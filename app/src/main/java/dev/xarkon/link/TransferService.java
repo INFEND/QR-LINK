@@ -384,7 +384,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private void verifyReceiver(String host,Pairing.Info info,boolean p2pPath,String raw,int attempt){
         if(destroyed||!peerAttempts.current(attempt))return;
         peerState="Проверяем защищённый сеанс QR LINK...";refresh();
-        work.execute(()->{
+        try{work.execute(()->{
             try{
                 org.json.JSONObject hello=new org.json.JSONObject(Util.http(host,info.port,info.key,"/hello","GET",null));
                 if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new Exception("Несовместимый протокол приёмника");
@@ -408,7 +408,12 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     note(peerState);unlockIfIdle();
                 }
             }
-        });
+        });}catch(RejectedExecutionException rejected){
+            if(!destroyed&&peerAttempts.current(attempt)){
+                peerVerified=false;peerState="Не удалось запустить проверку подключения";
+                note(peerState);unlockIfIdle();
+            }
+        }
     }
     /** Check a verified peer after route changes without blocking transfers or the UI. */
     private void monitorPeer(){

@@ -14,7 +14,7 @@ class PeerLifecycleTests(unittest.TestCase):
     def test_health_and_reconnect_use_attempt_guard(self):
         self.assertIn("private void monitorPeer()",SERVICE)
         self.assertIn("peerAttempts.snapshot()",SERVICE)
-        self.assertIn("if(!peerAttempts.current(attempt)||!peerVerified||isSending||isBusy)return;",SERVICE)
+        self.assertIn("if(destroyed||!peerAttempts.current(attempt)||!peerVerified||isSending||isBusy)return;",SERVICE)
         self.assertIn('if(info.hotspot||!info.key.equals(saved.getString("key","")))return;',SERVICE)
         self.assertIn("if(!autoReconnectLan||peerReconnectBusy",SERVICE)
         self.assertIn("peerHealth.shutdownNow()",SERVICE)
