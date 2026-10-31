@@ -248,13 +248,23 @@ public final class OtaProgressDialog {
         primary.setOnClickListener(v->{if(retry!=null)retry.run();});
     }
     private void showNotes(String source){
-        String notes=source==null?"":source.trim();
-        notes=notes.replace("GitHub Releases","списке обновлений")
-            .replace("GitHub","сервером обновлений");
+        // Only real, user-facing [+]/[-]/[=] changes. Ignore legacy QA footnotes.
+        String notes=ReleaseNotes.visible(source);
         if(notes.isEmpty()){notesScroll.setVisibility(View.GONE);return;}
-        if(notes.length()>6000)notes=notes.substring(0,6000)+"…";
-        notesText.setText(notes);
-        notesScroll.setScrollY(0);
+        android.text.SpannableStringBuilder styled=new android.text.SpannableStringBuilder();
+        for(String line:notes.split("\\n")){
+            if(styled.length()>0)styled.append("\n");
+            int begin=styled.length();
+            styled.append(line);
+            int tint=line.startsWith("[+]")?0xff4dd69c:
+                line.startsWith("[-]")?0xfff07878:accent;
+            styled.setSpan(new android.text.style.ForegroundColorSpan(tint),
+                begin,begin+3,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
+                begin,begin+3,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        notesText.setText(styled);
+        notesScroll.scrollTo(0,0);
         notesScroll.setVisibility(View.VISIBLE);
     }
     public void current(String version){

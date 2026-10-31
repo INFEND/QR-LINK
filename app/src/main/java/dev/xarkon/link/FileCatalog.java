@@ -10,6 +10,8 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.webkit.MimeTypeMap;
 import java.io.File;
+import java.io.IOException;
+import java.util.concurrent.CancellationException;
 import java.nio.file.*;
 import org.json.*;
 import java.util.*;
@@ -23,6 +25,8 @@ public final class FileCatalog {
         int entries;
         final HashSet<String> visited=new HashSet<>();
         void step(){
+            if(Thread.currentThread().isInterrupted())
+                throw new CancellationException("Выбор папки отменён");
             if(++entries>MAX_FOLDER_ENTRIES)
                 throw new IllegalStateException("Слишком много элементов в папке (предел 120000)");
         }
@@ -107,7 +111,21 @@ public final class FileCatalog {
             QueueRevision.changed();
         }
     }
-    public static synchronized void append(Context c,List<Item> items){ArrayList<Item> all=load(c);all.addAll(items);save(c,all);}
+    public static synchronized void append(Context c,List<Item> items){
+        ArrayList<Item> all=load(c);
+        HashSet<String> seen=new HashSet<>();
+        for(Item old:all)if(old.uri!=null&&!old.uri.isEmpty())seen.add(old.uri);
+        for(Item item:items){
+            if(item==null||item.uri==null||item.uri.isEmpty())
+                throw new IllegalArgumentException("Файл без адреса нельзя добавить в очередь");
+            if(!seen.add(item.uri))continue;
+            if(all.size()>=MAX_FOLDER_FILES)
+                throw new IllegalStateException("В очереди может быть не более 30000 файлов");
+            all.add(item);
+        }
+        // Commit only after the entire new selection has passed validation.
+        save(c,all);
+    }
     public static synchronized void setStatus(Context c,String id,String status){
         if(id==null||id.isEmpty())return;
         try{
@@ -149,7 +167,11 @@ public final class FileCatalog {
         try(DirectoryStream<Path> stream=Files.newDirectoryStream(directory)){
             for(Path child:stream){
                 budget.step();
-                if(Files.isSymbolicLink(child)||!child.toFile().getCanonicalPath().startsWith(root))continue;
+                // Never silently send a subset of a selected folder.
+                if(Files.isSymbolicLink(child))
+                    throw new SecurityException("Папка содержит символическую ссылку");
+                if(!child.toFile().getCanonicalPath().startsWith(root))
+                    throw new SecurityException("Элемент выходит за пределы внутренней памяти");
                 String name=Util.safeName(child.getFileName().toString());
                 if(Files.isDirectory(child,LinkOption.NOFOLLOW_LINKS)){
                     collectLocal(child,root,relative.isEmpty()?name:relative+"/"+name,result,depth+1,budget);
@@ -163,7 +185,7 @@ public final class FileCatalog {
                     it.mime=mime==null?"application/octet-stream":mime;it.status="В очереди";
                     result.add(it);
                     if(result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Больше 30000 файлов");
-                }
+                }else throw new IOException("Не удалось прочитать элемент папки: "+name);
             }
         }
     }
@@ -192,6 +214,8 @@ public final class FileCatalog {
             while(cursor.moveToNext()){
                 budget.step();
                 String childId=cursor.getString(0),name=Util.safeName(cursor.getString(1)),mime=cursor.getString(2);
+                if(childId==null||childId.isEmpty())
+                    throw new IOException("Папка содержит элемент без идентификатора");
                 if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime))collect(c,tree,childId,path+"/"+name,result,depth+1,budget);
                 else {
                     Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,childId);

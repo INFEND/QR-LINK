@@ -18,7 +18,33 @@ def load_release_notes(version):
         raise SystemExit("Empty release notes: " + str(filename))
     if len(notes) > 6000:
         raise SystemExit("Release notes too long: " + str(filename))
-    return notes
+    # Release notes are customer-facing. A CI/QA report must never leak into OTA.
+    entries = []
+    heading = ""
+    banned = ("scoped storage", "jvm", "github", "chatgpt", "openai",
+              "регрессион", "тестирован", "тесты", "аппаратн",
+              "не проверен", "не готов", "требуют испытан",
+              "лимит 30000", "ci success", "versioncode")
+    for line in notes.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if not heading and not entries and line.startswith("QR LINK "):
+            if not re.fullmatch(r"QR LINK\s+" + re.escape(version) +
+                                r"(?:\s*[·:]\s*[^\n]{1,90})?", line):
+                raise SystemExit("Wrong release notes heading: " + line)
+            heading = line
+            continue
+        if not re.match(r"^\[(?:\+|-|=)\]\s+\S", line):
+            raise SystemExit("Non-changelog text in release notes: " + line[:100])
+        if len(line) > 260 or any(word in line.casefold() for word in banned):
+            raise SystemExit("Internal or excessively long release note: " + line[:100])
+        if line in entries:
+            raise SystemExit("Duplicate release note: " + line[:100])
+        entries.append(line)
+    if not entries:
+        raise SystemExit("No user-visible release changes: " + str(filename))
+    return "\n".join(([heading, ""] if heading else []) + entries)
 
 def main():
     parser = argparse.ArgumentParser()

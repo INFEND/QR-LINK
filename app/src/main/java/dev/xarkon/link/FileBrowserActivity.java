@@ -807,7 +807,12 @@ public final class FileBrowserActivity extends Activity {
             return;
         }
         // The folder is expanded into every descendant at commit time, not just visible rows.
-        selected.clear();selected.put(folder.key(),folder);
+        if(!selected.containsKey(folder.key())&&selected.size()>=MAX_QUEUE){
+            Toast.makeText(this,"Слишком много выбранных папок и файлов",Toast.LENGTH_LONG).show();
+            return;
+        }
+        // Selecting another folder must not discard the user's earlier choices.
+        selected.put(folder.key(),folder);
         for(String key:selectionIndicators.keySet())refreshIndicator(key);
         updateCount();
         Toast.makeText(this,"Выбрана вся папка. Вложенные файлы проверяются при отправке.",Toast.LENGTH_SHORT).show();
@@ -879,7 +884,8 @@ public final class FileBrowserActivity extends Activity {
         if(child==parent)return true;
         if(child.localFile!=null&&parent.localFile!=null)
             return child.localFile.toPath().startsWith(parent.localFile.toPath());
-        if(child.mediaFolder&&parent.mediaFolder)return child.path.startsWith(parent.path);
+        if(child.mediaFolder&&parent.mediaFolder)
+            return BrowserPathRules.isSameOrDescendant(child.path,parent.path);
         return child.tree!=null&&parent.tree!=null&&child.tree.equals(parent.tree)&&
             child.docId.startsWith(parent.docId+"/");
     }
