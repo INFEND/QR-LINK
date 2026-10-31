@@ -24,13 +24,14 @@ import android.text.style.StyleSpan;
 import android.view.*;
 import android.widget.*;
 import java.io.File;
+import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 
 /** Permission-aware in-app browser. SAF is used only to grant access to external folders. */
 public final class FileBrowserActivity extends Activity {
     private static final String[] TABS={"Картинки","Видео","Музыка","Приложения","Файлы"};
-    private static final int PICK_TREE=501,MEDIA_PERMISSION=502,MAX_QUEUE=12000,MAX_VISIBLE=60,MAX_MEDIA_SCAN=25000,MAX_SAF_SCAN=50000;
+    private static final int PICK_TREE=501,MEDIA_PERMISSION=502,STORAGE_PERMISSION=503,MAX_QUEUE=12000,MAX_VISIBLE=60,MAX_MEDIA_SCAN=25000,MAX_SAF_SCAN=50000;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final ExecutorService previews=Executors.newFixedThreadPool(2);
     private final LruCache<String,Bitmap> previewCache=new LruCache<String,Bitmap>(8*1024*1024){
@@ -59,7 +60,7 @@ public final class FileBrowserActivity extends Activity {
     private int accent,bg,card,fg,muted,stroke,tab=0,serial=0,sort=0;
     private String mediaPath="",folderPath="",folderId="";
     private Uri tree;
-    private boolean busy=false;
+    private boolean busy=false,storagePermissionRequested=false;
     private boolean safTruncated=false,mediaTruncated=false;
     // Cancel obsolete provider queries when navigating quickly between tabs/folders.
     private CancellationSignal activeQuery;
@@ -72,6 +73,7 @@ public final class FileBrowserActivity extends Activity {
         String name="",mime="",path="",docId="",group="",version="";
         long size=-1,date=0;
         boolean folder=false,mediaFolder=false;
+        File localFile;
         String key(){return (folder?"dir:":"file:")+(tree==null?"":tree.toString()+"|")+
             (mediaFolder?group+"|"+path:docId.isEmpty()?uri.toString():docId);}
     }
@@ -109,6 +111,36 @@ public final class FileBrowserActivity extends Activity {
     }
     @Override public void onCreate(Bundle state){
         super.onCreate(state);theme();buildUi();applyInsets();switchTab(0);
+    }
+    @Override protected void onResume(){
+        super.onResume();
+        if(storagePermissionRequested){
+            storagePermissionRequested=false;
+            if(tab==4&&list!=null)load();
+        }
+    }
+    private boolean hasLocalStorageAccess(){
+        if(Build.VERSION.SDK_INT>=30)return Environment.isExternalStorageManager();
+        return checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)==PackageManager.PERMISSION_GRANTED;
+    }
+    /** All-files access is opt-in, used only for the shared /storage/emulated/0 tree. */
+    private void requestLocalStorageAccess(){
+        if(hasLocalStorageAccess()){load();return;}
+        if(Build.VERSION.SDK_INT<30){
+            requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},STORAGE_PERMISSION);
+            return;
+        }
+        storagePermissionRequested=true;
+        try{
+            startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:"+getPackageName())));
+        }catch(android.content.ActivityNotFoundException missing){
+            try{startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));}
+            catch(Exception ignored){
+                storagePermissionRequested=false;
+                Toast.makeText(this,"Не удалось открыть настройки доступа к файлам",Toast.LENGTH_LONG).show();
+            }
+        }
     }
     /** Android 15+ draws behind system bars even for legacy target SDKs. */
     private void applyInsets(){
@@ -270,7 +302,7 @@ public final class FileBrowserActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int req,String[] p,int[] grants){
         super.onRequestPermissionsResult(req,p,grants);
-        if(req==MEDIA_PERMISSION)load();
+        if(req==MEDIA_PERMISSION||req==STORAGE_PERMISSION)load();
     }
     private void showMessage(String message,boolean grant){
         list.removeAllViews();
@@ -295,7 +327,7 @@ public final class FileBrowserActivity extends Activity {
         int token=++serial;
         subtitle.setText(isMedia()?TABS[tab]+(mediaPath.isEmpty()?"":" · "+mediaPath):
             tab==3?"Установленные приложения":
-            tree==null?"Разрешённые папки":"Папка · "+folderPath);
+            tree==null?"Внутренняя память · /0":"Папка · "+folderPath);
         if(isMedia()&&!hasMediaAccess()){
             showMessage("Для просмотра медиа требуется разрешение Android.\nМожно также выбрать папку вручную.",true);
             if(permissionPrompted.add(tab))requestMedia();
@@ -406,9 +438,54 @@ public final class FileBrowserActivity extends Activity {
         }
         return result;
     }
-    private ArrayList<Entry> queryDocuments(Uri rootTree,String doc,String displayPath,CancellationSignal cancellation){
+    /** Stream the actual shared-storage root, without materialising an unbounded file array. */
+    private ArrayList<Entry> queryLocal(File directory,CancellationSignal cancellation)throws Exception{
+        if(!hasLocalStorageAccess())throw new SecurityException("Нет разрешения на внутреннюю память");
+        File base=Environment.getExternalStorageDirectory().getCanonicalFile();
+        File folder=directory.getCanonicalFile();
+        String rootPath=base.getPath();
+        if(!folder.equals(base)&&!folder.getPath().startsWith(rootPath+File.separator))
+            throw new SecurityException("Папка находится вне внутренней памяти");
+        if(!Files.isDirectory(folder.toPath(),LinkOption.NOFOLLOW_LINKS))
+            throw new IllegalStateException("Каталог недоступен");
+        Entries result=new Entries();
+        ArrayList<Entry> directories=new ArrayList<>(),files=new ArrayList<>();
+        String parent=base.toPath().relativize(folder.toPath()).toString().replace(File.separatorChar,'/');
+        int scanned=0;
+        try(DirectoryStream<Path> stream=Files.newDirectoryStream(folder.toPath())){
+            for(Path child:stream){
+                if(cancellation!=null&&cancellation.isCanceled())throw new OperationCanceledException();
+                if(++scanned>MAX_SAF_SCAN){result.truncated=true;break;}
+                // Do not follow symbolic links or expose locations outside /storage/emulated/0.
+                if(Files.isSymbolicLink(child))continue;
+                boolean isDir=Files.isDirectory(child,LinkOption.NOFOLLOW_LINKS);
+                if(!isDir&&!Files.isRegularFile(child,LinkOption.NOFOLLOW_LINKS))continue;
+                File file=child.toFile();
+                if(!file.getCanonicalPath().startsWith(rootPath+File.separator))continue;
+                Entry e=new Entry();e.localFile=file;e.uri=Uri.fromFile(file);
+                e.name=Util.safeName(file.getName());e.folder=isDir;
+                e.path=isDir?(parent.isEmpty()?e.name:parent+"/"+e.name):parent;
+                e.size=isDir?-1:file.length();e.date=file.lastModified()/1000;
+                e.mime=isDir?DocumentsContract.Document.MIME_TYPE_DIR:
+                    java.net.URLConnection.guessContentTypeFromName(file.getName());
+                if(e.mime==null)e.mime="application/octet-stream";
+                ArrayList<Entry> target=isDir?directories:files;
+                if(target.size()<MAX_QUEUE)target.add(e);
+                else result.truncated=true;
+            }
+        }
+        result.addAll(directories);result.addAll(files);
+        return result;
+    }
+    private ArrayList<Entry> queryDocuments(Uri rootTree,String doc,String displayPath,CancellationSignal cancellation)throws Exception{
         Entries result=new Entries();
         if(rootTree==null){
+            if(hasLocalStorageAccess()){
+                ArrayList<Entry> local=queryLocal(Environment.getExternalStorageDirectory(),cancellation);
+                result.addAll(local);
+                if(local instanceof Entries)result.truncated=((Entries)local).truncated;
+            }
+            // Keep individually authorised SAF folders accessible even without broad access.
             for(UriPermission perm:getContentResolver().getPersistedUriPermissions()){
                 if(cancellation.isCanceled())throw new OperationCanceledException();
                 if(!perm.isReadPermission())continue;
@@ -456,8 +533,11 @@ public final class FileBrowserActivity extends Activity {
         list.removeAllViews();
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
+            if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
             addWide("СИСТЕМНЫЙ ПРОВОДНИК",this::pickTree);
-            TextView hint=label("Разрешение выдаётся Android один раз. Затем содержимое открывается здесь, в собственном проводнике.",12,muted,false);
+            TextView hint=label(hasLocalStorageAccess()?
+                "Корень внутренней памяти /0. Нажмите на папку для раскрытия, на + для выбора со вложениями. Каталоги Android/data и Android/obb могут быть недоступны.":
+                "Для просмотра всех доступных папок /0 разрешите доступ к файлам в настройках Android. Можно также выбрать отдельную папку через системный проводник.",12,muted,false);
             pad(hint,6,8);list.addView(hint);
         }
         String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
@@ -483,7 +563,7 @@ public final class FileBrowserActivity extends Activity {
         // even when the parent folder's name does not match the query.
         if(!filter.isEmpty())rows.removeIf(e->!e.name.toLowerCase(Locale.ROOT).contains(filter));
         if(rows.isEmpty()){
-            TextView nothing=label(tab==4&&tree==null?"Откройте папку, чтобы увидеть файлы":
+            TextView nothing=label(tab==4&&tree==null?"Нет доступных файлов. Проверьте разрешения или выберите папку":
                 "В этом разделе пока нет файлов",14,muted,false);
             nothing.setGravity(Gravity.CENTER);pad(nothing,8,35);list.addView(nothing);
         }
@@ -502,7 +582,7 @@ public final class FileBrowserActivity extends Activity {
             if(page>0)addWide("← ПРЕДЫДУЩИЕ",()->changePage(-1));
             if(page+1<pages)addWide("СЛЕДУЮЩИЕ →",()->changePage(1));
         }
-        if(tab==4&&tree!=null&&safTruncated){
+        if(tab==4&&safTruncated){
             TextView cap=label("Каталог очень большой: показана только часть содержимого. Для полного выбора откройте вложенную папку или предоставьте доступ к более узкому каталогу.",12,muted,false);
             pad(cap,10,12);list.addView(cap);
         }
@@ -734,7 +814,8 @@ public final class FileBrowserActivity extends Activity {
         render();
         io.execute(()->{
             try{
-                ArrayList<Entry> children=e.mediaFolder?queryMedia(category,e.path,false,signal):
+                ArrayList<Entry> children=e.localFile!=null?queryLocal(e.localFile,signal):
+                    e.mediaFolder?queryMedia(category,e.path,false,signal):
                     queryDocuments(e.tree,e.docId,e.name,signal);
                 ui.post(()->{
                     if(expansionSignals.get(key)!=signal)return;
@@ -816,8 +897,9 @@ public final class FileBrowserActivity extends Activity {
                             for(Entry child:media.get(e.key()))
                                 if(child.path.startsWith(e.path))addJob(jobs,used,child,child.path);
                         }else{
-                            ArrayList<FileCatalog.Item> folderJobs=FileCatalog.fromDocumentFolder(
-                                this,e.tree,e.docId,e.name);
+                            ArrayList<FileCatalog.Item> folderJobs=e.localFile!=null?
+                                FileCatalog.fromLocalFolder(this,e.localFile,e.path):
+                                FileCatalog.fromDocumentFolder(this,e.tree,e.docId,e.name);
                             for(FileCatalog.Item f:folderJobs)
                                 if(used.add(f.uri))jobs.add(f);
                         }

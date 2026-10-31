@@ -5,7 +5,12 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
 import android.provider.DocumentsContract;
+import android.webkit.MimeTypeMap;
+import java.io.File;
+import java.nio.file.*;
 import org.json.*;
 import java.util.*;
 
@@ -107,6 +112,44 @@ public final class FileCatalog {
     public static Item single(Context c,Uri uri,String path){
         Item it=new Item();it.id=Util.id();it.uri=uri.toString();it.name=Util.name(c,uri);
         it.size=Util.size(c,uri);it.mime=Util.mime(c,uri);it.path=Util.safePath(path);it.status="В очереди";return it;
+    }
+    /** Collect a user-authorised shared-storage folder without following symlinks. */
+    public static ArrayList<Item> fromLocalFolder(Context c,File folder,String relativePath)throws Exception{
+        if(Build.VERSION.SDK_INT>=30&&!Environment.isExternalStorageManager())
+            throw new SecurityException("Разрешение на внутреннюю память отозвано");
+        File base=Environment.getExternalStorageDirectory().getCanonicalFile();
+        File directory=folder.getCanonicalFile();
+        if(!directory.getPath().startsWith(base.getPath()+File.separator))
+            throw new SecurityException("Папка находится вне внутренней памяти");
+        ArrayList<Item> result=new ArrayList<>();
+        collectLocal(directory.toPath(),base.getPath()+File.separator,Util.safePath(relativePath),result,0);
+        return result;
+    }
+    private static void collectLocal(Path directory,String root, String relative,
+                                     ArrayList<Item> result,int depth)throws Exception{
+        if(depth>24||result.size()>MAX_FOLDER_FILES)
+            throw new IllegalStateException("Папка слишком велика: максимум 12000 файлов / 24 уровня");
+        if(Files.isSymbolicLink(directory)||!Files.isDirectory(directory,LinkOption.NOFOLLOW_LINKS))
+            throw new SecurityException("Недоступная папка");
+        try(DirectoryStream<Path> stream=Files.newDirectoryStream(directory)){
+            for(Path child:stream){
+                if(Files.isSymbolicLink(child)||!child.toFile().getCanonicalPath().startsWith(root))continue;
+                String name=Util.safeName(child.getFileName().toString());
+                if(Files.isDirectory(child,LinkOption.NOFOLLOW_LINKS)){
+                    collectLocal(child,root,relative.isEmpty()?name:relative+"/"+name,result,depth+1);
+                }else if(Files.isRegularFile(child,LinkOption.NOFOLLOW_LINKS)){
+                    Item it=new Item();it.id=Util.id();it.uri=Uri.fromFile(child.toFile()).toString();
+                    it.name=name;it.size=Files.size(child);it.path=Util.safePath(relative);
+                    String original=child.getFileName().toString();
+                    int dot=original.lastIndexOf('.');
+                    String ext=dot<0?"":original.substring(dot+1).toLowerCase(Locale.ROOT);
+                    String mime=MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+                    it.mime=mime==null?"application/octet-stream":mime;it.status="В очереди";
+                    result.add(it);
+                    if(result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Больше 12000 файлов");
+                }
+            }
+        }
     }
     public static ArrayList<Item> fromDocumentFolder(Context c,Uri tree,String docId,String name)throws Exception{
         ArrayList<Item> result=new ArrayList<>();
