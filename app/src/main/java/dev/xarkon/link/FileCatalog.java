@@ -66,9 +66,23 @@ public final class FileCatalog {
     }
     public static synchronized ArrayList<Item> load(Context c){
         ArrayList<Item> out=new ArrayList<>();
-        try{JSONArray j=new JSONArray(c.getSharedPreferences(PREF,0).getString("list","[]"));
+        android.content.SharedPreferences prefs=c.getSharedPreferences(PREF,0);
+        String primary=prefs.getString("list","[]");
+        try{
+            JSONArray j=new JSONArray(primary);
             for(int i=0;i<j.length();i++)out.add(Item.from(j.getJSONObject(i)));
-        }catch(Exception ignored){}
+        }catch(Exception damaged){
+            // Recover the last successfully committed mirror, never silently clear.
+            String mirror=prefs.getString("list_mirror",null);
+            if(mirror==null)throw new IllegalStateException("Не удалось прочитать сохранённую очередь",damaged);
+            out.clear();
+            try{
+                JSONArray j=new JSONArray(mirror);
+                for(int i=0;i<j.length();i++)out.add(Item.from(j.getJSONObject(i)));
+            }catch(Exception lost){
+                throw new IllegalStateException("Сохранённая очередь повреждена",lost);
+            }
+        }
         if(out.isEmpty())return out;
         try{
             HashMap<String,Item> byId=new HashMap<>();
@@ -103,13 +117,17 @@ public final class FileCatalog {
         }catch(Exception ignored){
             // Preserve the supplied queue snapshot if the status DB is unavailable.
         }
-        JSONArray a=new JSONArray();try{for(Item it:items)a.put(it.json());}catch(Exception ignored){}
+        JSONArray a=new JSONArray();
+        try{for(Item it:items)a.put(it.json());}
+        catch(Exception invalid){throw new IllegalStateException("Не удалось сохранить очередь целиком",invalid);}
+        // Both copies are committed atomically; an invalid primary can be recovered.
+        String snapshot=a.toString();
+        boolean saved=c.getSharedPreferences(PREF,0).edit()
+            .putString("list",snapshot).putString("list_mirror",snapshot).commit();
+        if(!saved)throw new IllegalStateException("Android не сохранил очередь файлов");
         // Never discard the status journal unless the merged snapshot is durable.
-        boolean saved=c.getSharedPreferences(PREF,0).edit().putString("list",a.toString()).commit();
-        if(saved){
-            try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
-            QueueRevision.changed();
-        }
+        try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
+        QueueRevision.changed();
     }
     public static synchronized void append(Context c,List<Item> items){
         ArrayList<Item> all=load(c);
@@ -176,6 +194,8 @@ public final class FileCatalog {
                 if(Files.isDirectory(child,LinkOption.NOFOLLOW_LINKS)){
                     collectLocal(child,root,relative.isEmpty()?name:relative+"/"+name,result,depth+1,budget);
                 }else if(Files.isRegularFile(child,LinkOption.NOFOLLOW_LINKS)){
+                    if(!Files.isReadable(child))
+                        throw new IOException("Нет доступа к файлу: "+name);
                     Item it=new Item();it.id=Util.id();it.uri=Uri.fromFile(child.toFile()).toString();
                     it.name=name;it.size=Files.size(child);it.path=Util.safePath(relative);
                     String original=child.getFileName().toString();

@@ -31,12 +31,20 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private final PeerAttemptGuard peerAttempts=new PeerAttemptGuard();
     private final Handler networkHandler=new Handler(Looper.getMainLooper());
     private boolean wantReceive;
+    private boolean senderWifiLost;
     private boolean groupProbeRunning;
     // Invalidates delayed Wi-Fi Direct callbacks after radio loss or STOP.
     private int directRouteAttempt;
     private final Runnable networkWatch=new Runnable(){
         @Override public void run(){
             try{
+                if(isSending&&!senderWifiLost&&!WifiState.localTransferReady(TransferService.this)){
+                    senderWifiLost=true;
+                    engine.cancelSending();
+                    peerAttempts.next();peerVerified=false;
+                    peerState="Соединение потеряно · передача приостановлена";
+                    status=peerState;refresh();
+                }
                 if(wantReceive){
                     if(!WifiState.localTransferReady(TransferService.this)){
                         ++directRouteAttempt;
@@ -130,6 +138,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(in==null)return START_NOT_STICKY;
         String action=in.getAction();
         if(DISCONNECT_PEER.equals(action)){
+            engine.cancelSending();
             peerAttempts.next();peerVerified=false;peerState="";
             getSharedPreferences("settings",0).edit().remove("host").remove("key")
                 .remove("port").remove("peer_name").remove("pair_qr").commit();
@@ -143,6 +152,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             return START_NOT_STICKY;
         }
         if(STOP.equals(action)){
+            engine.cancelSending();
             ++directRouteAttempt;
             peerAttempts.next();peerVerified=false;
             wantReceive=false;getSharedPreferences("settings",0).edit().putBoolean("receive_desired",false).apply();
@@ -349,16 +359,23 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private void runJob(Work job){runJob(job,false);}
     private void runJob(Work job,boolean sending){
         if(!busy.compareAndSet(false,true)){note("Другая операция ещё выполняется");return;}
-        isBusy=true;isSending=sending;status="Подготовка...";lock();refresh();
-        work.submit(()->{
+        isBusy=true;isSending=sending;senderWifiLost=false;
+        status="Подготовка...";lock();refresh();
+        try{work.submit(()->{
             try{job.run();}catch(Exception e){note("Ошибка: "+e.getMessage());}
             finally{isSending=false;isBusy=false;busy.set(false);
                 // Keep last transfer figures visible after completion.
                 if(transferDirection.isEmpty()){progress=0;total=0;bytesPerSecond=0;activeFile="";}
-                status=isReceiving?(directReady?"Wi-Fi Direct активен": "Приём включён · "+Util.ip()+":"+Util.PORT):
+                status=isReceiving&&engine.receiving()&&WifiState.localTransferReady(this)?
+                    (directReady&&QrInputValidation.isLocalIpv4(directHost)?
+                        "Wi-Fi Direct готов":"Приём включён · "+Util.ip()+":"+Util.PORT):
+                    isReceiving?"Ожидание восстановления сети":
                     (!peerState.isEmpty()?peerState:"Готов к работе");
                 unlockIfIdle();refresh();}
-        });
+        });}catch(RejectedExecutionException rejected){
+            isSending=false;isBusy=false;busy.set(false);
+            status="Не удалось запустить операцию";unlockIfIdle();refresh();
+        }
     }
     @Override public void note(String message){
         message=ErrorText.human(message);
@@ -371,11 +388,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
     }
     @Override public synchronized void progress(String label,long received,long max,double speed){
         status=label;
-        String file=label;
-        String direction="";
-        int sep=label.indexOf(": ");
-        if(sep>=0){direction=label.substring(0,sep);file=label.substring(sep+2);}
-        else if(label.startsWith("Готово: ")){direction="Отправка";file=label.substring(8);}
+        String file=TransferLabel.file(label);
+        String direction=TransferLabel.direction(label);
         if(!file.equals(sampledFile)||received<sampleBytes){
             sampledFile=file;sampleAt=Util.now();sampleBytes=received;
             bytesPerSecond=0;

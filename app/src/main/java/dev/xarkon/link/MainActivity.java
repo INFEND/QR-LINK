@@ -1320,7 +1320,8 @@ public final class MainActivity extends Activity {
                 visibleBytes+=Math.min(gap,Math.max(128L*1024L,(long)(gap*.33)));
             }else visibleBytes=done;
             long shown=Math.min(size,visibleBytes);
-            status.setText(size>0&&done>=size?"Файл передан · соединение активно":
+            status.setText(size>0&&done>=size?
+                ("Приём".equals(phase)?"Файл получен":"Файл отправлен"):
                 size>0?("Приём".equals(phase)?"Получение в фоне · экран можно заблокировать":
                     "Отправка в фоне · экран можно заблокировать"):TransferService.status);
             int permille=size>0?(int)Math.min(1000,shown*1000d/size):0;
