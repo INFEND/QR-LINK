@@ -31,7 +31,7 @@ import java.util.concurrent.*;
 /** Permission-aware in-app browser. SAF is used only to grant access to external folders. */
 public final class FileBrowserActivity extends Activity {
     private static final String[] TABS={"Картинки","Видео","Музыка","Приложения","Файлы"};
-    private static final int PICK_TREE=501,MEDIA_PERMISSION=502,STORAGE_PERMISSION=503,MAX_QUEUE=30000,MAX_VISIBLE=60,MAX_MEDIA_SCAN=60000,MAX_SAF_SCAN=300000;
+    private static final int PICK_TREE=501,MEDIA_PERMISSION=502,STORAGE_PERMISSION=503,MAX_QUEUE=30000,MAX_VISIBLE=60,MAX_MEDIA_SCAN=60000,MAX_SAF_SCAN=120000;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final ExecutorService previews=Executors.newFixedThreadPool(2);
     private final LruCache<String,Bitmap> previewCache=new LruCache<String,Bitmap>(8*1024*1024){
