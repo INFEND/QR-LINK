@@ -12,7 +12,7 @@ from urllib.parse import quote
 def load_release_notes(version):
     filename = Path("release_notes") / f"v{version}.txt"
     if not filename.is_file():
-        return f"QR LINK {version}. Подробное описание изменений для этой версии не предоставлено."
+        raise SystemExit("Missing release notes: " + str(filename))
     notes = filename.read_text(encoding="utf-8").strip()
     if not notes:
         raise SystemExit("Empty release notes: " + str(filename))
@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--github-output", required=True)
     args = parser.parse_args()
 
-    if args.repo.casefold() != "antiferment/qr-link":
+    if args.repo.casefold() not in ("antiferment/qr-link", "infend/qr-link"):
         raise SystemExit("Unexpected repository: " + args.repo)
     apk = Path(args.apk)
     if not apk.is_file():
@@ -52,7 +52,9 @@ def main():
         "packageName": package_name,
         "versionCode": int(code),
         "versionName": version,
-        "apkUrl": f"https://github.com/{args.repo}/releases/download/{quote(tag)}/QR-LINK.apk",
+        # Keep the legacy release URL for already-installed versions that pin its path.
+        # GitHub redirects the old repository slug after an owner rename.
+        "apkUrl": f"https://github.com/ANTIFERMENT/QR-LINK/releases/download/{quote(tag)}/QR-LINK.apk",
         "sha256": sha,
         "sizeBytes": apk.stat().st_size,
         "publishedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),

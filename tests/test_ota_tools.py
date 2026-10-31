@@ -20,6 +20,8 @@ class OtaToolsTests(unittest.TestCase):
             fake_aapt.write_text(
                 "#!/bin/sh\nprintf \"package: name='dev.xarkon.link' versionCode='39' versionName='0.3.9'\\n\"\n")
             fake_aapt.chmod(0o755)
+            (p / "release_notes").mkdir()
+            (p / "release_notes/v0.3.9.txt").write_text("[+] Проверка настоящего списка изменений",encoding="utf-8")
             out = p / "update.json"
             output = p / "github_output"
             subprocess.run([
@@ -33,8 +35,31 @@ class OtaToolsTests(unittest.TestCase):
             self.assertEqual(manifest["versionCode"], 39)
             self.assertEqual(manifest["sha256"], hashlib.sha256(apk.read_bytes()).hexdigest())
             self.assertEqual(manifest["sizeBytes"], apk.stat().st_size)
-            self.assertIn("/v0.3.9/QR-LINK.apk", manifest["apkUrl"])
+            self.assertEqual(manifest["apkUrl"],"https://github.com/ANTIFERMENT/QR-LINK/releases/download/v0.3.9/QR-LINK.apk")
+            self.assertIn("настоящего списка изменений",manifest["notes"])
             self.assertIn("tag=v0.3.9", output.read_text())
+
+    def test_renamed_repository_keeps_legacy_ota_compatibility(self):
+        with tempfile.TemporaryDirectory() as td:
+            p=Path(td)
+            (p/"QR-LINK.apk").write_bytes(b"fixture")
+            aapt=p/"aapt"
+            aapt.write_text("#!/bin/sh\\nprintf \\"package: name='dev.xarkon.link' versionCode='66' versionName='0.3.61'\\\\n\\"\\n")
+            aapt.chmod(0o755)
+            (p/"release_notes").mkdir()
+            (p/"release_notes/v0.3.61.txt").write_text("[+] Реальные изменения",encoding="utf-8")
+            cmd=[sys.executable,str(ROOT/"scripts/make_manifest.py"),"--apk",str(p/"QR-LINK.apk"),
+                 "--aapt",str(aapt),"--repo","INFEND/QR-LINK","--output",str(p/"update.json"),
+                 "--github-output",str(p/"github_output")]
+            result=subprocess.run(cmd,cwd=p,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            data=json.loads((p/"update.json").read_text())
+            self.assertIn("/ANTIFERMENT/QR-LINK/releases/download/v0.3.61/",data["apkUrl"])
+            self.assertIn("Реальные изменения",data["notes"])
+            (p/"release_notes/v0.3.61.txt").unlink()
+            result=subprocess.run(cmd,cwd=p,capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn("Missing release notes",result.stderr+result.stdout)
 
     def test_manifest_rejects_wrong_application_id(self):
         with tempfile.TemporaryDirectory() as td:

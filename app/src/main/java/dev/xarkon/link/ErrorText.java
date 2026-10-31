@@ -15,6 +15,9 @@ public final class ErrorText {
         if(message==null||message.trim().isEmpty())
             return "Не удалось выполнить операцию. Повторите попытку.";
         String lower=message.toLowerCase(Locale.ROOT);
+        if(lower.contains("sslhandshake")||lower.contains("certificate_unknown")||
+           lower.contains("certpathvalidatorexception")||lower.contains("trust anchor"))
+            return "Ошибка проверки защищённого соединения. Проверьте дату, время и настройки VPN.";
         if(lower.contains("unknownhost")||lower.contains("unable to resolve host")||
            lower.contains("no address associated with hostname")||
            lower.contains("name or service not known"))
@@ -33,6 +36,8 @@ public final class ErrorText {
         if(lower.contains("permission denied")||lower.contains("securityexception")||
            lower.contains("eacces"))
             return "Не хватает разрешений Android. Проверьте доступ к файлам и устройствам поблизости.";
+        if(lower.contains("cleartext communication")||lower.contains("not permitted by network security policy"))
+            return "Незащищённое сетевое соединение заблокировано Android.";
         if(lower.contains("no space left")||lower.contains("enospc"))
             return "Недостаточно свободного места на устройстве.";
         if(lower.contains("file not found")||lower.contains("enoent"))

@@ -26,10 +26,10 @@ import javax.net.ssl.HttpsURLConnection;
 public final class UpdateManager {
     private UpdateManager(){}
     /** This is the only official OTA channel. No editable source or alternate endpoint. */
-    public static final String MANIFEST_URL="https://github.com/ANTIFERMENT/QR-LINK/releases/latest/download/update.json";
+    public static final String MANIFEST_URL=OtaUrlPolicy.LEGACY_MANIFEST;
     public static final String TRUSTED_CERT_SHA256="2651D90F5C57F2D4A121E2D8B0899680343DC9E87E515ED5E100FC3D62C6D626";
     private static final long MAX_APK=512L*1024L*1024L;
-    private static final String RELEASE_PREFIX="/ANTIFERMENT/QR-LINK/releases/download/";
+    // Only the two pinned slugs of this repository are accepted after its rename.
     public static final String APK_FILE="qr_link_update.apk";
     public interface Callback {
         void status(String message);
@@ -52,12 +52,11 @@ public final class UpdateManager {
             sha256=j.getString("sha256").toLowerCase(Locale.US);
             notes=j.optString("notes","");
             sizeBytes=j.optLong("sizeBytes",-1L);
-            if(versionCode<1||!sha256.matches("[0-9a-f]{64}"))throw new IOException("Недействительные метаданные OTA");
-            checkHttps(apkUrl);
-            URL apk=new URL(apkUrl);
-            if(!"github.com".equalsIgnoreCase(apk.getHost())
-                || !apk.getPath().startsWith(RELEASE_PREFIX)
-                || !apk.getPath().endsWith("/QR-LINK.apk"))
+            if(versionCode<1||!sha256.matches("[0-9a-f]{64}")||
+                !versionName.matches("[A-Za-z0-9._-]{1,40}")||
+                sizeBytes==0||sizeBytes < -1||sizeBytes>MAX_APK||notes.length()>6000)
+                throw new IOException("Недействительные метаданные OTA");
+            if(!OtaUrlPolicy.trustedApk(apkUrl,versionName))
                 throw new IOException("APK размещён вне официального канала");
         }
     }
@@ -86,7 +85,7 @@ public final class UpdateManager {
         if(e instanceof SSLException)return "Ошибка защищённого соединения. Проверьте дату, время и настройки VPN.";
         if(e instanceof ConnectException)return "Не удалось подключиться к серверу обновлений.";
         String s=e.getMessage();
-        return s==null||s.trim().isEmpty()?"Неизвестная ошибка. Повторите попытку.":s;
+        return ErrorText.human(s);
     }
     private static void requireOk(HttpsURLConnection c,String purpose)throws IOException{
         int code=c.getResponseCode();
@@ -105,10 +104,22 @@ public final class UpdateManager {
         h.setRequestProperty("User-Agent","QR-LINK-Updater/1.0");
         return h;
     }
-    /** Shared strictly authenticated manifest lookup for foreground and scheduled checks. */
+    /** The original URL remains primary for installed OTA clients. */
     public static Release fetchLatest(Context context)throws Exception{
         internetReady(context);
-        HttpsURLConnection c=connection(MANIFEST_URL);
+        try{return readManifest(MANIFEST_URL);}
+        catch(IOException oldEndpointFailure){
+            // GitHub owner changes can invalidate old release redirects.
+            // Retry only the canonical URL of the same pinned repository.
+            try{return readManifest(OtaUrlPolicy.CANONICAL_MANIFEST);}
+            catch(Exception currentFailure){
+                currentFailure.addSuppressed(oldEndpointFailure);
+                throw currentFailure;
+            }
+        }
+    }
+    private static Release readManifest(String url)throws Exception{
+        HttpsURLConnection c=connection(url);
         try{
             requireOk(c,"Проверка обновления");
             ByteArrayOutputStream memory=new ByteArrayOutputStream();
