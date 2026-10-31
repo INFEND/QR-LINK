@@ -31,6 +31,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private final PeerAttemptGuard peerAttempts=new PeerAttemptGuard();
     private final ExecutorService peerHealth=Executors.newSingleThreadExecutor();
     private volatile boolean autoReconnectLan;
+    private volatile boolean destroyed;
+    private boolean routeActive(int route){
+        return !destroyed&&route==directRouteAttempt&&wantReceive&&isReceiving&&
+            engine!=null&&engine.receiving()&&WifiState.localTransferReady(this);
+    }
     private boolean peerHealthBusy,peerReconnectBusy;
     private long lastPeerHealthAt,lastPeerReconnectAt;
     private final Handler networkHandler=new Handler(Looper.getMainLooper());
@@ -41,6 +46,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private int directRouteAttempt;
     private final Runnable networkWatch=new Runnable(){
         @Override public void run(){
+            if(destroyed)return;
             try{
                 // A verified idle peer is no longer reachable when the local radio disappears.
                 // Do not keep showing a connected device while Wi-Fi is off.
@@ -70,9 +76,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
                             new Intent(TransferService.this,TransferService.class).setAction(RECEIVE),0,0));
                     }else if(directReady&&!groupProbeRunning){
                         groupProbeRunning=true;
+                        final int probeRoute=directRouteAttempt;
                         directWifi.confirmHosting(directSsid,valid->{
+                            if(!routeActive(probeRoute))return;
                             groupProbeRunning=false;
-                            if(!valid&&wantReceive&&directReady){
+                            if(!valid&&directReady){
                                 resetDirect();directWifi.close();
                                 status="Соединение Wi-Fi Direct потеряно · восстанавливаем";refresh();
                                 establishNetworkRoute();
@@ -81,7 +89,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     }
                 }
                 monitorPeer();
-            }finally{networkHandler.postDelayed(this,1700L);}
+            }finally{if(!destroyed)networkHandler.postDelayed(this,1700L);}
         }
     };
     private final ExecutorService work=Executors.newSingleThreadExecutor();
@@ -134,7 +142,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(android.os.Build.VERSION.SDK_INT>=29)startForeground(NOTIFICATION,notification(),ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
         else startForeground(NOTIFICATION,notification());
     }
-    private void refresh(){MainActivity.changed();
+    private void refresh(){if(destroyed)return;MainActivity.changed();
         if(Util.now()-lastNotify>750){lastNotify=Util.now();
             ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION,notification());}
     }
@@ -154,7 +162,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     // Receiving keeps its locks while the server is listening in the background.
     private void unlockIfIdle(){if(!isReceiving&&!isBusy)unlock();}
     @Override public int onStartCommand(Intent in,int flags,int startId){
-        if(in==null)return START_NOT_STICKY;
+        if(destroyed||in==null)return START_NOT_STICKY;
         String action=in.getAction();
         if(DISCONNECT_PEER.equals(action)){
             engine.cancelSending();
@@ -295,8 +303,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             final int route=++directRouteAttempt;
             directWifi.host(new DirectWifi.HostListener(){
                 @Override public void ready(String mac,String ssid,String pass,String host){
-                    if(route!=directRouteAttempt||!wantReceive||!isReceiving||
-                        !WifiState.localTransferReady(TransferService.this))return;
+                    if(!routeActive(route))return;
                     if(host==null||!QrInputValidation.isLocalIpv4(host)||mac==null||
                         !mac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")){
                         resetDirect();directWifi.close();
@@ -307,8 +314,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     status="Wi-Fi Direct готов · покажите QR";refresh();
                 }
                 @Override public void failure(String reason){
-                    if(route!=directRouteAttempt||!wantReceive||!isReceiving||
-                        !WifiState.localTransferReady(TransferService.this))return;
+                    if(!routeActive(route))return;
                     resetDirect();startHotspotFallback(reason);
                 }
             });
@@ -318,17 +324,25 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(!wantReceive||!isReceiving)return;
         if(hotspotReady||hotspotStarting)return;
         hotspotStarting=true;
+        final int route=++directRouteAttempt;
         status="Создаём локальную точку доступа...";detail=reason;refresh();
         hotspot.start(new HotspotSupport.Listener(){
             @Override public void ready(String ssid,String pass,int security,String host){
-                if(!wantReceive){hotspot.stop();return;}
+                if(!routeActive(route))return;
+                if(ssid==null||ssid.trim().isEmpty()||pass==null||pass.isEmpty()){
+                    hotspot.stop();resetHotspot();
+                    status="Android не предоставил параметры точки доступа";refresh();return;
+                }
                 hotspotStarting=false;hotspotReady=true;
                 hotspotSsid=ssid;hotspotPassword=pass;hotspotSecurity=security;
-                hotspotHost=host;
-                status="Локальная точка доступа готова";refresh();
-                if(hotspotHost.isEmpty())networkHandler.postDelayed(()->resolveHotspotAddress(0),250);
+                hotspotHost=QrInputValidation.isLocalIpv4(host)?host:"";
+                status=hotspotHost.isEmpty()?"Определяем адрес точки доступа...":
+                    "Локальная точка доступа готова";
+                refresh();
+                if(hotspotHost.isEmpty())networkHandler.postDelayed(()->resolveHotspotAddress(0,route),250);
             }
             @Override public void failure(String why){
+                if(!routeActive(route))return;
                 resetHotspot();
                 if(WifiState.clientConnected(TransferService.this)){
                     status="Приём через общую сеть Wi-Fi";detail=why;
@@ -340,16 +354,21 @@ public final class TransferService extends Service implements TransferEngine.Eve
             }
         });
     }
-    private void resolveHotspotAddress(int attempt){
-        if(!hotspotReady||!wantReceive)return;
+    private void resolveHotspotAddress(int attempt,int route){
+        if(!routeActive(route)||!hotspotReady)return;
         String ip=HotspotSupport.hotspotIp();
-        if(!ip.isEmpty()){hotspotHost=ip;refresh();return;}
-        if(attempt<24)networkHandler.postDelayed(()->resolveHotspotAddress(attempt+1),250);
-        else{status="Локальная точка доступа без адреса";
-            detail="Android не сообщил IP. Перезапустите приём.";refresh();}
+        if(QrInputValidation.isLocalIpv4(ip)){
+            hotspotHost=ip;status="Локальная точка доступа готова";refresh();return;
+        }
+        if(attempt<24)networkHandler.postDelayed(()->resolveHotspotAddress(attempt+1,route),250);
+        else{
+            hotspot.stop();resetHotspot();
+            status="Не удалось определить адрес точки доступа";
+            detail="Android не сообщил IP. Перезапустите приём.";refresh();
+        }
     }
     private void fallbackWifi(Pairing.Info info,String raw,int attempt){
-        if(!peerAttempts.current(attempt))return;
+        if(destroyed||!peerAttempts.current(attempt))return;
         peerState="Подключение к сети приёмника. Может потребоваться подтверждение Android";refresh();
         wifiPeer.connect(info,new WifiPeerConnector.Listener(){
             @Override public void connected(String host){
@@ -363,13 +382,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
         });
     }
     private void verifyReceiver(String host,Pairing.Info info,boolean p2pPath,String raw,int attempt){
-        if(!peerAttempts.current(attempt))return;
+        if(destroyed||!peerAttempts.current(attempt))return;
         peerState="Проверяем защищённый сеанс QR LINK...";refresh();
         work.execute(()->{
             try{
                 org.json.JSONObject hello=new org.json.JSONObject(Util.http(host,info.port,info.key,"/hello","GET",null));
                 if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new Exception("Несовместимый протокол приёмника");
-                if(!peerAttempts.current(attempt))return;
+                if(destroyed||!peerAttempts.current(attempt))return;
                 if(!WifiState.localTransferReady(TransferService.this))
                     throw new java.io.IOException("Локальная сеть отключилась во время подключения");
                 getSharedPreferences("settings",0).edit().putString("host",host).putInt("port",info.port)
@@ -379,7 +398,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 peerVerified=true;peerState="Подключено по QR · готово к отправке";status=peerState;
                 unlockIfIdle();refresh();
             }catch(Exception e){
-                if(!peerAttempts.current(attempt))return;
+                if(destroyed||!peerAttempts.current(attempt))return;
                 peerVerified=false;
                 if(info.direct&&p2pPath){
                     peerState="Wi-Fi Direct подключён, но приёмник не отвечает. Пробуем резервный маршрут";refresh();
@@ -393,7 +412,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     }
     /** Check a verified peer after route changes without blocking transfers or the UI. */
     private void monitorPeer(){
-        if(isSending||isBusy)return;
+        if(destroyed||isSending||isBusy)return;
         final long now=Util.now();
         final android.content.SharedPreferences saved=getSharedPreferences("settings",0);
         if(peerVerified){
@@ -412,7 +431,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 final boolean ok=reachable;
                 networkHandler.post(()->{
                     peerHealthBusy=false;
-                    if(!peerAttempts.current(attempt)||!peerVerified||isSending||isBusy)return;
+                    if(destroyed||!peerAttempts.current(attempt)||!peerVerified||isSending||isBusy)return;
                     if(!host.equals(saved.getString("host",""))||
                         !key.equals(saved.getString("key","")))return;
                     if(!ok){
@@ -434,6 +453,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             if(info.hotspot||!info.key.equals(saved.getString("key","")))return;
         }catch(Exception ignored){autoReconnectLan=false;return;}
         peerReconnectBusy=true;lastPeerReconnectAt=now;
+        final String pairedQr=saved.getString("pair_qr","");
         final int attempt=peerAttempts.next();
         peerHealth.execute(()->{
             boolean reachable=false;String name="";
@@ -446,9 +466,10 @@ public final class TransferService extends Service implements TransferEngine.Eve
             final String peerName=name;
             networkHandler.post(()->{
                 peerReconnectBusy=false;
-                if(!peerAttempts.current(attempt)||!autoReconnectLan||isSending||isBusy||
+                if(destroyed||!peerAttempts.current(attempt)||!autoReconnectLan||isSending||isBusy||
                     !WifiState.clientConnected(this))return;
-                if(!info.key.equals(saved.getString("key","")))return;
+                if(!pairedQr.equals(saved.getString("pair_qr",""))||
+                    !info.key.equals(saved.getString("key","")))return;
                 if(ok&&validRoute){
                     saved.edit().putString("host",info.host).putInt("port",info.port)
                         .putString("peer_name",peerName).apply();
@@ -486,6 +507,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         }
     }
     @Override public void note(String message){
+        if(destroyed)return;
         message=ErrorText.human(message);
         detail=message;status=message;
         android.content.SharedPreferences prefs=getSharedPreferences("history",0);
@@ -495,6 +517,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         prefs.edit().putString("log",next).apply();refresh();
     }
     @Override public synchronized void progress(String label,long received,long max,double speed){
+        if(destroyed)return;
         status=label;
         String file=TransferLabel.file(label);
         String direction=TransferLabel.direction(label);
@@ -518,10 +541,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
         note("Достигнуто системное ограничение фоновой службы. Продолжите позднее.");
         stopSelf();
     }
-    private void resetDirect(){directReady=false;directStarting=false;directMac="";directSsid="";
+    private void resetDirect(){groupProbeRunning=false;directReady=false;directStarting=false;directMac="";directSsid="";
         directPass="";directHost="";MainActivity.changed();}
     private void resetHotspot(){hotspotReady=false;hotspotStarting=false;hotspotSsid="";hotspotPassword="";hotspotHost="";hotspotSecurity=0;MainActivity.changed();}
-    @Override public void onDestroy(){++directRouteAttempt;networkHandler.removeCallbacks(networkWatch);engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
+    @Override public void onDestroy(){destroyed=true;peerAttempts.next();autoReconnectLan=false;wantReceive=false;
+        ++directRouteAttempt;networkHandler.removeCallbacksAndMessages(null);engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
         peerVerified=false;peerState="";isReceiving=false;isBusy=false;isSending=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }

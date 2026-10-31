@@ -29,6 +29,7 @@ public final class TransferEngine {
     }
     private final ConcurrentHashMap<String,BadPin> lastBadPin=new ConcurrentHashMap<>();
     private volatile boolean alive;
+    private volatile long receiveEpoch;
     private volatile boolean sendingCancelled;
     private final Set<HttpURLConnection> activeUploads=ConcurrentHashMap.newKeySet();
     /** Stop only outgoing uploads. Disconnect blocked sockets immediately. */
@@ -52,27 +53,38 @@ public final class TransferEngine {
         sessionKey=chosenKey;
         socket=new ServerSocket();socket.setReuseAddress(true);
         socket.bind(new InetSocketAddress(Util.PORT),32);
+        final long epoch=++receiveEpoch;
+        final ServerSocket listening=socket;
         alive=true;
         acceptThread=new Thread(()->{
-            while(alive)try{
-                Socket s=socket.accept();s.setSoTimeout(5000);s.setTcpNoDelay(true);s.setReceiveBufferSize(1024*1024);
-                handlers.execute(()->serve(s));
-            }catch(Exception ex){if(alive)events.note("Сервер: "+ex.getMessage());}
+            while(alive&&epoch==receiveEpoch)try{
+                Socket s=listening.accept();
+                try{
+                    s.setSoTimeout(5000);s.setTcpNoDelay(true);s.setReceiveBufferSize(1024*1024);
+                    handlers.execute(()->serve(s,epoch));
+                }catch(Exception rejected){
+                    try{s.close();}catch(IOException ignored){}
+                    if(alive&&epoch==receiveEpoch)events.note("Не удалось принять подключение");
+                }
+            }catch(Exception ex){if(alive&&epoch==receiveEpoch)events.note("Сервер: "+ex.getMessage());}
         },"xarkon-accept");acceptThread.start();
-        discoverThread=new Thread(this::discoveryLoop,"xarkon-discovery");discoverThread.start();
+        discoverThread=new Thread(()->discoveryLoop(epoch),"xarkon-discovery");discoverThread.start();
         events.note("Приём включён, порт "+Util.PORT);
     }
     public synchronized void stop(){
-        alive=false;sessionKey="";try{if(socket!=null)socket.close();}catch(Exception ignored){}
+        ++receiveEpoch;alive=false;sessionKey="";try{if(socket!=null)socket.close();}catch(Exception ignored){}
         if(discovery!=null)discovery.close();
         for(Incoming item:incoming.values())closeDestination(item,false);
     }
     public void shutdown(){stop();handlers.shutdownNow();}
-    private void discoveryLoop(){
+    private void discoveryLoop(long epoch){
+        if(!alive||epoch!=receiveEpoch)return;
         try(DatagramSocket ds=new DatagramSocket(null)){
-            discovery=ds;ds.setReuseAddress(true);ds.bind(new InetSocketAddress(Util.DISCOVERY_PORT));
+            ds.setReuseAddress(true);ds.bind(new InetSocketAddress(Util.DISCOVERY_PORT));
+            if(!alive||epoch!=receiveEpoch)return;
+            discovery=ds;
             ds.setSoTimeout(2500);byte[]buf=new byte[1024];
-            while(alive){
+            while(alive&&epoch==receiveEpoch){
                 try{
                     DatagramPacket p=new DatagramPacket(buf,buf.length);ds.receive(p);
                     String msg=new String(p.getData(),p.getOffset(),p.getLength(),StandardCharsets.UTF_8);
@@ -83,7 +95,7 @@ public final class TransferEngine {
                     }
                 }catch(SocketTimeoutException ignored){}
             }
-        }catch(Exception e){if(alive)events.note("Поиск устройств: "+e.getMessage());}
+        }catch(Exception e){if(alive&&epoch==receiveEpoch)events.note("Поиск устройств: "+e.getMessage());}
     }
     private static String line(InputStream in)throws IOException{
         ByteArrayOutputStream b=new ByteArrayOutputStream();int x;
@@ -97,7 +109,8 @@ public final class TransferEngine {
         out.write(header.getBytes(StandardCharsets.US_ASCII));out.write(body);out.flush();
     }
     private static JSONObject error(String why){JSONObject j=new JSONObject();try{j.put("error",why);}catch(Exception ignored){}return j;}
-    private void serve(Socket sock){
+    private void serve(Socket sock,long epoch){
+        if(!alive||epoch!=receiveEpoch){try{sock.close();}catch(IOException ignored){}return;}
         try(Socket s=sock; InputStream in=new BufferedInputStream(s.getInputStream(),256*1024);
                OutputStream out=new BufferedOutputStream(s.getOutputStream(),32*1024)){
             String first=line(in);if(first==null)return;
@@ -128,6 +141,7 @@ public final class TransferEngine {
                 block.count=0;block.lockedUntil=0;
             }
             // Short timeout for unauthenticated peers; full timeout for authenticated chunks.
+            if(!alive||epoch!=receiveEpoch)return;
             s.setSoTimeout(90000);
             String path=pieces[1];String method=pieces[0];
             if(method.equals("GET")&&path.equals("/hello")){
@@ -182,6 +196,7 @@ public final class TransferEngine {
                     MessageDigest checksum=MessageDigest.getInstance("SHA-256");
                     byte[] buffer=new byte[256*1024];
                     while(partial<contentLength){
+                        if(!alive||epoch!=receiveEpoch)throw new IOException("Приём остановлен");
                         int n=in.read(buffer,0,(int)Math.min(buffer.length,contentLength-partial));
                         if(n<0)throw new EOFException("Соединение оборвалось");
                         checksum.update(buffer,0,n);
@@ -201,6 +216,7 @@ public final class TransferEngine {
                         // before reporting. Retries never count unfinished chunks as done.
                         // A chunk is resumable only after its bytes are durable and
                         // the bitmap has been committed synchronously.
+                        if(!alive||epoch!=receiveEpoch)throw new IOException("Приём остановлен");
                         channel.force(false);
                         // Persist the digest BEFORE publishing the done bit. A
                         // reboot cannot turn an unverified block into a resume hit.
@@ -230,7 +246,7 @@ public final class TransferEngine {
                 reply(out,200,"OK",new JSONObject().put("received",contentLength));return;
             }
             reply(out,404,"Not Found",error("Неизвестный запрос"));
-        }catch(Exception e){events.note("Входящее соединение: "+e.getMessage());}
+        }catch(Exception e){if(alive&&epoch==receiveEpoch)events.note("Входящее соединение: "+ErrorText.human(e));}
     }
     private String storedSha256(Incoming inc,int index)throws Exception{
         long position=(long)index*Util.CHUNK;
@@ -655,13 +671,15 @@ public final class TransferEngine {
         try{
             for(int i=0;i<32;i++)calls.add(pool.submit(()->{
                 try{
-                    HttpURLConnection conn=(HttpURLConnection)new URL("http",host,port,"/bench").openConnection();
-                    conn.setDoOutput(true);conn.setRequestMethod("PUT");conn.setConnectTimeout(5000);conn.setReadTimeout(30000);
-                    conn.setRequestProperty("X-Xarkon-Key",pin);conn.setFixedLengthStreamingMode(16*1024*1024);
-                    byte[]b=new byte[256*1024];new java.security.SecureRandom().nextBytes(b);
-                    try(OutputStream out=conn.getOutputStream()){for(int k=0;k<64;k++)out.write(b);}
-                    if(conn.getResponseCode()!=200)throw new IOException("HTTP "+conn.getResponseCode());
-                    conn.disconnect();
+                    HttpURLConnection conn=null;
+                    try{
+                        conn=(HttpURLConnection)new URL("http",host,port,"/bench").openConnection();
+                        conn.setDoOutput(true);conn.setRequestMethod("PUT");conn.setConnectTimeout(5000);conn.setReadTimeout(30000);
+                        conn.setRequestProperty("X-Xarkon-Key",pin);conn.setFixedLengthStreamingMode(16*1024*1024);
+                        byte[]b=new byte[256*1024];new java.security.SecureRandom().nextBytes(b);
+                        try(OutputStream out=conn.getOutputStream()){for(int k=0;k<64;k++)out.write(b);}
+                        if(conn.getResponseCode()!=200)throw new IOException("Тест сети не завершён");
+                    }finally{if(conn!=null)conn.disconnect();}
                 }catch(Exception e){throw new RuntimeException(e);}
             }));
             for(Future<?> f:calls)f.get();
