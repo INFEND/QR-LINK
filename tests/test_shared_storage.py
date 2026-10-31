@@ -33,7 +33,7 @@ class SharedStorageContract(unittest.TestCase):
 
     def test_recursive_selection_is_bounded_even_for_empty_folders(self):
         catalog = CATALOG.read_text(encoding="utf-8")
-        self.assertIn("MAX_FOLDER_ENTRIES=50000", catalog)
+        self.assertIn("MAX_FOLDER_ENTRIES=120000", catalog)
         self.assertIn("budget.step();", catalog)
         self.assertIn("!budget.visited.add(docId)", catalog)
         self.assertIn("result,depth+1,budget", catalog)

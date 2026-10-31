@@ -19,7 +19,6 @@ class BrowserLimitsTests(unittest.TestCase):
         self.assertEqual(value(browser, "MAX_MEDIA_SCAN"), 60000)
         self.assertEqual(value(browser, "MAX_QUEUE"), 30000)
         self.assertEqual(value(browser, "MAX_SAF_SCAN"), 120000)
-        self.assertEqual(value(browser, "MAX_SAF_SCAN"), 50000)
         self.assertIn("++scanned>MAX_MEDIA_SCAN", browser)
         self.assertIn("++scanned>MAX_SAF_SCAN", browser)
         self.assertIn("result.size()>MAX_FOLDER_FILES", catalog)
