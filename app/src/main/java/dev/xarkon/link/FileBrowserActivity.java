@@ -74,6 +74,7 @@ public final class FileBrowserActivity extends Activity {
         String name="",mime="",path="",docId="",group="",version="";
         long size=-1,date=0;
         boolean folder=false,mediaFolder=false;
+        int mediaCount=0;
         File localFile;
         String key(){return (folder?"dir:":"file:")+(tree==null?"":tree.toString()+"|")+
             (mediaFolder?group+"|"+path:docId.isEmpty()?uri.toString():docId);}
@@ -344,14 +345,25 @@ public final class FileBrowserActivity extends Activity {
         final String mediaFolder=mediaPath;final String displayPath=folderPath;
         io.execute(()->{
             try{
-                ArrayList<Entry> result=cat<3?(hasLocalStorageAccess()?
-                    queryLocal(Environment.getExternalStorageDirectory(),signal,cat):
-                    queryMedia(cat,mediaFolder,false,signal)):cat==3?queryApps(signal):
-                    queryDocuments(rootTree,doc,displayPath,signal);
+                // Media tabs use MediaStore; only Files traverses every folder in /0.
+                ArrayList<Entry> result=cat<3?queryMedia(cat,mediaFolder,false,signal):
+                    cat==3?queryApps(signal):queryDocuments(rootTree,doc,displayPath,signal);
+                MediaGrouping grouped=cat<3?groupMedia(result,cat):null;
                 ui.post(()->{if(token!=serial||isFinishing())return;
                     safTruncated=cat==4&&result instanceof Entries&&((Entries)result).truncated;
                     mediaTruncated=cat<3&&result instanceof Entries&&((Entries)result).truncated;
-                    current.clear();current.addAll(result);render();});
+                    current.clear();
+                    if(grouped==null)current.addAll(result);
+                    else{
+                        expandedFolders.clear();expandedChildren.clear();openedFolders.clear();
+                        current.addAll(grouped.folders);
+                        for(Entry folder:grouped.folders){
+                            String key=folder.key();
+                            expandedFolders.add(key);
+                            expandedChildren.put(key,grouped.children.get(key));
+                        }
+                    }
+                    render();});
             }catch(Exception ex){
                 ui.post(()->{if(token==serial&&!isFinishing())
                     showMessage("Не удалось открыть каталог. "+ErrorText.human(ex),false);});
@@ -368,17 +380,13 @@ public final class FileBrowserActivity extends Activity {
     }
     private ArrayList<Entry> queryMedia(int cat,String prefix,boolean complete,CancellationSignal cancellation){
         Entries result=new Entries();
-        // A gallery of the newest 30000 files may hide entire older folders.
-        // Scan a bounded number of metadata rows for folder names, without
-        // retaining more than MAX_QUEUE files or decoding thumbnails.
-        LinkedHashMap<String,Entry> folders=new LinkedHashMap<>();
-        int kept=0,scanned=0;
         Uri base=collection(cat);
         String[] cols={MediaStore.MediaColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.SIZE,MediaStore.MediaColumns.DATE_MODIFIED,
             MediaStore.MediaColumns.MIME_TYPE,MediaStore.MediaColumns.RELATIVE_PATH};
         String selection=prefix.isEmpty()?null:MediaStore.MediaColumns.RELATIVE_PATH+" LIKE ?";
         String[] args=prefix.isEmpty()?null:new String[]{prefix+"%"};
+        int scanned=0;
         try(Cursor c=getContentResolver().query(base,cols,selection,args,
                 MediaStore.MediaColumns.DATE_MODIFIED+" DESC",cancellation)){
             if(c==null)throw new IllegalStateException("Медиатека недоступна");
@@ -386,38 +394,47 @@ public final class FileBrowserActivity extends Activity {
                 if(cancellation!=null&&cancellation.isCanceled())throw new OperationCanceledException();
                 if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 String path=c.isNull(5)?"":c.getString(5);
-                // SQL LIKE treats % and _ as wildcards; check the real path.
+                // LIKE has wildcard semantics; still verify the actual prefix.
                 if(!path.startsWith(prefix))continue;
-                if(!complete){
-                    String remaining=path.substring(prefix.length());
-                    int slash=remaining.indexOf('/');
-                    if(slash>0){
-                        String segment=remaining.substring(0,slash);
-                        String folderPath=prefix+segment+"/";
-                        Entry folder=folders.get(folderPath);
-                        if(folder==null){
-                            folder=new Entry();folder.folder=true;folder.mediaFolder=true;
-                            folder.group=TABS[cat];folder.path=folderPath;folder.name=segment;
-                            folders.put(folderPath,folder);
-                        }
-                        folder.date=Math.max(folder.date,c.isNull(3)?0:c.getLong(3));
-                    }
-                }
-                if(kept>=MAX_QUEUE){
+                String name=Util.safeName(c.getString(1));
+                String mime=c.getString(4);
+                if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;
+                if(result.size()>=MAX_QUEUE){
                     if(complete)throw new IllegalStateException(
                         "В папке больше 30000 файлов. Выберите меньшую папку или отдельные файлы.");
-                    result.truncated=true;
-                    continue;
+                    result.truncated=true;break;
                 }
-                Entry e=new Entry();e.uri=ContentUris.withAppendedId(base,c.getLong(0));
-                e.name=Util.safeName(c.getString(1));e.size=c.isNull(2)?-1:c.getLong(2);
+                Entry e=new Entry();
+                e.uri=ContentUris.withAppendedId(base,c.getLong(0));
+                e.name=name;e.size=c.isNull(2)?-1:c.getLong(2);
                 e.date=c.isNull(3)?0:c.getLong(3);
-                e.mime=c.getString(4);e.path=path;
-                result.add(e);kept++;
+                e.mime=mime;e.path=BrowserMediaFolders.normalize(path);
+                result.add(e);
             }
         }
-        if(!complete)result.addAll(folders.values());
         return result;
+    }
+    private static final class MediaGrouping {
+        final ArrayList<Entry> folders=new ArrayList<>();
+        final HashMap<String,ArrayList<Entry>> children=new HashMap<>();
+    }
+    /** Only media-bearing folders are shown, pre-expanded with their matching files. */
+    private MediaGrouping groupMedia(ArrayList<Entry> media,int category){
+        MediaGrouping listing=new MediaGrouping();
+        LinkedHashMap<String,ArrayList<Entry>> groups=
+            BrowserMediaFolders.group(media,entry->entry.path);
+        for(Map.Entry<String,ArrayList<Entry>> item:groups.entrySet()){
+            if(item.getValue().isEmpty())continue;
+            Entry folder=new Entry();folder.folder=true;folder.mediaFolder=true;
+            folder.group=TABS[category];folder.path=item.getKey();
+            folder.name=BrowserMediaFolders.label(item.getKey());
+            folder.mediaCount=item.getValue().size();
+            folder.uri=item.getValue().get(0).uri;
+            for(Entry file:item.getValue())folder.date=Math.max(folder.date,file.date);
+            listing.folders.add(folder);
+            listing.children.put(folder.key(),item.getValue());
+        }
+        return listing;
     }
     private ArrayList<Entry> queryApps(CancellationSignal cancellation)throws Exception{
         PackageManager pm=getPackageManager();
@@ -444,8 +461,7 @@ public final class FileBrowserActivity extends Activity {
                 result.add(e);
             }catch(Exception ignored){}
         }
-        if(hasLocalStorageAccess())result.addAll(0,
-            queryLocal(Environment.getExternalStorageDirectory(),cancellation,3));
+        // Applications shows installed packages only, never directories or archives from /0.
         return result;
     }
     /** Stream the actual shared-storage root, without materialising an unbounded file array. */
@@ -578,17 +594,11 @@ public final class FileBrowserActivity extends Activity {
             if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
             addWide("СИСТЕМНЫЙ ПРОВОДНИК",this::pickTree);
         }
-        if(tab<4&&!hasLocalStorageAccess()){
-            addWide("ПОКАЗАТЬ ПАПКИ ВНУТРЕННЕЙ ПАМЯТИ /0",this::requestLocalStorageAccess);
-            TextView limited=label("Сейчас доступны "+(isMedia()?"файлы медиатеки":"установленные приложения")+
-                ". Для просмотра папок от /0 требуется отдельное разрешение Android.",12,muted,false);
-            pad(limited,6,8);list.addView(limited);
-        }
+
         String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
         // Category search includes indexed files in nested media folders, even
         // when the folder has not yet been expanded. SAF search respects grants.
-        ArrayList<Entry> rows=isMedia()&&filter.isEmpty()&&!hasLocalStorageAccess()?mediaRows(current,mediaPath):
-            new ArrayList<>(current);
+        ArrayList<Entry> rows=new ArrayList<>(current);
         rowDepths.clear();
         Comparator<Entry> cmp=(a,b)->{
             if(a.folder!=b.folder)return a.folder?-1:1;
@@ -646,7 +656,8 @@ public final class FileBrowserActivity extends Activity {
         row.setBackground(shape(card,stroke,14));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(8);
         list.addView(row,rp);
-        String glyph=e.folder?"folder":tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
+        String glyph=e.folder&&!e.mediaFolder?"folder":
+            tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
         int style=browserStyle();
         if(style==1){
             FrameLayout tile=new FrameLayout(this);
@@ -675,7 +686,8 @@ public final class FileBrowserActivity extends Activity {
         }
         UiIcon icon=new UiIcon(this,glyph,accent);
         if(style!=0){
-            if(!e.folder&&(tab==0||tab==1||tab==3))addPreview(row,e,icon,tab);
+            if((!e.folder&&(tab==0||tab==1||tab==3))||
+                (e.mediaFolder&&e.uri!=null))addPreview(row,e,icon,tab);
             else row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
         }
         LinearLayout detail=column();detail.setPadding(dp(10),0,dp(4),0);
@@ -683,7 +695,9 @@ public final class FileBrowserActivity extends Activity {
         if(tab==3&&display.toLowerCase(Locale.ROOT).endsWith(".apk"))display=display.substring(0,display.length()-4);
         TextView name=label(display,14,fg,true);name.setMaxLines(style==1?1:2);name.setEllipsize(TextUtils.TruncateAt.END);
         detail.addView(name);
-        String sub=e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
+        String sub=e.mediaFolder?
+            (tab==0?"Изображений: ":tab==1?"Видео: ":"Аудиофайлов: ")+e.mediaCount:
+            e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
             incompleteFolders.contains(e.key())?"Показана часть содержимого · нажмите, чтобы свернуть":
             expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
             Util.readable(e.size)+(e.mime==null||e.mime.isEmpty()?"":" · "+e.mime);

@@ -38,12 +38,14 @@ class BrowserCategoryRootTests(unittest.TestCase):
             subprocess.run(["java", "-cp", tmp, "dev.xarkon.link.BrowserCategoryFilterCheck"],
                            check=True, capture_output=True, text=True)
 
-    def test_all_categories_have_permission_gated_shared_root(self):
+    def test_files_tab_keeps_universal_root_while_categories_are_specific(self):
         src = BROWSER.read_text(encoding="utf-8")
-        self.assertIn("queryLocal(Environment.getExternalStorageDirectory(),signal,cat)", src)
-        self.assertIn("queryLocal(Environment.getExternalStorageDirectory(),cancellation,3)", src)
+        self.assertIn("cat<3?queryMedia(cat,mediaFolder,false,signal)", src)
+        self.assertIn("cat==3?queryApps(signal):queryDocuments(", src)
+        self.assertIn("queryLocal(Environment.getExternalStorageDirectory(),cancellation)", src)
         self.assertIn("BrowserCategoryFilter.accepts(category,file.getName(),e.mime)", src)
         self.assertIn("queryLocal(e.localFile,signal,category)", src)
+        self.assertNotIn("queryLocal(Environment.getExternalStorageDirectory(),cancellation,3)", src)
         self.assertIn("if(isMedia()&&!hasMediaAccess()&&!hasLocalStorageAccess())", src)
 
     def test_full_folder_selection_not_silently_reduced_to_media_only(self):
