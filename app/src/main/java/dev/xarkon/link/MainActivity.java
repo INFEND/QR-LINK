@@ -71,6 +71,9 @@ public final class MainActivity extends Activity {
     private TextView status,progressText,queueLabel,pairLabel,receiveHint,receiveCaption,networkBadge;
     private TextView transferName,transferPercent,transferSize,transferRate,transferHeading;
     private boolean displayedPairState;
+    private boolean peerProbeBusy;
+    private int peerProbeGeneration;
+    private long lastPeerProbeAt;
     private LinearLayout transferCard;
     private ListView transferFileList;
     private ArrayAdapter<String> transferFileAdapter;
@@ -736,20 +739,22 @@ public final class MainActivity extends Activity {
         }
     }
     private boolean paired(){return prefs().getString("key","").matches("[0-9a-f]{64}")&&!prefs().getString("host","").isEmpty();}
+    private boolean sessionConfirmed(){return paired()&&TransferService.peerVerified&&WifiState.localTransferReady(this);}
     private void sendPage(){
-        displayedPairState=paired();
-        if(displayedPairState){
+        displayedPairState=sessionConfirmed();
+        if(paired()){
             String name=prefs().getString("peer_name","Получатель");
             LinearLayout connected=panel("Устройство: "+name,
-                "Соединение установлено · готово к передаче","wifi");
-            pairLabel=text("Подключено",14,accent,true);
+                displayedPairState?"Сеанс подтверждён · готово к передаче":"QR сохранён · соединение не подтверждено","wifi");
+            pairLabel=text(displayedPairState?"Подключено":"Нужна проверка соединения",14,displayedPairState?accent:muted,true);
             margin(connected,pairLabel,12);
             outlineButton(connected,"link","ПЕРЕПОДКЛЮЧИТЬСЯ",this::validatePaired);
             outlineButton(connected,"trash","РАЗОРВАТЬ СОЕДИНЕНИЕ",()->{
+                ++peerProbeGeneration;peerProbeBusy=false;
                 prefs().edit().remove("host").remove("key").remove("port")
-                    .remove("peer_name").apply();
-                TransferService.peerState="";
-                show();
+                    .remove("peer_name").remove("pair_qr").apply();
+                TransferService.peerVerified=false;TransferService.peerState="";
+                start(TransferService.DISCONNECT_PEER);show();
             });
         }else{
             LinearLayout connect=panel("Подключение по QR",
@@ -1219,7 +1224,7 @@ public final class MainActivity extends Activity {
         }
     }
     private void updateDynamic(){
-        if(page==SEND&&pairLabel!=null&&displayedPairState!=paired()&&!TransferService.isBusy){
+        if(page==SEND&&pairLabel!=null&&displayedPairState!=sessionConfirmed()&&!TransferService.isBusy){
             suppressEntranceAnimations=true;
             try{show();}finally{suppressEntranceAnimations=false;}
             return;
@@ -1266,9 +1271,12 @@ public final class MainActivity extends Activity {
             if(progressText!=null)progressText.setText(TransferService.detail);
         }
         if(page==SEND){
-            if(pairLabel!=null)pairLabel.setText(!TransferService.peerState.isEmpty()?TransferService.peerState:
-                (paired()?"QR отсканирован · получатель найден":"Ожидаем сканирование QR-кода"));
+            if(pairLabel!=null)pairLabel.setText(sessionConfirmed()?"Подключено · сеанс подтверждён":
+                paired()?"QR сохранён · требуется проверка":
+                !TransferService.peerState.isEmpty()?TransferService.peerState:"Ожидаем сканирование QR-кода");
             long now=Util.now();
+            if(paired()&&TransferService.peerVerified&&!TransferService.isBusy&&now-lastPeerProbeAt>25000L)
+                probeSavedPeer(false);
             if(now-lastQueueUpdate>=1000){lastQueueUpdate=now;updateQueue();}
         }
         if(page==RECEIVE)renderQr();
@@ -1377,6 +1385,7 @@ public final class MainActivity extends Activity {
     }
     private void connectQr(String raw){final Pairing.Info info;
         try{info=Pairing.parse(raw);}catch(Exception e){toast("QR не подходит: "+e.getMessage());return;}
+        ++peerProbeGeneration;peerProbeBusy=false;TransferService.peerVerified=false;
         if(pairLabel!=null)pairLabel.setText("Проверяем QR и соединение...");
         if(info.hotspot){
             if(!ensureWifiEnabled())return;
@@ -1400,17 +1409,59 @@ public final class MainActivity extends Activity {
                 org.json.JSONObject check=new org.json.JSONObject(Util.http(info.host,info.port,info.key,"/hello","GET",null));
                 if(!"XARKON LINK".equals(check.optString("app")))throw new Exception("На этом устройстве не запущен совместимый приёмник QR LINK");
                 prefs().edit().putString("host",info.host).putInt("port",info.port)
-                    .putString("key",info.key).putString("peer_name",check.optString("deviceName","Получатель")).apply();
+                    .putString("key",info.key).putString("peer_name",check.optString("deviceName","Получатель"))
+                    .putString("pair_qr",raw).apply();
+                TransferService.peerVerified=true;lastPeerProbeAt=Util.now();
                 runOnUiThread(()->{navigate(SEND);toast("QR принят. Можно отправлять файлы.");});
             }catch(Exception e){runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Не удалось подключиться")
                 .setMessage(ErrorText.human(e.getMessage())+"\n\nПроверьте наличие общего локального соединения и активный QR-код.")
                 .setPositiveButton("Повторить",(d,w)->startScanner()).setNegativeButton("Закрыть",null).show());}
         },"qr-connect-check").start();
     }
-    private void validatePaired(){if(!paired()){toast("Сначала отсканируйте QR-код");return;}
-        String host=prefs().getString("host",""),key=prefs().getString("key","");int port=prefs().getInt("port",Util.PORT);
-        new Thread(()->{try{Util.http(host,port,key,"/hello","GET",null);runOnUiThread(()->toast("Получатель доступен"));}
-            catch(Exception e){runOnUiThread(()->toast("Получатель не отвечает: "+e.getMessage()));}},"qr-check").start();
+    private void validatePaired(){
+        if(!paired()){toast("Сначала отсканируйте QR-код");return;}
+        String raw=prefs().getString("pair_qr","");
+        try{
+            Pairing.Info invitation=Pairing.parse(raw);
+            if(invitation.hotspot){
+                ++peerProbeGeneration;peerProbeBusy=false;
+                TransferService.peerVerified=false;TransferService.peerState="Повторное подключение…";
+                Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);
+                request.putExtra("qr",raw);launchService(request);show();return;
+            }
+        }catch(Exception ignored){/* Earlier sessions can be rechecked over LAN. */}
+        probeSavedPeer(true);
+    }
+    private void probeSavedPeer(boolean showFeedback){
+        if(!paired()||peerProbeBusy)return;
+        peerProbeBusy=true;final int token=++peerProbeGeneration;lastPeerProbeAt=Util.now();
+        final String host=prefs().getString("host",""),key=prefs().getString("key","");
+        final int port=prefs().getInt("port",Util.PORT);
+        new Thread(()->{
+            boolean verified=false;String name="",failure="";
+            try{
+                org.json.JSONObject hello=new org.json.JSONObject(Util.http(host,port,key,"/hello","GET",null));
+                if(!"XARKON LINK".equals(hello.optString("app")))
+                    throw new IllegalStateException("Несовместимый приёмник QR LINK");
+                name=hello.optString("deviceName","Получатель");verified=true;
+            }catch(Exception error){failure=ErrorText.human(error);}
+            final boolean ok=verified;final String device=name,reason=failure;
+            runOnUiThread(()->{
+                if(token!=peerProbeGeneration)return;
+                peerProbeBusy=false;
+                if(!key.equals(prefs().getString("key",""))||!host.equals(prefs().getString("host","")))return;
+                TransferService.peerVerified=ok;
+                if(ok){
+                    prefs().edit().putString("peer_name",device).apply();
+                    TransferService.peerState="Подключено · сеанс подтверждён";
+                    if(showFeedback)toast("Соединение с получателем подтверждено");
+                }else{
+                    TransferService.peerState="Получатель не отвечает · переподключитесь";
+                    if(showFeedback)toast(reason);
+                }
+                if(page==SEND)show();
+            });
+        },"qr-hello-check").start();
     }
     private void pickFilesOrFolder(){
         startActivityForResult(new Intent(this,FileBrowserActivity.class),BROWSER);
@@ -1499,7 +1550,9 @@ public final class MainActivity extends Activity {
         }
     }
     private void launchService(Intent intent){try{
-        if(TransferService.STOP.equals(intent.getAction()))startService(intent);else startForegroundService(intent);
+        if(TransferService.STOP.equals(intent.getAction())||
+            TransferService.DISCONNECT_PEER.equals(intent.getAction()))startService(intent);
+        else startForegroundService(intent);
     }catch(Exception e){toast("Служба: "+e.getMessage());}}
     private void toast(String text){Toast.makeText(this,ErrorText.human(text),Toast.LENGTH_LONG).show();}
 }

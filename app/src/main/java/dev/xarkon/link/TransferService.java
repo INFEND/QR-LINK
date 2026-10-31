@@ -15,6 +15,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     public static final String RECEIVE="dev.xarkon.link.RECEIVE",STOP="dev.xarkon.link.STOP",SEND="dev.xarkon.link.SEND";
     public static final String CONNECT="dev.xarkon.link.CONNECT";
     public static final String CANCEL_SEND="dev.xarkon.link.CANCEL_SEND";
+    public static final String DISCONNECT_PEER="dev.xarkon.link.DISCONNECT_PEER";
     public static final String BENCH="dev.xarkon.link.BENCH",FTP="dev.xarkon.link.FTP",ROTATE="dev.xarkon.link.ROTATE";
     public static volatile String status="Служба выключена",detail="",receiveKey="";
     public static volatile long progress=0,total=0;
@@ -27,6 +28,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private static final String CHANNEL="xarkon_transfer";
     private static final int NOTIFICATION=118;
     private final AtomicBoolean busy=new AtomicBoolean();
+    private final PeerAttemptGuard peerAttempts=new PeerAttemptGuard();
     private final Handler networkHandler=new Handler(Looper.getMainLooper());
     private boolean wantReceive;
     private boolean groupProbeRunning;
@@ -35,6 +37,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             try{
                 if(wantReceive){
                     if(!WifiState.localTransferReady(TransferService.this)){
+                        peerVerified=false;
                         if(isReceiving||directReady||hotspotReady){
                             engine.stop();directWifi.close();hotspot.stop();resetDirect();resetHotspot();
                             systemApHost="";receiveKey="";isReceiving=false;
@@ -70,6 +73,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     public static volatile String hotspotSsid="", hotspotPassword="", hotspotHost="";
     public static volatile int hotspotSecurity=0;
     public static volatile String peerState="";
+    public static volatile boolean peerVerified=false; // Set only after a successful /hello.
     public static volatile String systemApHost="";
     public static volatile boolean directReady=false,directStarting=false;
     public static volatile String directMac="",directSsid="",directPass="",directHost="";
@@ -122,12 +126,19 @@ public final class TransferService extends Service implements TransferEngine.Eve
     @Override public int onStartCommand(Intent in,int flags,int startId){
         if(in==null)return START_NOT_STICKY;
         String action=in.getAction();
+        if(DISCONNECT_PEER.equals(action)){
+            peerAttempts.next();peerVerified=false;peerState="";
+            wifiPeer.stop();if(!wantReceive)directWifi.close();
+            if(!wantReceive&&!isBusy){unlock();stopSelf();}else refresh();
+            MainActivity.changed();return START_NOT_STICKY;
+        }
         if(CANCEL_SEND.equals(action)){
             engine.cancelSending();
             status="Останавливаем передачу · соединение сохранено";refresh();
             return START_NOT_STICKY;
         }
         if(STOP.equals(action)){
+            peerAttempts.next();peerVerified=false;
             wantReceive=false;getSharedPreferences("settings",0).edit().putBoolean("receive_desired",false).apply();
             engine.stop();hotspot.stop();wifiPeer.stop();directWifi.close();resetHotspot();resetDirect();systemApHost="";isReceiving=false;receiveKey="";peerState="";activeFile="";transferDirection="";progress=0;total=0;status="Служба остановлена";
             unlock();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();MainActivity.changed();return START_NOT_STICKY;
@@ -157,6 +168,9 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 return START_NOT_STICKY;
             }
             String raw=in.getStringExtra("qr");
+            final int attempt=peerAttempts.next();
+            peerVerified=false;peerState="Подключение · проверяем маршрут";refresh();
+            wifiPeer.stop();if(!wantReceive)directWifi.close();
             try{
                 Pairing.Info info=Pairing.parse(raw);
                 if(!info.hotspot){note("Это QR общей Wi-Fi сети, используйте стандартное подключение");}
@@ -167,14 +181,15 @@ public final class TransferService extends Service implements TransferEngine.Eve
                         peerState="Ищем Wi-Fi Direct приёмник...";refresh();
                         directWifi.join(info.mac,new DirectWifi.JoinListener(){
                             @Override public void connected(String host){
-                                verifyReceiver(host,info,true);
+                                if(peerAttempts.current(attempt))verifyReceiver(host,info,true,raw,attempt);
                             }
                             @Override public void failure(String reason){
+                                if(!peerAttempts.current(attempt))return;
                                 peerState="Wi-Fi Direct: "+reason+". Пробуем подключение по имени сети...";refresh();
-                                fallbackWifi(info);
+                                fallbackWifi(info,raw,attempt);
                             }
                         });
-                    }else fallbackWifi(info);
+                    }else fallbackWifi(info,raw,attempt);
                 }
             }catch(Exception e){note("Ошибка QR: "+e.getMessage());}
         }else if(SEND.equals(action))runJob(()->{
@@ -188,7 +203,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
             if(todo.isEmpty()){note("Нет файлов для отправки");return;}
             if(host.isEmpty()||pin.isEmpty())throw new java.io.IOException(
                 "Нет подключённого получателя. Отсканируйте QR заново.");
-            engine.send(host,port,pin,todo,lanes);
+            try{engine.send(host,port,pin,todo,lanes);}
+            catch(Exception failure){peerVerified=false;throw failure;}
         });
         else if(BENCH.equals(action))runJob(()->{
             if(!WifiState.localTransferReady(this))throw new java.io.IOException(
@@ -271,34 +287,43 @@ public final class TransferService extends Service implements TransferEngine.Eve
         else{status="Локальная точка доступа без адреса";
             detail="Android не сообщил IP. Перезапустите приём.";refresh();}
     }
-    private void fallbackWifi(Pairing.Info info){
+    private void fallbackWifi(Pairing.Info info,String raw,int attempt){
+        if(!peerAttempts.current(attempt))return;
         peerState="Подключение к сети приёмника. Может потребоваться подтверждение Android";refresh();
         wifiPeer.connect(info,new WifiPeerConnector.Listener(){
-            @Override public void connected(String host){verifyReceiver(host,info,false);}
+            @Override public void connected(String host){
+                if(peerAttempts.current(attempt))verifyReceiver(host,info,false,raw,attempt);
+            }
             @Override public void failure(String reason){
-                peerState="Не удалось подключиться: "+reason;
-                note(peerState);
-                unlockIfIdle();
+                if(!peerAttempts.current(attempt))return;
+                peerVerified=false;peerState="Не удалось подключиться: "+ErrorText.human(reason);
+                note(peerState);unlockIfIdle();
             }
         });
     }
-    private void verifyReceiver(String host,Pairing.Info info,boolean p2pPath){
+    private void verifyReceiver(String host,Pairing.Info info,boolean p2pPath,String raw,int attempt){
+        if(!peerAttempts.current(attempt))return;
         peerState="Проверяем защищённый сеанс QR LINK...";refresh();
         work.execute(()->{
             try{
                 org.json.JSONObject hello=new org.json.JSONObject(Util.http(host,info.port,info.key,"/hello","GET",null));
                 if(!"XARKON LINK".equals(hello.optString("app")))throw new Exception("Несовместимый приёмник");
+                if(!peerAttempts.current(attempt))return;
                 getSharedPreferences("settings",0).edit().putString("host",host).putInt("port",info.port)
-                    .putString("key",info.key)
+                    .putString("key",info.key).putString("pair_qr",raw)
                     .putString("peer_name",hello.optString("deviceName","Получатель")).apply();
-                peerState="Подключено по QR · готово к отправке";status=peerState;
+                peerVerified=true;peerState="Подключено по QR · готово к отправке";status=peerState;
                 unlockIfIdle();refresh();
             }catch(Exception e){
+                if(!peerAttempts.current(attempt))return;
+                peerVerified=false;
                 if(info.direct&&p2pPath){
                     peerState="Wi-Fi Direct подключён, но приёмник не отвечает. Пробуем резервный маршрут";refresh();
-                    fallbackWifi(info);
-                }else{peerState="Ошибка проверки приёмника: "+e.getMessage();note(peerState);
-                    unlockIfIdle();}
+                    fallbackWifi(info,raw,attempt);
+                }else{
+                    peerState="Ошибка проверки приёмника: "+ErrorText.human(e);
+                    note(peerState);unlockIfIdle();
+                }
             }
         });
     }
