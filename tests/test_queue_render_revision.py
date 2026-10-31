@@ -55,7 +55,8 @@ class QueueBrowserTests(unittest.TestCase):
         self.assertIn("final long revision=QueueRevision.current();",main)
         self.assertIn("queueReader.execute(()->{",main)
         self.assertIn("FileCatalog.load(getApplicationContext())",main)
-        self.assertIn("transferFileAdapter.set(next.get(i),i);",main)
+        self.assertIn("transferQueueRows.set(i,next.get(i));",main)
+        self.assertIn("android.R.layout.simple_list_item_1,transferQueueRows",main)
         self.assertIn("BrowserSearchTree.filter(rows,",browser)
 
 if __name__=="__main__":

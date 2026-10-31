@@ -77,6 +77,8 @@ public final class MainActivity extends Activity {
     private LinearLayout transferCard;
     private ListView transferFileList;
     private ArrayAdapter<String> transferFileAdapter;
+    // ArrayAdapter has no set(index); retain its mutable backing list for diff updates.
+    private final ArrayList<String> transferQueueRows=new ArrayList<>();
     private long visibleBytes;
     private String visibleFile="";
     private double visibleRate;
@@ -734,7 +736,8 @@ public final class MainActivity extends Activity {
         progressText.setVisibility(View.GONE);box.addView(progressText);
         if(page==SEND){
             space(box,14);box.addView(text("ФАЙЛЫ В ОЧЕРЕДИ",11,muted,true));space(box,7);
-            transferFileAdapter=new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1){
+            transferQueueRows.clear();
+            transferFileAdapter=new ArrayAdapter<String>(this,android.R.layout.simple_list_item_1,transferQueueRows){
                 @Override public View getView(int position,View convertView,ViewGroup parent){
                     TextView row=(TextView)super.getView(position,convertView,parent);
                     row.setTextColor(fg);row.setTextSize(12);row.setSingleLine(true);
@@ -1266,12 +1269,12 @@ public final class MainActivity extends Activity {
             String sign="Передан".equals(status)?"✓ ":status.startsWith("Ошибка")?"! ":"○ ";
             next.add(sign+file.name+" · "+Util.readable(Math.max(0,file.size)));
         }
-        if(transferFileAdapter.getCount()!=next.size()){
-            transferFileAdapter.clear();
-            transferFileAdapter.addAll(next);
+        if(transferQueueRows.size()!=next.size()){
+            transferQueueRows.clear();
+            transferQueueRows.addAll(next);
         }else for(int i=0;i<next.size();i++){
-            if(!Objects.equals(transferFileAdapter.getItem(i),next.get(i)))
-                transferFileAdapter.set(next.get(i),i);
+            if(!Objects.equals(transferQueueRows.get(i),next.get(i)))
+                transferQueueRows.set(i,next.get(i));
         }
         transferFileAdapter.notifyDataSetChanged();
     }
