@@ -470,6 +470,29 @@ public final class MainActivity extends Activity {
             }
         }
     }
+    private void browserAppearance(LinearLayout parent){
+        margin(parent,text("СТИЛЬ ПРОВОДНИКА",11,muted,true),18);
+        LinearLayout choices=row();margin(parent,choices,10);
+        String[] names={"Текст","Иконки","Текст и иконки"};
+        String[] glyphs={"file","image","folder"};
+        int current=Math.max(0,Math.min(2,prefs().getInt("browser_style",2)));
+        for(int i=0;i<names.length;i++){
+            final int value=i;boolean selected=i==current;
+            LinearLayout tile=column();tile.setGravity(Gravity.CENTER);
+            tile.setPadding(dp(5),dp(11),dp(5),dp(11));
+            tile.setBackground(ripple(selected?soft:buttonBg,selected?accent:stroke,14));
+            tile.addView(icon(glyphs[i],selected?accent:muted,25));
+            space(tile,7);
+            TextView caption=text(names[i],11,selected?accent:fg,selected);
+            caption.setGravity(Gravity.CENTER);tile.addView(caption);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(80),1);
+            lp.setMargins(dp(3),0,dp(3),0);choices.addView(tile,lp);
+            interactive(tile,()->{
+                prefs().edit().putInt("browser_style",value).apply();
+                redrawAtPosition();
+            });
+        }
+    }
     private void themeChoice(LinearLayout parent,String id,String name,String glyph){
         LinearLayout tile=column();tile.setGravity(Gravity.CENTER);
         boolean selected=mode().equals(id);
@@ -871,6 +894,7 @@ public final class MainActivity extends Activity {
         themeChoice(themes,"amoled","AMOLED","amoled");
         themeChoice(themes,"light","Светлая","sun");
         colorPalette(appearance);
+        browserAppearance(appearance);
         LinearLayout animations=section("animations","Анимация и отклик",
             "Скорость переходов и тактильная обратная связь","sparkles",false);
         settingToggle(animations,"sparkles","Плавные анимации",

@@ -19,6 +19,8 @@ import android.os.*;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.text.*;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.view.*;
 import android.widget.*;
 import java.io.File;
@@ -43,6 +45,10 @@ public final class FileBrowserActivity extends Activity {
     private final ArrayList<Entry> current=new ArrayList<>();
     private final ArrayDeque<Location> history=new ArrayDeque<>();
     private final HashSet<Integer> permissionPrompted=new HashSet<>();
+    private final HashMap<String,ArrayList<Entry>> expandedChildren=new HashMap<>();
+    private final HashSet<String> expandedFolders=new HashSet<>();
+    private final HashSet<String> loadingFolders=new HashSet<>();
+    private final HashMap<String,Integer> rowDepths=new HashMap<>();
     private LinearLayout list,tabs,root;
     private ScrollView scroll;
     private int page=0;
@@ -61,7 +67,7 @@ public final class FileBrowserActivity extends Activity {
 
     private static final class Entry {
         Uri uri,tree;
-        String name="",mime="",path="",docId="",group="";
+        String name="",mime="",path="",docId="",group="",version="";
         long size=-1,date=0;
         boolean folder=false,mediaFolder=false;
         String key(){return (folder?"dir:":"file:")+(tree==null?"":tree.toString()+"|")+
@@ -100,7 +106,45 @@ public final class FileBrowserActivity extends Activity {
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
     }
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);theme();buildUi();switchTab(0);
+        super.onCreate(state);theme();buildUi();applyInsets();switchTab(0);
+    }
+    /** Android 15+ draws behind system bars even for legacy target SDKs. */
+    private void applyInsets(){
+        if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
+        root.setOnApplyWindowInsetsListener((view,insets)->{
+            int top,bottom;
+            if(Build.VERSION.SDK_INT>=30){
+                android.graphics.Insets bars=insets.getInsets(
+                    WindowInsets.Type.statusBars()|WindowInsets.Type.navigationBars());
+                top=bars.top;bottom=bars.bottom;
+            }else{top=insets.getSystemWindowInsetTop();bottom=insets.getSystemWindowInsetBottom();}
+            view.setPadding(0,top,0,bottom);
+            return insets;
+        });
+        root.requestApplyInsets();
+    }
+    private int browserStyle(){return Math.max(0,Math.min(2,
+        getSharedPreferences("settings",0).getInt("browser_style",2)));}
+    private void showSortDialog(){
+        final android.app.Dialog dialog=new android.app.Dialog(this);
+        LinearLayout panel=column();pad(panel,12,12);
+        panel.setBackground(shape(card,accent,16));
+        TextView heading=label("СОРТИРОВКА",12,muted,true);pad(heading,12,10);panel.addView(heading);
+        String[] names={"Имя","Дата","Размер","Тип"};int[] values={0,2,1,3};
+        for(int i=0;i<names.length;i++){
+            final int choice=values[i];boolean active=sort==choice;
+            TextView option=label((active?"✓  ":"     ")+names[i],16,active?accent:fg,active);
+            pad(option,15,14);option.setBackground(shape(active?bg:card,active?accent:0,10));
+            panel.addView(option,new LinearLayout.LayoutParams(-1,-2));
+            option.setOnClickListener(v->{sort=choice;page=0;dialog.dismiss();render();});
+        }
+        dialog.setContentView(panel);dialog.show();
+        Window w=dialog.getWindow();if(w!=null){
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            w.setLayout(dp(230),-2);w.setGravity(Gravity.TOP|Gravity.END);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams attrs=w.getAttributes();attrs.dimAmount=.28f;w.setAttributes(attrs);
+        }
     }
     private void buildUi(){
         root=column();root.setBackgroundColor(bg);setContentView(root);
@@ -119,20 +163,14 @@ public final class FileBrowserActivity extends Activity {
         LinearLayout tools=new LinearLayout(this);tools.setGravity(Gravity.CENTER_VERTICAL);
         tools.setPadding(dp(16),dp(3),dp(16),dp(10));
         search=new EditText(this);search.setSingleLine(true);search.setTextSize(14);
-        search.setHint("Поиск в текущей папке");search.setHintTextColor(muted);
+        search.setHint("Поиск по картинкам");search.setHintTextColor(muted);
         search.setTextColor(fg);search.setBackground(shape(card,stroke,14));
         search.setCompoundDrawablePadding(dp(8));pad(search,12,10);
         tools.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
         sortButton=label("↕",22,accent,true);sortButton.setGravity(Gravity.CENTER);
         tools.addView(sortButton,new LinearLayout.LayoutParams(dp(52),dp(48)));
         sortButton.setContentDescription("Сортировка файлов");
-        sortButton.setOnClickListener(v->{
-            PopupMenu menu=new PopupMenu(this,sortButton);
-            menu.getMenu().add(0,0,0,"Имя");menu.getMenu().add(0,2,1,"Дата");
-            menu.getMenu().add(0,1,2,"Размер");menu.getMenu().add(0,3,3,"Тип");
-            menu.setOnMenuItemClickListener(item->{sort=item.getItemId();page=0;render();return true;});
-            menu.show();
-        });
+        sortButton.setOnClickListener(v->showSortDialog());
         root.addView(tools);
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int c,int after){}
@@ -174,16 +212,31 @@ public final class FileBrowserActivity extends Activity {
     private void updateTabs(){
         tabs.removeAllViews();
         for(int i=0;i<TABS.length;i++){
-            final int index=i;TextView chip=label(TABS[i],13,i==tab?Color.BLACK:fg,true);
-            chip.setGravity(Gravity.CENTER);pad(chip,16,12);
+            final int index=i;int style=browserStyle();
+            LinearLayout chip=new LinearLayout(this);chip.setGravity(Gravity.CENTER_VERTICAL);
+            chip.setOrientation(LinearLayout.HORIZONTAL);chip.setPadding(dp(12),dp(10),dp(12),dp(10));
             chip.setBackground(shape(i==tab?accent:card,i==tab?0:stroke,14));
+            if(style!=0){
+                String[] glyphs={"image","video","music","apps","file"};
+                UiIcon icon=new UiIcon(this,glyphs[i],i==tab?Color.BLACK:accent);
+                chip.addView(icon,new LinearLayout.LayoutParams(dp(22),dp(22)));
+            }
+            if(style!=1){
+                TextView title=label(TABS[i],13,i==tab?Color.BLACK:fg,true);
+                if(style==2)title.setPadding(dp(7),0,0,0);
+                chip.addView(title);
+            }
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);
             lp.rightMargin=dp(8);tabs.addView(chip,lp);
+            chip.setContentDescription(TABS[i]);
             chip.setOnClickListener(v->switchTab(index));
         }
     }
     private void switchTab(int index){
         tab=index;page=0;tree=null;folderId="";folderPath="";mediaPath="";history.clear();
+        expandedChildren.clear();expandedFolders.clear();loadingFolders.clear();rowDepths.clear();
+        String[] hints={"Поиск по картинкам","Поиск по видео","Поиск по музыке","Поиск по приложениям","Поиск по файлам"};
+        search.setHint(hints[index]);
         // Do not expose the previous tab's entries while the new provider query is pending.
         current.clear();safTruncated=false;mediaTruncated=false;
         ui.removeCallbacks(searchRefresh);
@@ -339,7 +392,10 @@ public final class FileBrowserActivity extends Activity {
                 ApplicationInfo app=pm.getApplicationInfo(pkg,0);
                 File apk=new File(app.publicSourceDir);
                 if(!apk.isFile())continue;
-                Entry e=new Entry();e.name=Util.safeName(pm.getApplicationLabel(app).toString())+".apk";
+                Entry e=new Entry();e.name=Util.safeName(pm.getApplicationLabel(app).toString());
+                try{PackageInfo pkgInfo=pm.getPackageInfo(pkg,0);
+                    e.version=pkgInfo.versionName==null?"Неизвестна":pkgInfo.versionName;
+                }catch(Exception ignored){e.version="Неизвестна";}
                 e.uri=Uri.parse("content://dev.xarkon.link.updates/installed/"+Uri.encode(pkg));
                 e.mime="application/vnd.android.package-archive";
                 e.size=apk.length();e.date=apk.lastModified()/1000;
@@ -398,29 +454,12 @@ public final class FileBrowserActivity extends Activity {
         list.removeAllViews();
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
-            addWide("+ ОТКРЫТЬ ПАПКУ ЧЕРЕЗ ANDROID",this::pickTree);
+            addWide("СИСТЕМНЫЙ ПРОВОДНИК",this::pickTree);
             TextView hint=label("Разрешение выдаётся Android один раз. Затем содержимое открывается здесь, в собственном проводнике.",12,muted,false);
             pad(hint,6,8);list.addView(hint);
         }
-        ArrayList<Entry> rows=new ArrayList<>();
-        if(isMedia()){
-            String prefix=mediaPath;LinkedHashMap<String,Entry> folders=new LinkedHashMap<>();
-            for(Entry e:current){
-                if(e.mediaFolder){folders.putIfAbsent(e.path,e);continue;}
-                if(!e.path.startsWith(prefix))continue;
-                String remain=e.path.substring(prefix.length());
-                if(!remain.isEmpty()){
-                    String segment=remain.split("/",2)[0];
-                    if(segment.isEmpty())continue;
-                    String path=prefix+segment+"/";
-                    if(!folders.containsKey(path)){
-                        Entry f=new Entry();f.folder=true;f.mediaFolder=true;f.group=TABS[tab];
-                        f.path=path;f.name=segment;folders.put(path,f);
-                    }
-                }else rows.add(e);
-            }
-            rows.addAll(0,folders.values());
-        }else rows.addAll(current);
+        ArrayList<Entry> rows=isMedia()?mediaRows(current,mediaPath):new ArrayList<>(current);
+        rowDepths.clear();
         String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
         if(!filter.isEmpty())rows.removeIf(e->!e.name.toLowerCase(Locale.ROOT).contains(filter));
         Comparator<Entry> cmp=(a,b)->{
@@ -432,6 +471,9 @@ public final class FileBrowserActivity extends Activity {
             return a.name.compareToIgnoreCase(b.name);
         };
         Collections.sort(rows,cmp);
+        ArrayList<Entry> flattened=new ArrayList<>();
+        for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp);
+        rows=flattened;
         if(rows.isEmpty()){
             TextView nothing=label(tab==4&&tree==null?"Откройте папку, чтобы увидеть файлы":
                 "В этом разделе пока нет файлов",14,muted,false);
@@ -443,7 +485,7 @@ public final class FileBrowserActivity extends Activity {
         page=Math.max(0,Math.min(page,pages-1));
         int from=page*MAX_VISIBLE,to=Math.min(rows.size(),from+MAX_VISIBLE);
         for(int i=from;i<to;i++){
-            Entry entry=rows.get(i);visibleEntries.add(entry);drawRow(entry);
+            Entry entry=rows.get(i);visibleEntries.add(entry);drawRow(entry,rowDepths.getOrDefault(entry.key(),0));
         }
         if(rows.size()>MAX_VISIBLE){
             TextView position=label("Показаны "+(from+1)+"–"+to+" из "+rows.size()+
@@ -465,23 +507,43 @@ public final class FileBrowserActivity extends Activity {
         page=Math.max(0,page+delta);render();
         if(scroll!=null)scroll.post(()->scroll.smoothScrollTo(0,0));
     }
-    private void drawRow(Entry e){
+    private void drawRow(Entry e,int depth){
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(12),dp(11),dp(9),dp(11));
+        row.setPadding(dp(12+Math.min(7,depth)*10),dp(11),dp(9),dp(11));
         row.setBackground(shape(card,stroke,14));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(8);
         list.addView(row,rp);
         String glyph=e.folder?"folder":tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
         UiIcon icon=new UiIcon(this,glyph,accent);
-        if(!e.folder&&(tab==0||tab==1||tab==3))addPreview(row,e,icon,tab);
-        else row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
+        int style=browserStyle();
+        if(style!=0){
+            if(!e.folder&&(tab==0||tab==1||tab==3))addPreview(row,e,icon,tab);
+            else row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
+        }
         LinearLayout detail=column();detail.setPadding(dp(10),0,dp(4),0);
-        TextView name=label(e.name,14,fg,true);name.setMaxLines(2);name.setEllipsize(TextUtils.TruncateAt.END);
+        String display=e.name;
+        if(tab==3&&display.toLowerCase(Locale.ROOT).endsWith(".apk"))display=display.substring(0,display.length()-4);
+        TextView name=label(display,14,fg,true);name.setMaxLines(style==1?1:2);name.setEllipsize(TextUtils.TruncateAt.END);
         detail.addView(name);
-        String sub=e.folder?"Папка · нажмите, чтобы открыть":
+        String sub=e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
+            expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
             Util.readable(e.size)+(e.mime==null||e.mime.isEmpty()?"":" · "+e.mime);
-        TextView meta=label(sub,11,muted,false);meta.setSingleLine(true);
-        meta.setEllipsize(TextUtils.TruncateAt.END);detail.addView(meta);
+        if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
+        if(style!=1||e.folder){
+            TextView meta=label(sub,11,muted,false);meta.setSingleLine(true);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            if(tab==3&&!e.folder){
+                SpannableStringBuilder rich=new SpannableStringBuilder(sub);
+                int sizeStart="Размер: ".length(),sizeEnd=sub.indexOf(" | Версия:");
+                int versionStart=sizeEnd+" | Версия: ".length();
+                for(int[] range:new int[][]{{sizeStart,sizeEnd},{versionStart,sub.length()}}){
+                    rich.setSpan(new ForegroundColorSpan(accent),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    rich.setSpan(new StyleSpan(Typeface.BOLD),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                meta.setText(rich);
+            }
+            detail.addView(meta);
+        }
         row.addView(detail,new LinearLayout.LayoutParams(0,-2,1));
         boolean checked=selected.containsKey(e.key());
         TextView check=label(checked?"✓":"＋",22,checked?Color.BLACK:accent,true);
@@ -489,7 +551,7 @@ public final class FileBrowserActivity extends Activity {
         row.addView(check,new LinearLayout.LayoutParams(dp(39),dp(39)));
         selectionIndicators.put(e.key(),check);
         check.setOnClickListener(v->toggle(e));
-        row.setOnClickListener(v->{if(e.folder)open(e);else toggle(e);});
+        row.setOnClickListener(v->{if(e.folder)expandFolder(e);else toggle(e);});
         row.setOnLongClickListener(v->{toggle(e);return true;});
     }
     /** Asynchronous, bounded-memory thumbnails; never decode images on the UI thread. */
@@ -608,12 +670,67 @@ public final class FileBrowserActivity extends Activity {
         action.setAlpha(selected.isEmpty()||busy?.42f:1f);
         action.setBackground(shape(accent,0,14));
     }
-    private void open(Entry e){
-        history.push(new Location(tree,folderId,folderPath,mediaPath));
-        if(e.mediaFolder)mediaPath=e.path;
-        else{tree=e.tree;folderId=e.docId;folderPath=
-            folderPath.isEmpty()?e.name:folderPath+"/"+e.name;}
-        search.setText("");load();
+    /** Build direct children only. Nested folders are queried on demand and cached. */
+    private ArrayList<Entry> mediaRows(List<Entry> entries,String prefix){
+        ArrayList<Entry> rows=new ArrayList<>();
+        LinkedHashMap<String,Entry> folders=new LinkedHashMap<>();
+        for(Entry e:entries){
+            if(e.mediaFolder){if(e.path.startsWith(prefix)&&!e.path.equals(prefix))
+                folders.putIfAbsent(e.path,e);continue;}
+            if(!e.path.startsWith(prefix))continue;
+            String remaining=e.path.substring(prefix.length());
+            if(!remaining.isEmpty()){
+                int slash=remaining.indexOf('/');
+                String segment=slash<0?remaining:remaining.substring(0,slash);
+                if(segment.isEmpty())continue;
+                String path=prefix+segment+"/";
+                if(!folders.containsKey(path)){
+                    Entry f=new Entry();f.folder=true;f.mediaFolder=true;f.group=TABS[tab];
+                    f.path=path;f.name=segment;folders.put(path,f);
+                }
+            }else rows.add(e);
+        }
+        rows.addAll(0,folders.values());
+        return rows;
+    }
+    private void appendExpanded(ArrayList<Entry> result,Entry entry,int depth,Comparator<Entry> cmp){
+        if(depth>16||result.size()>=MAX_SAF_SCAN)return;
+        rowDepths.put(entry.key(),depth);result.add(entry);
+        if(!entry.folder||!expandedFolders.contains(entry.key()))return;
+        ArrayList<Entry> children=expandedChildren.get(entry.key());
+        if(children==null)return;
+        ArrayList<Entry> direct=entry.mediaFolder?mediaRows(children,entry.path):new ArrayList<>(children);
+        direct.sort(cmp);
+        for(Entry child:direct)appendExpanded(result,child,depth+1,cmp);
+    }
+    private void expandFolder(Entry e){
+        String key=e.key();
+        if(expandedFolders.remove(key)){render();return;}
+        expandedFolders.add(key);
+        if(expandedChildren.containsKey(key)){render();return;}
+        if(!loadingFolders.add(key))return;
+        render();
+        final int token=serial,category=tab;
+        io.execute(()->{
+            try{
+                CancellationSignal signal=new CancellationSignal();
+                ArrayList<Entry> children=e.mediaFolder?queryMedia(category,e.path,false,signal):
+                    queryDocuments(e.tree,e.docId,e.name,signal);
+                ui.post(()->{
+                    loadingFolders.remove(key);
+                    if(token!=serial||isFinishing())return;
+                    expandedChildren.put(key,children);render();
+                });
+            }catch(Exception error){
+                ui.post(()->{
+                    loadingFolders.remove(key);
+                    if(token!=serial||isFinishing())return;
+                    expandedFolders.remove(key);
+                    Toast.makeText(this,"Не удалось раскрыть папку",Toast.LENGTH_SHORT).show();
+                    render();
+                });
+            }
+        });
     }
     @Override public void onBackPressed(){
         if(!history.isEmpty()){
@@ -638,9 +755,12 @@ public final class FileBrowserActivity extends Activity {
             // Open the granted folder immediately. Back returns to the saved roots.
             String id=DocumentsContract.getTreeDocumentId(uri);
             Uri rootDocument=DocumentsContract.buildDocumentUriUsingTree(uri,id);
-            tab=4;tree=uri;folderId=id;folderPath=Util.name(this,rootDocument);
+            tab=4;tree=null;folderId="";folderPath="";
+            expandedChildren.clear();expandedFolders.clear();loadingFolders.clear();
+            // Show the granted root in the tree instead of navigating into it.
+            tree=null;
             mediaPath="";history.clear();
-            history.push(new Location(null,"","",""));
+            // The granted folder appears among the available roots.
             current.clear();safTruncated=false;
             ui.removeCallbacks(searchRefresh);
             search.setText("");updateTabs();load();
@@ -686,7 +806,8 @@ public final class FileBrowserActivity extends Activity {
     private void addJob(ArrayList<FileCatalog.Item> jobs,Set<String> used,Entry e,String path){
         if(e.uri==null||!used.add(e.uri.toString()))return;
         FileCatalog.Item it=new FileCatalog.Item();
-        it.id=Util.id();it.uri=e.uri.toString();it.name=Util.safeName(e.name);
+        it.id=Util.id();it.uri=e.uri.toString();
+        it.name=Util.safeName(tab==3&&!e.name.endsWith(".apk")?e.name+".apk":e.name);
         it.mime=e.mime==null||e.mime.isEmpty()?"application/octet-stream":e.mime;
         it.size=e.size;it.path=Util.safePath(path);it.status="В очереди";
         jobs.add(it);
