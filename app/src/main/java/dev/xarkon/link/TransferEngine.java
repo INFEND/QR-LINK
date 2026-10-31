@@ -524,6 +524,8 @@ public final class TransferEngine {
         JSONObject hello=new JSONObject(Util.http(host,port,userPin,"/hello","GET",null));
         if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new IOException("Это не совместимый приёмник QR LINK");
         final boolean verifySha=hello.optBoolean("sha256",false);
+        // Never silently report an unchecked transfer as successful.
+        if(!verifySha)throw new IOException("Приёмник не подтверждает SHA-256. Обновите QR LINK на втором телефоне.");
         int failed=0;
         for(FileCatalog.Item job:jobs){
             if(sendingCancelled||Thread.currentThread().isInterrupted()){
@@ -550,16 +552,16 @@ public final class TransferEngine {
         int blocks=ChunkState.count(job.size,Util.CHUNK);
         BitSet completed=BitSet.valueOf(Base64.decode(result.optString("done",""),Base64.DEFAULT));
         ChunkState.validate(completed,blocks);
-        // A fully resumed file still needs a readable, unchanged-size source.
-        // Otherwise a deleted source could be falsely reported as transferred.
+        // Check the source before ANY resumed chunks are skipped, not only
+        // when the receiver reports that the whole file is already complete.
+        Uri sourceUri=Uri.parse(job.uri);
+        long actual=Util.size(context,sourceUri);
+        if(actual>=0&&actual!=job.size)
+            throw new IOException("Размер исходного файла изменился");
         if(completed.cardinality()==blocks){
-            Uri sourceUri=Uri.parse(job.uri);
             try(InputStream probe=context.getContentResolver().openInputStream(sourceUri)){
                 if(probe==null)throw new IOException("Исходный файл больше недоступен");
             }
-            long actual=Util.size(context,sourceUri);
-            if(actual>=0&&actual!=job.size)
-                throw new IOException("Размер исходного файла изменился");
         }
         // Do not allocate one boxed index per missing block for very large files.
         long already=0;
