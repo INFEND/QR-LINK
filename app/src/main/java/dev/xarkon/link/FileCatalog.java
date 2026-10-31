@@ -134,8 +134,9 @@ public final class FileCatalog {
             .putString("list",snapshot).putString("list_mirror",snapshot).commit();
         if(!saved)throw new IllegalStateException("Android не сохранил очередь файлов");
         // Do not erase unmerged statuses after a transient database failure.
-        if(statusesMerged&&mergePendingStatuses)
+        if(statusesMerged&&mergePendingStatuses){
             try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
+        }
         QueueRevision.changed();
     }
     public static synchronized void append(Context c,List<Item> items){
