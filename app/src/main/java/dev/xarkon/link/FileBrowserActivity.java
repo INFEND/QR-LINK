@@ -593,7 +593,8 @@ public final class FileBrowserActivity extends Activity {
         rows=flattened;
         // Search after expanding the tree so a matching SAF child remains visible
         // even when the parent folder's name does not match the query.
-        if(!filter.isEmpty())rows.removeIf(e->!e.name.toLowerCase(Locale.ROOT).contains(filter));
+        if(!filter.isEmpty())rows=new ArrayList<>(BrowserSearchTree.filter(rows,
+            e->rowDepths.getOrDefault(e.key(),0),e->e.name,filter));
         if(rows.isEmpty()){
             TextView nothing=label(tab==4&&tree==null?"Нет доступных файлов. Проверьте разрешения или выберите папку":
                 "В этом разделе пока нет файлов",14,muted,false);

@@ -32,6 +32,8 @@ public final class FileCatalog {
     // deserialize and rewrite thousands of unrelated entries after every file.
     // A small SQLite table keeps each status update durable and O(log n).
     private static StatusStore statusStore;
+    // A single-process monotonic invalidation signal for the large queue UI.
+    // The durable JSON snapshot and SQLite status journal remain authoritative.
     private static final class StatusStore extends SQLiteOpenHelper {
         StatusStore(Context c){super(c.getApplicationContext(),"qr_link_status.db",null,1);}
         @Override public void onCreate(SQLiteDatabase db){
@@ -100,7 +102,10 @@ public final class FileCatalog {
         JSONArray a=new JSONArray();try{for(Item it:items)a.put(it.json());}catch(Exception ignored){}
         // Never discard the status journal unless the merged snapshot is durable.
         boolean saved=c.getSharedPreferences(PREF,0).edit().putString("list",a.toString()).commit();
-        if(saved)try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
+        if(saved){
+            try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
+            QueueRevision.changed();
+        }
     }
     public static synchronized void append(Context c,List<Item> items){ArrayList<Item> all=load(c);all.addAll(items);save(c,all);}
     public static synchronized void setStatus(Context c,String id,String status){
@@ -109,7 +114,7 @@ public final class FileCatalog {
             ContentValues values=new ContentValues();
             values.put("id",id);values.put("status",status);
             if(statusDb(c).insertWithOnConflict("item_status",null,values,
-                    SQLiteDatabase.CONFLICT_REPLACE)!=-1)return;
+                    SQLiteDatabase.CONFLICT_REPLACE)!=-1){QueueRevision.changed();return;}
         }catch(Exception ignored){}
         // Conservative fallback: retain the original JSON status path if
         // SQLite is temporarily unavailable. No transfer result is discarded.

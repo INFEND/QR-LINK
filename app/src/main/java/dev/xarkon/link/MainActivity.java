@@ -91,6 +91,12 @@ public final class MainActivity extends Activity {
     private final ArrayList<FtpBridge.Entry> ftpEntries=new ArrayList<>();
     private TextView ftpListLabel;
     private long lastQueueFingerprint=-1;
+    private boolean queueReadPending;
+    private TextView renderedQueueLabel;
+    private ArrayAdapter<String> renderedQueueAdapter;
+    // Queue metadata is read off the UI thread; progress ticks never parse 12k JSON rows.
+    private final java.util.concurrent.ExecutorService queueReader=
+        java.util.concurrent.Executors.newSingleThreadExecutor();
     // Section state is only kept while editing Settings; opening Settings starts fully collapsed.
     private final Set<String> expandedSections = new HashSet<>();
     public static void changed(){MainActivity a=current.get();if(a!=null)a.runOnUiThread(a::updateDynamic);}
@@ -259,7 +265,11 @@ public final class MainActivity extends Activity {
         handler.removeCallbacks(startupUpdateTask);
         super.onPause();
     }
-    @Override protected void onDestroy(){if(current.get()==this)current.clear();super.onDestroy();}
+    @Override protected void onDestroy(){
+        queueReader.shutdownNow();
+        if(current.get()==this)current.clear();
+        super.onDestroy();
+    }
     @Override public void onBackPressed(){if(page==HOME){super.onBackPressed();}else if(page==HISTORY||page==FTP){navigate(SETTINGS);}else navigate(HOME);}
     private GradientDrawable shape(int color,int line,int round){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(round));if(line!=0)d.setStroke(dp(1),line);return d;}
     private TextView text(CharSequence value,int size,int color,boolean heavy){TextView t=new TextView(this);
@@ -1208,20 +1218,62 @@ public final class MainActivity extends Activity {
             });
         }catch(Exception e){runOnUiThread(()->{if(ftpListLabel!=null)ftpListLabel.setText("Ошибка: "+e.getMessage());});}},"ftp-list").start();
     }
-    private void updateQueue(){if(queueLabel==null||page!=SEND)return;
-        ArrayList<FileCatalog.Item> jobs=FileCatalog.load(this);long size=0;int finished=0,failed=0;
-        for(FileCatalog.Item f:jobs){size+=Math.max(0,f.size);if("Передан".equals(f.status))finished++;
-            if(f.status.startsWith("Ошибка"))failed++;}
-        queueLabel.setText(jobs.isEmpty()?"Очередь пуста":
-            "Файлов: "+jobs.size()+"  ·  "+Util.readable(size)+"\nГотово: "+finished+"   Ошибки: "+failed);
-        if(transferFileAdapter!=null){
-            transferFileAdapter.clear();
-            for(FileCatalog.Item file:jobs){
-                String sign="Передан".equals(file.status)?"✓ ":file.status.startsWith("Ошибка")?"! ":"○ ";
-                transferFileAdapter.add(sign+file.name+" · "+Util.readable(Math.max(0,file.size)));
-            }
-            transferFileAdapter.notifyDataSetChanged();
+    /** No disk I/O or 12k-row adapter rebuild on the 55 ms animation ticker. */
+    private void updateQueue(){
+        if(queueLabel==null||page!=SEND)return;
+        final long revision=QueueRevision.current();
+        if(revision==lastQueueFingerprint&&renderedQueueLabel==queueLabel&&
+            renderedQueueAdapter==transferFileAdapter)return;
+        if(queueReadPending)return;
+        queueReadPending=true;
+        final TextView requestedLabel=queueLabel;
+        final ArrayAdapter<String> requestedAdapter=transferFileAdapter;
+        queueReader.execute(()->{
+            final ArrayList<FileCatalog.Item> jobs=FileCatalog.load(getApplicationContext());
+            runOnUiThread(()->{
+                queueReadPending=false;
+                if(isFinishing()||isDestroyed())return;
+                if(page==SEND&&queueLabel==requestedLabel&&
+                    transferFileAdapter==requestedAdapter){
+                    renderQueueSnapshot(jobs);
+                    // Capture the revision from BEFORE loading: a concurrent status
+                    // write must trigger another read, not be mistaken for rendered.
+                    lastQueueFingerprint=revision;
+                    renderedQueueLabel=requestedLabel;
+                    renderedQueueAdapter=requestedAdapter;
+                }
+                if(page==SEND&&(QueueRevision.current()!=lastQueueFingerprint||
+                    renderedQueueLabel!=queueLabel||
+                    renderedQueueAdapter!=transferFileAdapter))updateQueue();
+            });
+        });
+    }
+    /** Diff in place: keep ListView rows and scroll position for large queues. */
+    private void renderQueueSnapshot(ArrayList<FileCatalog.Item> jobs){
+        long size=0;int finished=0,failed=0;
+        for(FileCatalog.Item file:jobs){
+            size+=Math.max(0,file.size);
+            if("Передан".equals(file.status))finished++;
+            if(file.status!=null&&file.status.startsWith("Ошибка"))failed++;
         }
+        queueLabel.setText(jobs.isEmpty()?"Очередь пуста":
+            "Файлов: "+jobs.size()+"  ·  "+Util.readable(size)+
+            "\nГотово: "+finished+"   Ошибки: "+failed);
+        if(transferFileAdapter==null)return;
+        ArrayList<String> next=new ArrayList<>(jobs.size());
+        for(FileCatalog.Item file:jobs){
+            String status=file.status==null?"":file.status;
+            String sign="Передан".equals(status)?"✓ ":status.startsWith("Ошибка")?"! ":"○ ";
+            next.add(sign+file.name+" · "+Util.readable(Math.max(0,file.size)));
+        }
+        if(transferFileAdapter.getCount()!=next.size()){
+            transferFileAdapter.clear();
+            transferFileAdapter.addAll(next);
+        }else for(int i=0;i<next.size();i++){
+            if(!Objects.equals(transferFileAdapter.getItem(i),next.get(i)))
+                transferFileAdapter.set(next.get(i),i);
+        }
+        transferFileAdapter.notifyDataSetChanged();
     }
     private void updateDynamic(){
         if(page==SEND&&pairLabel!=null&&displayedPairState!=sessionConfirmed()&&!TransferService.isBusy){
