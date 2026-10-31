@@ -42,8 +42,8 @@ public final class QrValidationHarness {
         if (!QrInputValidation.validWifiCredentials("DIRECT-AB-test","password123"))
             throw new AssertionError("Valid Wi-Fi credentials rejected");
         for (String[] bad : new String[][]{
-                {"", "password123"}, {"WiFi", "short"}, {"WiFi\\nBad", "password123"},
-                {"WiFi", "pass\\nword"}, {"123456789012345678901234567890123", "password123"}})
+                {"", "password123"}, {"WiFi", "short"}, {"WiFi"+(char)10+"Bad", "password123"},
+                {"WiFi", "pass"+(char)10+"word"}, {"123456789012345678901234567890123", "password123"}})
             if (QrInputValidation.validWifiCredentials(bad[0],bad[1]))
                 throw new AssertionError("Unsafe Wi-Fi credentials accepted");
         for (int i=0; i<=4; i++)
