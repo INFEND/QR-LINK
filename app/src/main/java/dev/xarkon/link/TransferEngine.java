@@ -550,6 +550,17 @@ public final class TransferEngine {
         int blocks=ChunkState.count(job.size,Util.CHUNK);
         BitSet completed=BitSet.valueOf(Base64.decode(result.optString("done",""),Base64.DEFAULT));
         ChunkState.validate(completed,blocks);
+        // A fully resumed file still needs a readable, unchanged-size source.
+        // Otherwise a deleted source could be falsely reported as transferred.
+        if(completed.cardinality()==blocks){
+            Uri sourceUri=Uri.parse(job.uri);
+            try(InputStream probe=context.getContentResolver().openInputStream(sourceUri)){
+                if(probe==null)throw new IOException("Исходный файл больше недоступен");
+            }
+            long actual=Util.size(context,sourceUri);
+            if(actual>=0&&actual!=job.size)
+                throw new IOException("Размер исходного файла изменился");
+        }
         // Do not allocate one boxed index per missing block for very large files.
         long already=0;
         for(int i=completed.nextSetBit(0);i>=0;i=completed.nextSetBit(i+1))

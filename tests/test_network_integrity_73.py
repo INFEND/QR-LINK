@@ -79,6 +79,12 @@ public final class PeerGuard73 {
         self.assertIn("QrInputValidation.isLocalIpv4(listenIp)?", S)
         self.assertIn("Ожидание IP-адреса для приёма", S)
 
+    def test_fully_resumed_sender_still_checks_source(self):
+        send = E.split("private void sendOne(", 1)[1].split("private void sendChunk(", 1)[0]
+        self.assertIn("if(completed.cardinality()==blocks){", send)
+        self.assertIn("openInputStream(sourceUri)", send)
+        self.assertIn("actual!=job.size", send)
+
     def test_completed_destination_rechecked_before_resume_ack(self):
         offer = E.split("private JSONObject offer(", 1)[1].split("private static class Incoming", 1)[0]
         self.assertIn("if(inc.completed){", offer)
