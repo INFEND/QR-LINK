@@ -17,6 +17,16 @@ import java.util.*;
 public final class FileCatalog {
     public static final String PREF="xarkon_queue";
     private static final int MAX_FOLDER_FILES=12000;
+    // Bound traversal even when a folder contains only empty directories.
+    private static final int MAX_FOLDER_ENTRIES=50000;
+    private static final class ScanBudget {
+        int entries;
+        final HashSet<String> visited=new HashSet<>();
+        void step(){
+            if(++entries>MAX_FOLDER_ENTRIES)
+                throw new IllegalStateException("Слишком много элементов в папке (предел 50000)");
+        }
+    }
     private FileCatalog(){}
     // Queue metadata is a JSON snapshot. Per-file status changes must not
     // deserialize and rewrite thousands of unrelated entries after every file.
@@ -122,21 +132,22 @@ public final class FileCatalog {
         if(!directory.getPath().startsWith(base.getPath()+File.separator))
             throw new SecurityException("Папка находится вне внутренней памяти");
         ArrayList<Item> result=new ArrayList<>();
-        collectLocal(directory.toPath(),base.getPath()+File.separator,Util.safePath(relativePath),result,0);
+        collectLocal(directory.toPath(),base.getPath()+File.separator,Util.safePath(relativePath),result,0,new ScanBudget());
         return result;
     }
     private static void collectLocal(Path directory,String root, String relative,
-                                     ArrayList<Item> result,int depth)throws Exception{
+                                     ArrayList<Item> result,int depth,ScanBudget budget)throws Exception{
         if(depth>24||result.size()>MAX_FOLDER_FILES)
             throw new IllegalStateException("Папка слишком велика: максимум 12000 файлов / 24 уровня");
         if(Files.isSymbolicLink(directory)||!Files.isDirectory(directory,LinkOption.NOFOLLOW_LINKS))
             throw new SecurityException("Недоступная папка");
         try(DirectoryStream<Path> stream=Files.newDirectoryStream(directory)){
             for(Path child:stream){
+                budget.step();
                 if(Files.isSymbolicLink(child)||!child.toFile().getCanonicalPath().startsWith(root))continue;
                 String name=Util.safeName(child.getFileName().toString());
                 if(Files.isDirectory(child,LinkOption.NOFOLLOW_LINKS)){
-                    collectLocal(child,root,relative.isEmpty()?name:relative+"/"+name,result,depth+1);
+                    collectLocal(child,root,relative.isEmpty()?name:relative+"/"+name,result,depth+1,budget);
                 }else if(Files.isRegularFile(child,LinkOption.NOFOLLOW_LINKS)){
                     Item it=new Item();it.id=Util.id();it.uri=Uri.fromFile(child.toFile()).toString();
                     it.name=name;it.size=Files.size(child);it.path=Util.safePath(relative);
@@ -154,7 +165,7 @@ public final class FileCatalog {
     public static ArrayList<Item> fromDocumentFolder(Context c,Uri tree,String docId,String name)throws Exception{
         ArrayList<Item> result=new ArrayList<>();
         if(tree==null||docId==null||docId.isEmpty())throw new IllegalArgumentException("Папка недоступна");
-        collect(c,tree,docId,Util.safePath(name),result,0);
+        collect(c,tree,docId,Util.safePath(name),result,0,new ScanBudget());
         return result;
     }
     public static ArrayList<Item> fromFolder(Context c,Uri tree)throws Exception{
@@ -162,10 +173,11 @@ public final class FileCatalog {
         String id=DocumentsContract.getTreeDocumentId(tree);
         Uri base=DocumentsContract.buildDocumentUriUsingTree(tree,id);
         String root=Util.name(c,base);
-        collect(c,tree,id,root,result,0);
+        collect(c,tree,id,root,result,0,new ScanBudget());
         return result;
     }
-    private static void collect(Context c,Uri tree,String docId,String path,ArrayList<Item> result,int depth)throws Exception{
+    private static void collect(Context c,Uri tree,String docId,String path,ArrayList<Item> result,int depth,ScanBudget budget)throws Exception{
+        if(!budget.visited.add(docId))throw new IllegalStateException("Обнаружен циклический каталог");
         if(depth>24||result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Папка слишком велика: максимум 12000 файлов / 24 уровня");
         Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,docId);
         String[]cols={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,
@@ -173,8 +185,9 @@ public final class FileCatalog {
         try(Cursor cursor=c.getContentResolver().query(children,cols,null,null,null)){
             if(cursor==null)throw new IllegalStateException("Каталог недоступен");
             while(cursor.moveToNext()){
+                budget.step();
                 String childId=cursor.getString(0),name=Util.safeName(cursor.getString(1)),mime=cursor.getString(2);
-                if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime))collect(c,tree,childId,path+"/"+name,result,depth+1);
+                if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime))collect(c,tree,childId,path+"/"+name,result,depth+1,budget);
                 else {
                     Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,childId);
                     // The directory cursor already contains all metadata. Avoid

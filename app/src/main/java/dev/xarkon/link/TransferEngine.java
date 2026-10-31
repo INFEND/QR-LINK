@@ -187,6 +187,10 @@ public final class TransferEngine {
                         // A chunk is resumable only after its bytes are durable and
                         // the bitmap has been committed synchronously.
                         channel.force(false);
+                        // Persist the digest BEFORE publishing the done bit. A
+                        // reboot cannot turn an unverified block into a resume hit.
+                        byte[] durableDigest=checksum.digest();
+                        ChunkDigestStore.put(digestFile(inc.id),index,durableDigest);
                         inc.done.set(index);
                         try{persist(inc);}catch(IOException failure){inc.done.clear(index);throw failure;}
                         inc.activeBytes.addAndGet(-partial);
@@ -195,7 +199,7 @@ public final class TransferEngine {
                     if(finished)complete(inc);
                     reportReceive(inc,true);
                     reply(out,200,"OK",new JSONObject().put("ok",true)
-                        .put("sha256",hex(checksum.digest())));return;
+                        .put("sha256",hex(durableDigest)));return;
                 } finally {
                     synchronized(inc){inc.writing.clear(index);}
                     if(partial>0 && !inc.done.get(index)){
@@ -267,6 +271,9 @@ public final class TransferEngine {
         }
         if(inc.size!=size||!inc.name.equals(name)||!inc.path.equals(path)||!inc.mime.equals(mime))
             throw new IOException("Конфликт ID файла: имя, путь, размер или формат изменились");
+        // A saved bitmap is not evidence that the bytes still match. Verify
+        // every restored chunk against its durable SHA-256 before advertising it.
+        verifyRestored(inc);
         JSONObject r=new JSONObject();r.put("chunk",Util.CHUNK);
         boolean allDone;
         synchronized(inc){r.put("done",Base64.encodeToString(inc.done.toByteArray(),Base64.NO_WRAP));allDone=inc.done.cardinality()==inc.count;}
@@ -275,7 +282,7 @@ public final class TransferEngine {
     }
     private static class Incoming {
         final String id,name,path,mime; final Uri uri;final long size;final int count;final BitSet done=new BitSet();
-        boolean completed;
+        boolean completed,restored;
         final BitSet writing=new BitSet();
         final AtomicLong activeBytes=new AtomicLong();
         final AtomicLong lastReport=new AtomicLong();
@@ -334,9 +341,40 @@ public final class TransferEngine {
         }catch(IOException e){throw e;}
         catch(Exception e){throw new IOException("Ошибка сохранения сеанса приёма",e);}
     }
+    /** A digest sidecar is private app data; IDs are validated before use. */
+    private File digestFile(String id){
+        if(!id.matches("[0-9a-fA-F-]{36}"))throw new IllegalArgumentException("Неверный ID файла");
+        return new File(new File(context.getFilesDir(),"chunk_sha256"),id+".sha");
+    }
+    /** Verify once after a process restart; never trust a bitmap alone. */
+    private void verifyRestored(Incoming inc)throws IOException{
+        synchronized(inc){
+            if(!inc.restored)return;
+            int invalid=0;
+            try(ChunkDigestStore.Reader hashes=ChunkDigestStore.open(digestFile(inc.id))){
+                for(int index=inc.done.nextSetBit(0);index>=0;){
+                    int next=inc.done.nextSetBit(index+1);
+                    byte[] expected=hashes==null?null:hashes.read(index);
+                    boolean valid=false;
+                    if(expected!=null){
+                        try{valid=hex(expected).equalsIgnoreCase(storedSha256(inc,index));}
+                        catch(Exception failure){
+                            throw new IOException("Не удалось проверить сохранённый блок "+index,failure);
+                        }
+                    }
+                    if(!valid){inc.done.clear(index);invalid++;}
+                    index=next;
+                }
+            }
+            if(invalid>0)persist(inc);
+            inc.restored=false;
+            if(invalid>0)events.note("Повторная отправка неподтверждённых блоков: "+invalid);
+        }
+    }
     private void restore(){
         Map<String,?> prefs=context.getSharedPreferences(SESSIONS,0).getAll();
         for(Map.Entry<String,?>e:prefs.entrySet())try{
+            if(!e.getKey().matches("[0-9a-fA-F-]{36}"))continue;
             JSONObject j=new JSONObject(String.valueOf(e.getValue()));long size=j.getLong("size");
             if(size<0||size>10L*1000*1024*1024*1024)continue;
             Uri restoredUri=Uri.parse(j.getString("uri"));
@@ -345,6 +383,7 @@ public final class TransferEngine {
             Incoming in=new Incoming(e.getKey(),j.getString("name"),j.optString("path"),j.getString("mime"),restoredUri,size,count);
             in.done.or(BitSet.valueOf(Base64.decode(j.optString("bits",""),Base64.DEFAULT)));
             ChunkState.validate(in.done,count);
+            in.restored=true;
             incoming.put(in.id,in);
         }catch(Exception ignored){}
     }
