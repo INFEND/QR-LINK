@@ -38,6 +38,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             engine!=null&&engine.receiving()&&WifiState.localTransferReady(this);
     }
     private boolean peerHealthBusy,peerReconnectBusy;
+    private int failedPeerHealthChecks;
     private long lastPeerHealthAt,lastPeerReconnectAt;
     private final Handler networkHandler=new Handler(Looper.getMainLooper());
     private boolean wantReceive;
@@ -174,7 +175,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         String action=in.getAction();
         if(DISCONNECT_PEER.equals(action)){
             engine.cancelSending();
-            peerAttempts.next();peerVerified=false;reverseVerified=false;peerState="";autoReconnectLan=false;
+            peerAttempts.next();peerVerified=false;reverseVerified=false;peerState="";autoReconnectLan=false;failedPeerHealthChecks=0;
             getSharedPreferences("settings",0).edit().remove("host").remove("key")
                 .remove("port").remove("peer_name").remove("pair_qr").commit();
             wifiPeer.stop();if(!wantReceive)directWifi.close();
@@ -192,7 +193,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(STOP.equals(action)){
             engine.cancelSending();
             ++directRouteAttempt;
-            peerAttempts.next();peerVerified=false;reverseVerified=false;autoReconnectLan=false;
+            peerAttempts.next();peerVerified=false;reverseVerified=false;autoReconnectLan=false;failedPeerHealthChecks=0;
             wantReceive=false;getSharedPreferences("settings",0).edit().putBoolean("receive_desired",false).apply();
             engine.stop();hotspot.stop();wifiPeer.stop();directWifi.close();resetHotspot();resetDirect();systemApHost="";isReceiving=false;receiveKey="";peerState="";activeFile="";transferDirection="";progress=0;total=0;status="Служба остановлена";
             unlock();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();MainActivity.changed();return START_NOT_STICKY;
@@ -228,7 +229,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             // A new invitation must never leave an upload running to the old peer.
             engine.cancelSending();
             final int attempt=peerAttempts.next();
-            autoReconnectLan=false;
+            autoReconnectLan=false;failedPeerHealthChecks=0;
             peerVerified=false;reverseVerified=false;peerState="Подключение · проверяем маршрут";refresh();
             wifiPeer.stop();if(!wantReceive)directWifi.close();
             try{
@@ -327,7 +328,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 @Override public void ready(String mac,String ssid,String pass,String host){
                     if(!routeActive(route))return;
                     if(host==null||!QrInputValidation.isLocalIpv4(host)||mac==null||
-                        !mac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")){
+                        !QrInputValidation.validP2pMac(mac)){
                         resetDirect();directWifi.close();
                         startHotspotFallback("Wi-Fi Direct не предоставил корректный IP или MAC");return;
                     }
@@ -442,6 +443,17 @@ public final class TransferService extends Service implements TransferEngine.Eve
         android.content.SharedPreferences p=getSharedPreferences("settings",0);
         final String host=p.getString("host",""),key=p.getString("key","");
         final int port=p.getInt("port",Util.PORT);
+        // Rejoin the advertised P2P/LocalOnlyHotspot network before /hello.
+        // The last IP alone is not a valid route after Android changes networks.
+        final String invitation=p.getString("pair_qr","");
+        try{
+            Pairing.Info savedRoute=Pairing.parse(invitation);
+            if(savedRoute.hotspot){
+                onStartCommand(new Intent(this,TransferService.class).setAction(CONNECT)
+                    .putExtra("qr",invitation),0,0);
+                return;
+            }
+        }catch(Exception ignored){}
         if(!QrInputValidation.isLocalIpv4(host)||!key.matches("[0-9a-f]{64}")||
             !WifiState.localTransferReady(this)){
             peerVerified=false;reverseVerified=false;peerState="Нет сохранённого доступного соединения";
@@ -463,6 +475,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             networkHandler.post(()->{
                 if(destroyed||!peerAttempts.current(attempt)||!WifiState.localTransferReady(this))return;
                 if(!host.equals(p.getString("host",""))||!key.equals(p.getString("key","")))return;
+                if(ok)failedPeerHealthChecks=0;
                 peerVerified=ok;reverseVerified=ok&&reverseOk;
                 if(ok)p.edit().putString("peer_name",peerName).apply();
                 peerState=ok?(reverseOk?"Двустороннее соединение подтверждено":
@@ -498,7 +511,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             else editor.remove("pair_qr");
             if(!editor.commit())return false;
             if(destroyed||!peerAttempts.current(attempt)||!engine.receiving())return false;
-            autoReconnectLan=lan;peerVerified=true;reverseVerified=true;
+            autoReconnectLan=lan;failedPeerHealthChecks=0;peerVerified=true;reverseVerified=true;
             peerState="Двустороннее соединение подтверждено";
             status=peerState;refresh();
             return true;
@@ -522,7 +535,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     .putString("key",info.key).putString("pair_qr",raw)
                     .putString("peer_name",PeerIdentity.displayName(hello.optString("deviceName","Получатель"))).commit())
                     throw new java.io.IOException("Не удалось сохранить подтверждённое соединение");
-                autoReconnectLan=!info.hotspot;
+                autoReconnectLan=!info.hotspot;failedPeerHealthChecks=0;
                 peerVerified=true;reverseVerified=bidirectional;
                 peerState=bidirectional?"Двустороннее соединение подтверждено":
                     "Подключено · ответный приём недоступен";
@@ -570,7 +583,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     if(destroyed||!peerAttempts.current(attempt)||!peerVerified||isSending||isBusy)return;
                     if(!host.equals(saved.getString("host",""))||
                         !key.equals(saved.getString("key","")))return;
-                    if(!ok){
+                    // A single timed-out /hello is not proof of a lost session.
+                    // Invalidate only after two consecutive failed health probes.
+                    if(ok){failedPeerHealthChecks=0;}
+                    else if(++failedPeerHealthChecks>=2){
+                        failedPeerHealthChecks=0;
                         peerAttempts.next();peerVerified=false;reverseVerified=false;
                         peerState="Получатель недоступен · ожидаем восстановления соединения";
                         status=peerState;refresh();
@@ -612,7 +629,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 if(ok){
                     saved.edit().putString("host",info.host).putInt("port",info.port)
                         .putString("peer_name",peerName).apply();
-                    peerVerified=true;reverseVerified=reverseOk;
+                    failedPeerHealthChecks=0;peerVerified=true;reverseVerified=reverseOk;
                     peerState=reverseOk?"Двустороннее соединение восстановлено":
                         "Соединение восстановлено · ответный приём недоступен";
                     status=peerState;refresh();
