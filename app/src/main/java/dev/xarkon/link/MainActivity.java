@@ -1369,6 +1369,12 @@ public final class MainActivity extends Activity {
         boolean localAp=TransferService.hotspotReady;
         String host=direct?TransferService.directHost:(localAp?TransferService.hotspotHost:
             externalAp?TransferService.systemApHost:Util.ip());
+        if(direct&&(host.isEmpty()||!QrInputValidation.isLocalIpv4(host)||
+            TransferService.directMac.isEmpty())){
+            receiveHint.setText("Ожидаем IP и адрес устройства Wi-Fi Direct...");
+            qrImage.setImageDrawable(null);lastQr="";
+            receiveCaption.setText("QR появится только после подтверждения параметров Wi-Fi Direct.");return;
+        }
         if(localAp&&host.isEmpty()){
             receiveHint.setText("Ожидаем адрес локальной точки доступа...");
             qrImage.setImageDrawable(null);lastQr="";return;

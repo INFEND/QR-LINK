@@ -167,6 +167,11 @@ public final class DirectWifi {
                 return;
             }
             String ip=localIp(group.getInterface());
+            // A formed group without a usable IPv4 address or P2P owner MAC
+            // is NOT ready for a scannable invitation. Keep polling until the
+            // interface is configured; the host timeout triggers fallback.
+            if(ip.isEmpty()||mac==null||
+                !mac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))return;
             HostListener listener=hostListener;hostListener=null;
             listener.ready(mac==null?"":mac,ssid,password,ip);
         });}catch(Exception e){hostFail("Не удалось получить параметры Wi-Fi Direct: "+e.getMessage());}
