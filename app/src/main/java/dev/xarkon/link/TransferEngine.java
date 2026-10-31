@@ -18,7 +18,11 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 public final class TransferEngine {
-    public interface Events { void note(String s); void progress(String s,long current,long total,double speed); }
+    public interface Events {
+        void note(String s);
+        void progress(String s,long current,long total,double speed);
+        void reversePair(String host,String key);
+    }
     private final Context context;
     private final Events events;
     private final ExecutorService handlers=Executors.newFixedThreadPool(16);
@@ -153,6 +157,27 @@ public final class TransferEngine {
             long contentLength;
             try{contentLength=Long.parseLong(heads.getOrDefault("content-length","-1"));}
             catch(Exception e){reply(out,411,"Length Required",error("Нужен Content-Length"));return;}
+            // The original QR holder can offer its own listener to the receiver.
+            // Authenticate using the current receive key, derive the reverse host
+            // from the actual TCP peer (never from user-supplied JSON), and bound
+            // the request before allocating or storing anything.
+            if(method.equals("POST")&&path.equals("/pair")){
+                if(contentLength<2||contentLength>2048){
+                    reply(out,413,"Too Large",error("Некорректный размер запроса подключения"));return;
+                }
+                if(!QrInputValidation.isLocalIpv4(from)){
+                    reply(out,403,"Forbidden",error("Ответное подключение разрешено только в локальной сети"));return;
+                }
+                byte[] data=new byte[(int)contentLength];readFully(in,data);
+                JSONObject request=new JSONObject(new String(data,StandardCharsets.UTF_8));
+                String reverseKey=request.optString("key","");
+                if(!reverseKey.matches("[0-9a-f]{64}")){
+                    reply(out,400,"Bad Request",error("Неверный ключ ответного подключения"));return;
+                }
+                reply(out,200,"OK",new JSONObject().put("ok",true));
+                if(alive&&epoch==receiveEpoch)events.reversePair(from,reverseKey);
+                return;
+            }
             if(method.equals("POST")&&path.equals("/offer")){
                 if(contentLength<2||contentLength>16384){reply(out,413,"Too Large",error("Неверный размер предложения"));return;}
                 byte[]data=new byte[(int)contentLength];readFully(in,data);

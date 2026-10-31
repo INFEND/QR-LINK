@@ -1497,8 +1497,9 @@ public final class MainActivity extends Activity {
                 Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);
                 request.putExtra("qr",raw);launchService(request);show();return;
             }
-        }catch(Exception ignored){/* Earlier sessions can be rechecked over LAN. */}
-        probeSavedPeer(true);
+        }catch(Exception ignored){/* A reverse invitation does not need a scanned QR. */}
+        start(TransferService.RECONNECT_PEER);
+        show();
     }
     private void probeSavedPeer(boolean showFeedback){
         if(!paired()||peerProbeBusy)return;
