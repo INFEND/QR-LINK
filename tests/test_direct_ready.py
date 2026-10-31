@@ -16,7 +16,8 @@ class DirectReadyTests(unittest.TestCase):
         src=(ROOT/"TransferService.java").read_text(encoding="utf-8")
         self.assertIn("final int route=++directRouteAttempt;",src)
         self.assertGreaterEqual(src.count("++directRouteAttempt;"),4)
-        self.assertIn("if(route!=directRouteAttempt||!wantReceive||!isReceiving||",src)
+        self.assertIn("if(!routeActive(route))return;",src)
+        self.assertIn("route==directRouteAttempt&&wantReceive&&isReceiving",src)
         self.assertIn("!QrInputValidation.isLocalIpv4(host)",src)
         self.assertIn('startHotspotFallback("Wi-Fi Direct не предоставил корректный IP или MAC")',src)
 

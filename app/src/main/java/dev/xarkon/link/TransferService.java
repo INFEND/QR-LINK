@@ -496,7 +496,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         isBusy=true;isSending=sending;senderWifiLost=false;
         status="Подготовка...";lock();refresh();
         try{work.submit(()->{
-            try{job.run();}catch(Exception e){note("Ошибка: "+e.getMessage());}
+            try{job.run();}catch(Exception e){note("Ошибка: "+ErrorText.human(e));}
             finally{isSending=false;isBusy=false;busy.set(false);
                 // Keep last transfer figures visible after completion.
                 if(transferDirection.isEmpty()){progress=0;total=0;bytesPerSecond=0;activeFile="";}
