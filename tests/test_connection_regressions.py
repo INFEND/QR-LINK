@@ -30,7 +30,7 @@ public class ChunkIndexCheck {
 '''
 class ConnectionRegressionTests(unittest.TestCase):
     def test_lan_qr_reaches_receiver(self):
-        self.assertRegex(SERVICE,r'if\\(!info\\.hotspot\\)\\s*\\{[^}]*verifyReceiver\\(info\\.host,info,false,raw,attempt\\)')
+        self.assertRegex(SERVICE,r'if\(!info\.hotspot\)\s*\{[^}]*verifyReceiver\(info\.host,info,false,raw,attempt\)')
         self.assertIn('peerState="Подключаемся через общую сеть Wi-Fi"',SERVICE)
 
     def test_new_qr_invalidates_previous_receiver(self):
@@ -46,7 +46,7 @@ class ConnectionRegressionTests(unittest.TestCase):
 
     def test_cancel_before_worker_and_disconnect_inflight_uploads(self):
         self.assertIn('if(sending)engine.prepareSending();',SERVICE)
-        self.assertNotIn('sendingCancelled=false;\\n        JSONObject hello=',ENGINE)
+        self.assertNotIn('sendingCancelled=false;\n        JSONObject hello=',ENGINE)
         self.assertIn('if(sendingCancelled){events.note("Передача остановлена до начала отправки.");return;}',ENGINE)
         self.assertIn('private final Set<HttpURLConnection> activeUploads=ConcurrentHashMap.newKeySet()',ENGINE)
         self.assertIn('for(HttpURLConnection connection:activeUploads)connection.disconnect()',ENGINE)
@@ -55,7 +55,7 @@ class ConnectionRegressionTests(unittest.TestCase):
 
     def test_http_connection_always_disconnected(self):
         segment=UTIL.split('public static String http(',1)[1].split('public static String id()',1)[0]
-        self.assertRegex(segment,r'HttpURLConnection conn=.*?\\n        try\\{')
+        self.assertRegex(segment,r'HttpURLConnection conn=.*?\n        try\{')
         self.assertIn('}finally{conn.disconnect();}',segment)
 
     def test_chunk_index_rejects_invalid_input_in_jvm(self):
