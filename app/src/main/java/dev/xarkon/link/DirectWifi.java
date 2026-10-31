@@ -172,7 +172,7 @@ public final class DirectWifi {
             // is NOT ready for a scannable invitation. Keep polling until the
             // interface is configured; the host timeout triggers fallback.
             if(ip.isEmpty()||mac==null||
-                !mac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))return;
+                !QrInputValidation.validP2pMac(mac))return;
             HostListener listener=hostListener;hostListener=null;
             listener.ready(mac==null?"":mac,ssid,password,ip);
         });}catch(Exception e){hostFail("Не удалось получить параметры Wi-Fi Direct: "+e.getMessage());}
@@ -205,7 +205,7 @@ public final class DirectWifi {
             joining=true;hosting=false;connectAttempted=false;joinListener=listener;
             connectionDelivered.set(false);
             desiredMac=mac==null?"":mac.trim();
-            if(!desiredMac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}")||"02:00:00:00:00:00".equals(desiredMac)){
+            if(!QrInputValidation.validP2pMac(desiredMac)){
                 joinFail("Адрес Wi-Fi Direct недоступен; требуется резервное соединение по имени сети");return;
             }
             try{
