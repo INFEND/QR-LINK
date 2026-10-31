@@ -25,7 +25,7 @@ class SharedStorageContract(unittest.TestCase):
         catalog = CATALOG.read_text(encoding="utf-8")
         self.assertIn("Files.isSymbolicLink(child)", browser)
         self.assertIn("Files.isSymbolicLink(child)", catalog)
-        self.assertIn("base.getPath()+File.separator", browser)
+        self.assertIn("rootPath+File.separator", browser)
         self.assertIn("base.getPath()+File.separator", catalog)
         self.assertIn("MAX_FOLDER_FILES", catalog)
         self.assertIn("DirectoryStream<Path>", browser)
