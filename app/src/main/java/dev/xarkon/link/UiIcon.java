@@ -31,6 +31,7 @@ public final class UiIcon extends View {
             case "theme":circle(nativeCanvas,12,12,9);circle(nativeCanvas,7,11,1);circle(nativeCanvas,13,7,1);circle(nativeCanvas,18,12,1);circle(nativeCanvas,12,17,1);break;
             case "history":circle(nativeCanvas,12,12,9);l(nativeCanvas,12,6,12,12);l(nativeCanvas,12,12,17,15);break;
             case "speed":l(nativeCanvas,4,19,20,19);l(nativeCanvas,5,19,5,13);l(nativeCanvas,19,19,19,13);l(nativeCanvas,5,13,12,5);l(nativeCanvas,12,5,19,13);l(nativeCanvas,12,15,17,9);break;
+            case "close":l(nativeCanvas,5,5,19,19);l(nativeCanvas,19,5,5,19);break;
             case "trash":rect(nativeCanvas,6,7,12,14,2);l(nativeCanvas,4,5,20,5);l(nativeCanvas,9,2,15,2);l(nativeCanvas,10,10,10,18);l(nativeCanvas,14,10,14,18);break;
             case "link":circle(nativeCanvas,7,16,4);circle(nativeCanvas,17,8,4);l(nativeCanvas,9,14,15,10);break;
             case "settings":{

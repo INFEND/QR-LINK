@@ -48,6 +48,7 @@ public final class FileBrowserActivity extends Activity {
     private final HashSet<Integer> permissionPrompted=new HashSet<>();
     private final HashMap<String,ArrayList<Entry>> expandedChildren=new HashMap<>();
     private final HashSet<String> expandedFolders=new HashSet<>();
+    private final LinkedHashMap<String,Entry> openedFolders=new LinkedHashMap<>();
     private final HashSet<String> loadingFolders=new HashSet<>();
     private final HashMap<String,CancellationSignal> expansionSignals=new HashMap<>();
     private final HashSet<String> incompleteFolders=new HashSet<>();
@@ -118,7 +119,7 @@ public final class FileBrowserActivity extends Activity {
             storagePermissionRequested=false;
             if(list!=null){
                 for(CancellationSignal signal:expansionSignals.values())signal.cancel();
-                expansionSignals.clear();expandedChildren.clear();expandedFolders.clear();
+                expansionSignals.clear();expandedChildren.clear();expandedFolders.clear();openedFolders.clear();
                 loadingFolders.clear();incompleteFolders.clear();rowDepths.clear();
                 load();
             }
@@ -191,11 +192,12 @@ public final class FileBrowserActivity extends Activity {
         back.setOnClickListener(v->onBackPressed());
         LinearLayout heads=column();title=label("ПРОВОДНИК",20,fg,true);
         subtitle=label("Выберите файлы для передачи",12,muted,false);
+        subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.START);
         heads.addView(title);heads.addView(subtitle);
         top.addView(heads,new LinearLayout.LayoutParams(0,-2,1));root.addView(top);
         HorizontalScrollView horizontal=new HorizontalScrollView(this);
-        horizontal.setHorizontalScrollBarEnabled(false);
-        tabs=new LinearLayout(this);tabs.setPadding(dp(12),dp(5),dp(12),dp(12));
+        horizontal.setHorizontalScrollBarEnabled(false);horizontal.setFillViewport(true);
+        tabs=new LinearLayout(this);tabs.setGravity(Gravity.CENTER);tabs.setPadding(dp(12),dp(5),dp(12),dp(12));
         horizontal.addView(tabs);root.addView(horizontal);
         LinearLayout tools=new LinearLayout(this);tools.setGravity(Gravity.CENTER_VERTICAL);
         tools.setPadding(dp(16),dp(3),dp(16),dp(10));
@@ -227,12 +229,12 @@ public final class FileBrowserActivity extends Activity {
         selectionTools.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams toolsParams=new LinearLayout.LayoutParams(-1,dp(40));
         toolsParams.topMargin=dp(8);footer.addView(selectionTools,toolsParams);
-        TextView selectPage=label("✓  ВЫБРАТЬ СТРАНИЦУ",11,accent,true);
+        TextView selectPage=label("✓  ВЫБРАТЬ ПАПКУ",11,accent,true);
         selectPage.setGravity(Gravity.CENTER);
         selectPage.setBackground(shape(bg,stroke,11));
         LinearLayout.LayoutParams selectParams=new LinearLayout.LayoutParams(0,-1,1);
         selectParams.rightMargin=dp(6);selectionTools.addView(selectPage,selectParams);
-        selectPage.setOnClickListener(v->selectVisiblePage());
+        selectPage.setOnClickListener(v->selectCurrentFolder());
         TextView clear=label("×  СНЯТЬ ВЫБОР",11,fg,true);
         clear.setGravity(Gravity.CENTER);clear.setBackground(shape(bg,stroke,11));
         selectionTools.addView(clear,new LinearLayout.LayoutParams(0,-1,1));
@@ -250,7 +252,7 @@ public final class FileBrowserActivity extends Activity {
         tabs.removeAllViews();
         for(int i=0;i<TABS.length;i++){
             final int index=i;int style=browserStyle();
-            LinearLayout chip=new LinearLayout(this);chip.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout chip=new LinearLayout(this);chip.setGravity(style==1?Gravity.CENTER:Gravity.CENTER_VERTICAL);
             chip.setOrientation(LinearLayout.HORIZONTAL);chip.setPadding(dp(12),dp(10),dp(12),dp(10));
             chip.setBackground(shape(i==tab?accent:card,i==tab?0:stroke,14));
             if(style!=0){
@@ -263,8 +265,8 @@ public final class FileBrowserActivity extends Activity {
                 if(style==2)title.setPadding(dp(7),0,0,0);
                 chip.addView(title);
             }
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);
-            lp.rightMargin=dp(8);tabs.addView(chip,lp);
+            LinearLayout.LayoutParams lp=style==1?new LinearLayout.LayoutParams(0,-2,1):new LinearLayout.LayoutParams(-2,-2);
+            if(style!=1)lp.rightMargin=dp(8);tabs.addView(chip,lp);
             chip.setContentDescription(TABS[i]);
             chip.setOnClickListener(v->switchTab(index));
         }
@@ -273,7 +275,7 @@ public final class FileBrowserActivity extends Activity {
         tab=index;page=0;tree=null;folderId="";folderPath="";mediaPath="";history.clear();
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();incompleteFolders.clear();
-        expandedChildren.clear();expandedFolders.clear();loadingFolders.clear();rowDepths.clear();
+        expandedChildren.clear();expandedFolders.clear();openedFolders.clear();loadingFolders.clear();rowDepths.clear();
         String[] hints={"Поиск по картинкам","Поиск по видео","Поиск по музыке","Поиск по приложениям","Поиск по файлам"};
         search.setHint(hints[index]);
         // Do not expose the previous tab's entries while the new provider query is pending.
@@ -331,10 +333,7 @@ public final class FileBrowserActivity extends Activity {
         final CancellationSignal signal=new CancellationSignal();
         activeQuery=signal;
         int token=++serial;
-        subtitle.setText(isMedia()?(hasLocalStorageAccess()?"Внутренняя память · /0 · "+TABS[tab]:
-            "Медиатека · "+TABS[tab]):
-            tab==3?(hasLocalStorageAccess()?"Приложения · /0 и установленные":"Установленные приложения"):
-            tree==null?"Внутренняя память · /0":"Папка · "+folderPath);
+        subtitle.setText(breadcrumb());
         if(isMedia()&&!hasMediaAccess()&&!hasLocalStorageAccess()){
             showMessage("Для просмотра медиа требуется разрешение Android.\nМожно также выбрать папку вручную.",true);
             if(permissionPrompted.add(tab))requestMedia();
@@ -554,17 +553,30 @@ public final class FileBrowserActivity extends Activity {
         }
         return result;
     }
+    private Entry focusedFolder(){
+        Entry focus=null;
+        for(Entry e:openedFolders.values())if(expandedFolders.contains(e.key()))focus=e;
+        return focus;
+    }
+    private String breadcrumb(){
+        Entry focus=focusedFolder();
+        if(focus==null)return "Внутренняя память";
+        if(focus.localFile!=null||focus.mediaFolder)return BrowserBreadcrumbs.format(focus.path);
+        if(focus.tree!=null){
+            String id=focus.docId;int colon=id.indexOf(':');
+            if(colon>=0)id=id.substring(colon+1);
+            return BrowserBreadcrumbs.format(id.isEmpty()?focus.name:id);
+        }
+        return BrowserBreadcrumbs.format(focus.name);
+    }
     private void render(){
         if(list==null)return;
+        subtitle.setText(breadcrumb());
         list.removeAllViews();
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
             if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
             addWide("СИСТЕМНЫЙ ПРОВОДНИК",this::pickTree);
-            TextView hint=label(hasLocalStorageAccess()?
-                "Корень внутренней памяти /0. Нажмите на папку для раскрытия, на + для выбора со вложениями. Каталоги Android/data и Android/obb могут быть недоступны.":
-                "Для просмотра всех доступных папок /0 разрешите доступ к файлам в настройках Android. Можно также выбрать отдельную папку через системный проводник.",12,muted,false);
-            pad(hint,6,8);list.addView(hint);
         }
         if(tab<4&&!hasLocalStorageAccess()){
             addWide("ПОКАЗАТЬ ПАПКИ ВНУТРЕННЕЙ ПАМЯТИ /0",this::requestLocalStorageAccess);
@@ -634,14 +646,34 @@ public final class FileBrowserActivity extends Activity {
         row.setBackground(shape(card,stroke,14));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(8);
         list.addView(row,rp);
+        String glyph=e.folder?"folder":tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
+        int style=browserStyle();
+        if(style==1){
+            FrameLayout tile=new FrameLayout(this);
+            UiIcon centered=new UiIcon(this,glyph,accent);
+            tile.addView(centered,new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.CENTER));
+            if(e.folder){
+                TextView arrow=label(expandedFolders.contains(e.key())?"⌄":"›",20,accent,true);
+                arrow.setGravity(Gravity.CENTER);
+                tile.addView(arrow,new FrameLayout.LayoutParams(dp(30),dp(40),Gravity.START|Gravity.CENTER_VERTICAL));
+            }
+            boolean checked=selected.containsKey(e.key());
+            TextView check=label(checked?"✓":"＋",22,checked?Color.BLACK:accent,true);
+            check.setGravity(Gravity.CENTER);check.setBackground(shape(checked?accent:bg,checked?0:stroke,11));
+            tile.addView(check,new FrameLayout.LayoutParams(dp(39),dp(39),Gravity.END|Gravity.CENTER_VERTICAL));
+            row.addView(tile,new LinearLayout.LayoutParams(-1,dp(54)));
+            selectionIndicators.put(e.key(),check);
+            check.setOnClickListener(v->toggle(e));
+            row.setOnClickListener(v->{if(e.folder)expandFolder(e);else toggle(e);});
+            row.setOnLongClickListener(v->{toggle(e);return true;});
+            return;
+        }
         if(e.folder){
             TextView arrow=label(expandedFolders.contains(e.key())?"⌄":"›",20,accent,true);
             arrow.setGravity(Gravity.CENTER);
             row.addView(arrow,new LinearLayout.LayoutParams(dp(20),dp(36)));
         }
-        String glyph=e.folder?"folder":tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
         UiIcon icon=new UiIcon(this,glyph,accent);
-        int style=browserStyle();
         if(style!=0){
             if(!e.folder&&(tab==0||tab==1||tab==3))addPreview(row,e,icon,tab);
             else row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
@@ -758,19 +790,27 @@ public final class FileBrowserActivity extends Activity {
         updateCount();
         // Do not rebuild up to 60 rows (and restart their thumbnails) per tap.
     }
-    private void selectVisiblePage(){
+    private void selectCurrentFolder(){
         if(busy)return;
-        boolean capped=false;
-        for(Entry e:visibleEntries){
-            String key=e.key();
-            if(!selected.containsKey(key)){
-                if(selected.size()>=MAX_QUEUE){capped=true;break;}
-                selected.put(key,e);
+        Entry folder=focusedFolder();
+        if(folder==null){
+            if(!hasLocalStorageAccess()){
+                Toast.makeText(this,"Откройте доступную папку или разрешите доступ к внутренней памяти",Toast.LENGTH_LONG).show();
+                return;
             }
-            refreshIndicator(key);
+            File base=Environment.getExternalStorageDirectory();
+            folder=new Entry();folder.folder=true;folder.localFile=base;
+            folder.uri=Uri.fromFile(base);folder.name="Внутренняя память";folder.path="";
         }
+        if(folder.mediaFolder&&!hasLocalStorageAccess()){
+            Toast.makeText(this,"Для полного выбора папки разрешите доступ к внутренней памяти",Toast.LENGTH_LONG).show();
+            return;
+        }
+        // The folder is expanded into every descendant at commit time, not just visible rows.
+        selected.clear();selected.put(folder.key(),folder);
+        for(String key:selectionIndicators.keySet())refreshIndicator(key);
         updateCount();
-        if(capped)Toast.makeText(this,"Достигнут предел 30000 объектов",Toast.LENGTH_SHORT).show();
+        Toast.makeText(this,"Выбрана вся папка. Вложенные файлы проверяются при отправке.",Toast.LENGTH_SHORT).show();
     }
     private void clearSelection(){
         if(busy||selected.isEmpty())return;
@@ -792,6 +832,10 @@ public final class FileBrowserActivity extends Activity {
             String summary="Выбрано: "+selected.size()+" · файлов: "+(selected.size()-folders)+
                 " · папок: "+folders+" · размер файлов: "+Util.readable(bytes);
             if(folders>0||unknown>0)summary+=" (без размера папок"+(unknown>0?", неизвестно: "+unknown:"")+")";
+            if(selected.size()==1&&folders==1){
+                Entry folder=selected.values().iterator().next();
+                summary="Папка: "+folder.name+" · все вложенные файлы будут проверены при отправке";
+            }
             count.setText(summary);
         }
         action.setAlpha(selected.isEmpty()||busy?.42f:1f);
@@ -831,14 +875,28 @@ public final class FileBrowserActivity extends Activity {
         direct.sort(cmp);
         for(Entry child:direct)appendExpanded(result,child,depth+1,cmp,seen);
     }
+    private boolean descendantOf(Entry child,Entry parent){
+        if(child==parent)return true;
+        if(child.localFile!=null&&parent.localFile!=null)
+            return child.localFile.toPath().startsWith(parent.localFile.toPath());
+        if(child.mediaFolder&&parent.mediaFolder)return child.path.startsWith(parent.path);
+        return child.tree!=null&&parent.tree!=null&&child.tree.equals(parent.tree)&&
+            child.docId.startsWith(parent.docId+"/");
+    }
     private void expandFolder(Entry e){
         String key=e.key();
         if(expandedFolders.remove(key)){
-            CancellationSignal old=expansionSignals.remove(key);
-            if(old!=null)old.cancel();
-            loadingFolders.remove(key);render();return;
+            for(Entry opened:new ArrayList<>(openedFolders.values())){
+                if(!descendantOf(opened,e))continue;
+                String childKey=opened.key();
+                openedFolders.remove(childKey);expandedFolders.remove(childKey);
+                CancellationSignal old=expansionSignals.remove(childKey);
+                if(old!=null)old.cancel();
+                loadingFolders.remove(childKey);
+            }
+            render();return;
         }
-        expandedFolders.add(key);
+        expandedFolders.add(key);openedFolders.remove(key);openedFolders.put(key,e);
         if(expandedChildren.containsKey(key)){render();return;}
         if(!loadingFolders.add(key))return;
         final int token=serial,category=tab;
@@ -875,6 +933,8 @@ public final class FileBrowserActivity extends Activity {
         });
     }
     @Override public void onBackPressed(){
+        Entry focused=focusedFolder();
+        if(focused!=null){expandFolder(focused);return;}
         if(!history.isEmpty()){
             Location l=history.pop();tree=l.tree;folderId=l.docId;folderPath=l.path;mediaPath=l.media;
             search.setText("");load();return;
@@ -900,7 +960,7 @@ public final class FileBrowserActivity extends Activity {
             tab=4;tree=null;folderId="";folderPath="";
             for(CancellationSignal signal:expansionSignals.values())signal.cancel();
             expansionSignals.clear();incompleteFolders.clear();
-            expandedChildren.clear();expandedFolders.clear();loadingFolders.clear();
+            expandedChildren.clear();expandedFolders.clear();openedFolders.clear();loadingFolders.clear();
             // Show the granted root in the tree instead of navigating into it.
             tree=null;
             mediaPath="";history.clear();

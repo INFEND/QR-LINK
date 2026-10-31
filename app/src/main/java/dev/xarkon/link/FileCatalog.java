@@ -134,7 +134,7 @@ public final class FileCatalog {
             throw new SecurityException("Разрешение на внутреннюю память отозвано");
         File base=Environment.getExternalStorageDirectory().getCanonicalFile();
         File directory=folder.getCanonicalFile();
-        if(!directory.getPath().startsWith(base.getPath()+File.separator))
+        if(!directory.equals(base)&&!directory.getPath().startsWith(base.getPath()+File.separator))
             throw new SecurityException("Папка находится вне внутренней памяти");
         ArrayList<Item> result=new ArrayList<>();
         collectLocal(directory.toPath(),base.getPath()+File.separator,Util.safePath(relativePath),result,0,new ScanBudget());

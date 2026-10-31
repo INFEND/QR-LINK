@@ -24,7 +24,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     public static volatile String transferDirection="";
     private long sampleAt=0,sampleBytes=0;
     private String sampledFile="";
-    public static volatile boolean isReceiving=false,isBusy=false;
+    public static volatile boolean isReceiving=false,isBusy=false,isSending=false;
     private static final String CHANNEL="xarkon_transfer";
     private static final int NOTIFICATION=118;
     private final AtomicBoolean busy=new AtomicBoolean();
@@ -212,7 +212,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 "Нет подключённого получателя. Отсканируйте QR заново.");
             try{engine.send(host,port,pin,todo,lanes);}
             catch(Exception failure){peerVerified=false;throw failure;}
-        });
+        },true);
         else if(BENCH.equals(action))runJob(()->{
             if(!WifiState.localTransferReady(this))throw new java.io.IOException(
                 "Локальная Wi-Fi сеть недоступна.");
@@ -346,12 +346,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
         });
     }
     private interface Work{void run()throws Exception;}
-    private void runJob(Work job){
+    private void runJob(Work job){runJob(job,false);}
+    private void runJob(Work job,boolean sending){
         if(!busy.compareAndSet(false,true)){note("Другая операция ещё выполняется");return;}
-        isBusy=true;status="Подготовка...";lock();refresh();
+        isBusy=true;isSending=sending;status="Подготовка...";lock();refresh();
         work.submit(()->{
             try{job.run();}catch(Exception e){note("Ошибка: "+e.getMessage());}
-            finally{isBusy=false;busy.set(false);
+            finally{isSending=false;isBusy=false;busy.set(false);
                 // Keep last transfer figures visible after completion.
                 if(transferDirection.isEmpty()){progress=0;total=0;bytesPerSecond=0;activeFile="";}
                 status=isReceiving?(directReady?"Wi-Fi Direct активен": "Приём включён · "+Util.ip()+":"+Util.PORT):
@@ -399,6 +400,6 @@ public final class TransferService extends Service implements TransferEngine.Eve
         directPass="";directHost="";MainActivity.changed();}
     private void resetHotspot(){hotspotReady=false;hotspotStarting=false;hotspotSsid="";hotspotPassword="";hotspotHost="";hotspotSecurity=0;MainActivity.changed();}
     @Override public void onDestroy(){++directRouteAttempt;networkHandler.removeCallbacks(networkWatch);engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();unlock();
-        peerVerified=false;peerState="";isReceiving=false;isBusy=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
+        peerVerified=false;peerState="";isReceiving=false;isBusy=false;isSending=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }

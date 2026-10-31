@@ -75,6 +75,7 @@ public final class MainActivity extends Activity {
     private int peerProbeGeneration;
     private long lastPeerProbeAt;
     private LinearLayout transferCard;
+    private View startSendButton,stopSendButton;
     private ListView transferFileList;
     private ArrayAdapter<String> transferFileAdapter;
     // ArrayAdapter has no set(index); retain its mutable backing list for diff updates.
@@ -551,6 +552,7 @@ public final class MainActivity extends Activity {
         theme();lastQr="";status=null;progress=null;progressText=null;transferName=null;transferPercent=null;transferSize=null;transferRate=null;pairLabel=null;queueLabel=null;
         qrImage=null;receiveHint=null;receiveCaption=null;networkBadge=null;
         transferCard=null;transferHeading=null;transferFileList=null;transferFileAdapter=null;
+        startSendButton=null;stopSendButton=null;
         backgroundCheckStatus=null;
         homeUpdatePanel=null;homeUpdateVersion=null;
         scroller=new ScrollView(this);scroller.setFillViewport(true);scroller.setClipToPadding(false);
@@ -782,7 +784,7 @@ public final class MainActivity extends Activity {
         }
         liveStatus();
         LinearLayout queue=panel("Файлы и папки","Собственный проводник: картинки, видео, музыка, приложения и файлы.","folder");
-        button(queue,"file","+ ОТКРЫТЬ ПРОВОДНИК",true,this::pickFilesOrFolder);
+        button(queue,"file","ВЫБРАТЬ ФАЙЛЫ",true,this::pickFilesOrFolder);
         queueLabel=text("Очередь пуста",13,muted,false);margin(queue,queueLabel,14);
         button(queue,"send","НАЧАТЬ ПЕРЕДАЧУ",true,()->{
             if(!ensureWifiEnabled())return;
@@ -790,7 +792,10 @@ public final class MainActivity extends Activity {
             if(FileCatalog.load(this).isEmpty()){toast("Добавьте файлы или папку");return;}
             start(TransferService.SEND);
         });
-        outlineButton(queue,"trash","ОСТАНОВИТЬ ПЕРЕДАЧУ",()->start(TransferService.CANCEL_SEND));
+        startSendButton=queue.getChildAt(queue.getChildCount()-1);
+        button(queue,"close","ОСТАНОВИТЬ ПЕРЕДАЧУ",true,()->start(TransferService.CANCEL_SEND));
+        stopSendButton=queue.getChildAt(queue.getChildCount()-1);
+        updateSendControls();
         outlineButton(queue,"trash","Очистить очередь",()->new AlertDialog.Builder(this).setTitle("Очистить очередь?")
             .setMessage("Исходные файлы не удалятся.").setNegativeButton("Отмена",null)
             .setPositiveButton("Очистить",(d,w)->{FileCatalog.save(this,new ArrayList<>());updateQueue();}).show());
@@ -1285,7 +1290,13 @@ public final class MainActivity extends Activity {
         }
         transferFileAdapter.notifyDataSetChanged();
     }
+    private void updateSendControls(){
+        boolean sending=TransferService.isSending;
+        if(startSendButton!=null)startSendButton.setVisibility(sending?View.GONE:View.VISIBLE);
+        if(stopSendButton!=null)stopSendButton.setVisibility(sending?View.VISIBLE:View.GONE);
+    }
     private void updateDynamic(){
+        if(page==SEND)updateSendControls();
         if(page==SEND&&pairLabel!=null&&displayedPairState!=sessionConfirmed()&&!TransferService.isBusy){
             suppressEntranceAnimations=true;
             try{show();}finally{suppressEntranceAnimations=false;}
