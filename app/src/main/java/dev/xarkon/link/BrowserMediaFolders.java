@@ -10,7 +10,7 @@ final class BrowserMediaFolders {
     private BrowserMediaFolders() {}
 
     static String normalize(String path) {
-        if(path==null||path.isBlank())return "";
+        if(path==null||path.trim().isEmpty())return "";
         StringBuilder clean=new StringBuilder();
         for(String segment:path.replace('\\','/').split("/")){
             if(segment.isEmpty()||segment.equals(".")||segment.equals(".."))continue;

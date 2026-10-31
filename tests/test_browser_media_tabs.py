@@ -54,6 +54,13 @@ class MediaTabsTests(unittest.TestCase):
         self.assertIn("folder.uri=item.getValue().get(0).uri",src)
         self.assertIn("(e.mediaFolder&&e.uri!=null))addPreview(row,e,icon,tab)",src)
         self.assertIn("BrowserCategoryFilter.accepts(cat,name,mime)",src)
+        self.assertIn("Найдено изображений: ",src)
+        self.assertIn("row.setContentDescription(e.folder?",src)
+        self.assertIn("previewFrame(e,centered,tab)",src)
+        self.assertIn("return frame;",src)
+        helper=(JAVA/"BrowserMediaFolders.java").read_text(encoding="utf-8")
+        self.assertNotIn("isBlank()",helper)
+        self.assertIn("path.trim().isEmpty()",helper)
 
     def test_apps_only_installed_packages_and_files_unmodified(self):
         src=BROWSER.read_text(encoding="utf-8")

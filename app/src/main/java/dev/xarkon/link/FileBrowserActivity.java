@@ -656,13 +656,20 @@ public final class FileBrowserActivity extends Activity {
         row.setBackground(shape(card,stroke,14));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(8);
         list.addView(row,rp);
+        row.setContentDescription(e.folder?
+            "Папка "+e.name+(e.mediaFolder?", найдено файлов: "+e.mediaCount:""):
+            (tab==3?"Приложение ":"Файл ")+e.name);
         String glyph=e.folder&&!e.mediaFolder?"folder":
             tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
         int style=browserStyle();
         if(style==1){
             FrameLayout tile=new FrameLayout(this);
             UiIcon centered=new UiIcon(this,glyph,accent);
-            tile.addView(centered,new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.CENTER));
+            // Center real previews too, not only the generic category glyph.
+            View centeredContent=e.uri!=null&&(!e.folder||e.mediaFolder)?
+                previewFrame(e,centered,tab):centered;
+            tile.addView(centeredContent,
+                new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.CENTER));
             if(e.folder){
                 TextView arrow=label(expandedFolders.contains(e.key())?"⌄":"›",20,accent,true);
                 arrow.setGravity(Gravity.CENTER);
@@ -695,8 +702,9 @@ public final class FileBrowserActivity extends Activity {
         if(tab==3&&display.toLowerCase(Locale.ROOT).endsWith(".apk"))display=display.substring(0,display.length()-4);
         TextView name=label(display,14,fg,true);name.setMaxLines(style==1?1:2);name.setEllipsize(TextUtils.TruncateAt.END);
         detail.addView(name);
+        // Counts describe items currently indexed, not the total in a truncated library.
         String sub=e.mediaFolder?
-            (tab==0?"Изображений: ":tab==1?"Видео: ":"Аудиофайлов: ")+e.mediaCount:
+            (tab==0?"Найдено изображений: ":tab==1?"Найдено видео: ":"Найдено аудиофайлов: ")+e.mediaCount:
             e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
             incompleteFolders.contains(e.key())?"Показана часть содержимого · нажмите, чтобы свернуть":
             expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
@@ -729,10 +737,14 @@ public final class FileBrowserActivity extends Activity {
     }
     /** Asynchronous, bounded-memory thumbnails; never decode images on the UI thread. */
     private void addPreview(LinearLayout row,Entry entry,UiIcon placeholder,int category){
+        row.addView(previewFrame(entry,placeholder,category),
+            new LinearLayout.LayoutParams(dp(40),dp(40)));
+    }
+    /** A shared cover renderer for list rows and icon-only tiles. */
+    private FrameLayout previewFrame(Entry entry,UiIcon placeholder,int category){
         FrameLayout frame=new FrameLayout(this);
         frame.setBackground(shape(bg,stroke,11));
         frame.setClipToOutline(true);
-        row.addView(frame,new LinearLayout.LayoutParams(dp(40),dp(40)));
         frame.addView(placeholder,new FrameLayout.LayoutParams(-1,-1));
         ImageView image=new ImageView(this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -741,7 +753,7 @@ public final class FileBrowserActivity extends Activity {
         String key=entry.uri.toString();
         Bitmap cached=previewCache.get(key);
         if(cached!=null){
-            image.setImageBitmap(cached);image.setVisibility(View.VISIBLE);return;
+            image.setImageBitmap(cached);image.setVisibility(View.VISIBLE);return frame;
         }
         ArrayList<WeakReference<ImageView>> waiting=previewWaiters.get(key);
         if(waiting==null){
@@ -780,6 +792,7 @@ public final class FileBrowserActivity extends Activity {
             });
         }
         waiting.add(new WeakReference<>(image));
+        return frame;
     }
     private void refreshIndicator(String key){
         TextView indicator=selectionIndicators.get(key);
