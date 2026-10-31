@@ -384,18 +384,21 @@ public final class FileBrowserActivity extends Activity {
         String[] cols={MediaStore.MediaColumns._ID,MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.SIZE,MediaStore.MediaColumns.DATE_MODIFIED,
             MediaStore.MediaColumns.MIME_TYPE,MediaStore.MediaColumns.RELATIVE_PATH};
-        String selection=prefix.isEmpty()?null:MediaStore.MediaColumns.RELATIVE_PATH+" LIKE ?";
-        String[] args=prefix.isEmpty()?null:new String[]{prefix+"%"};
+        String normalizedPrefix=BrowserMediaFolders.normalize(prefix);
+        String selection=normalizedPrefix.isEmpty()?null:
+            BrowserMediaQuery.likeSelection(MediaStore.MediaColumns.RELATIVE_PATH);
+        String[] args=normalizedPrefix.isEmpty()?null:
+            new String[]{BrowserMediaQuery.likeArgument(normalizedPrefix)};
         int scanned=0;
         try(Cursor c=getContentResolver().query(base,cols,selection,args,
                 MediaStore.MediaColumns.DATE_MODIFIED+" DESC",cancellation)){
             if(c==null)throw new IllegalStateException("Медиатека недоступна");
             while(c.moveToNext()){
                 if(cancellation!=null&&cancellation.isCanceled())throw new OperationCanceledException();
-                if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 String path=c.isNull(5)?"":c.getString(5);
-                // LIKE has wildcard semantics; still verify the actual prefix.
-                if(!path.startsWith(prefix))continue;
+                // Verify provider results even if it ignores the selection.
+                if(!BrowserMediaQuery.matches(path,normalizedPrefix))continue;
+                if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 String name=Util.safeName(c.getString(1));
                 String mime=c.getString(4);
                 if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;

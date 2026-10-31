@@ -32,9 +32,9 @@ class PeerConnectionContract(unittest.TestCase):
         self.assertIn("private boolean sessionConfirmed()",src)
         self.assertIn("TransferService.peerVerified&&WifiState.localTransferReady(this)",src)
         self.assertIn("displayedPairState=sessionConfirmed()",src)
-        self.assertIn('putString("pair_qr",raw)',src)
+        self.assertIn('request.putExtra("qr",raw)',src)
         self.assertIn("TransferService.DISCONNECT_PEER",src)
-        self.assertIn("if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;",src)
+        self.assertIn("if(token!=peerProbeGeneration)return;",src)
     def test_callbacks_and_disconnect_are_guarded(self):
         src=(JAVA/"TransferService.java").read_text(encoding="utf-8")
         self.assertIn("peerAttempts.current(attempt)",src)

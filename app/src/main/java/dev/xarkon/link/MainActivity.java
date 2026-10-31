@@ -1349,8 +1349,7 @@ public final class MainActivity extends Activity {
                 paired()?"QR сохранён · требуется проверка":
                 !TransferService.peerState.isEmpty()?TransferService.peerState:"Ожидаем сканирование QR-кода");
             long now=Util.now();
-            if(paired()&&TransferService.peerVerified&&!TransferService.isBusy&&now-lastPeerProbeAt>25000L)
-                probeSavedPeer(false);
+            // Session health is monitored by the service even when this screen is closed.
             if(now-lastQueueUpdate>=1000){lastQueueUpdate=now;updateQueue();}
         }
         if(page==RECEIVE)renderQr();
@@ -1463,57 +1462,36 @@ public final class MainActivity extends Activity {
                 .setPositiveButton("QR из галереи",(d,w)->startActivityForResult(new Intent(this,QrScannerActivity.class),SCAN))
                 .setNegativeButton("Отмена",null).show();}
     }
-    private void connectQr(String raw){final Pairing.Info info;
-        try{info=Pairing.parse(raw);}catch(Exception e){toast("QR не подходит: "+e.getMessage());return;}
-        final int attempt=++peerProbeGeneration;
-        peerProbeBusy=false;TransferService.peerVerified=false;
+    private void connectQr(String raw){
+        final Pairing.Info info;
+        try{info=Pairing.parse(raw);}
+        catch(Exception e){toast("QR не подходит: "+ErrorText.human(e));return;}
+        ++peerProbeGeneration;peerProbeBusy=false;TransferService.peerVerified=false;
         if(pairLabel!=null)pairLabel.setText("Проверяем QR и соединение...");
         if(info.hotspot){
             if(!ensureWifiEnabled())return;
-            String wifiPermission=Build.VERSION.SDK_INT>=33?Manifest.permission.NEARBY_WIFI_DEVICES:Manifest.permission.ACCESS_FINE_LOCATION;
-            if(checkSelfPermission(wifiPermission)!=PackageManager.PERMISSION_GRANTED){
+            String permission=Build.VERSION.SDK_INT>=33?
+                Manifest.permission.NEARBY_WIFI_DEVICES:Manifest.permission.ACCESS_FINE_LOCATION;
+            if(checkSelfPermission(permission)!=PackageManager.PERMISSION_GRANTED){
                 pendingHotspotQr=raw;
-                requestPermissions(new String[]{wifiPermission},WIFI_SEND_PERMISSION);
+                requestPermissions(new String[]{permission},WIFI_SEND_PERMISSION);
                 return;
             }
-            Intent i=new Intent(this,TransferService.class);i.setAction(TransferService.CONNECT);
-            i.putExtra("qr",raw);launchService(i);
-            toast(info.direct?"Соединяем через Wi-Fi Direct. Подтвердите запрос Android, если появится.":
-                "Подключаемся к точке доступа. Подтвердите запрос Android, если появится.");
-            navigate(SEND);return;
-        }
-        if(!WifiState.clientConnected(this)&&WifiState.hostedApAddress(this).isEmpty()){
+        }else if(!WifiState.clientConnected(this)&&WifiState.hostedApAddress(this).isEmpty()){
             toast("Для этого QR нужен доступ к общей локальной сети. Проверьте Wi-Fi.");
             return;
         }
-        new Thread(()->{
-            try{
-                org.json.JSONObject check=new org.json.JSONObject(Util.http(info.host,info.port,info.key,"/hello","GET",null));
-                if(!PeerIdentity.compatible(check.optString("app"),check.optInt("version",-1)))throw new Exception("На этом устройстве не запущен совместимый приёмник QR LINK");
-                String name=PeerIdentity.displayName(check.optString("deviceName","Получатель"));
-                runOnUiThread(()->{
-                    // A late /hello must never resurrect a QR after Disconnect/new scan.
-                    if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;
-                    prefs().edit().putString("host",info.host).putInt("port",info.port)
-                        .putString("key",info.key).putString("peer_name",name)
-                        .putString("pair_qr",raw).apply();
-                    TransferService.peerVerified=true;lastPeerProbeAt=Util.now();
-                    navigate(SEND);toast("QR принят. Можно отправлять файлы.");
-                });
-            }catch(Exception e){runOnUiThread(()->{
-                if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;
-                new AlertDialog.Builder(this).setTitle("Не удалось подключиться")
-                    .setMessage(ErrorText.human(e)+"\n\nПроверьте наличие общего локального соединения и активный QR-код.")
-                    .setPositiveButton("Повторить",(d,w)->startScanner()).setNegativeButton("Закрыть",null).show();
-            });}
-        },"qr-connect-check").start();
+        // Only TransferService verifies QR and invalidates stale connection attempts.
+        Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);
+        request.putExtra("qr",raw);launchService(request);
+        navigate(SEND);toast("Проверяем соединение с получателем…");
     }
     private void validatePaired(){
         if(!paired()){toast("Сначала отсканируйте QR-код");return;}
         String raw=prefs().getString("pair_qr","");
         try{
             Pairing.Info invitation=Pairing.parse(raw);
-            if(invitation.hotspot&&invitation.key.equals(prefs().getString("key",""))){
+            if(invitation.key.equals(prefs().getString("key",""))){
                 ++peerProbeGeneration;peerProbeBusy=false;
                 TransferService.peerVerified=false;TransferService.peerState="Повторное подключение…";
                 Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);

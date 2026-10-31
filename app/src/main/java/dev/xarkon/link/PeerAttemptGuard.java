@@ -5,4 +5,5 @@ final class PeerAttemptGuard {
     private final AtomicInteger generation=new AtomicInteger();
     int next(){return generation.incrementAndGet();}
     boolean current(int token){return generation.get()==token;}
+    int snapshot(){return generation.get();}
 }

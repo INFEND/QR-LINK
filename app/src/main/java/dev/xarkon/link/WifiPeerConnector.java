@@ -100,7 +100,7 @@ public final class WifiPeerConnector {
                 }
             };
             manager.requestNetwork(request,callback,25000);
-        }catch(Exception e){stop();listener.failure("Подключение Wi-Fi: "+e.getMessage());}
+        }catch(Exception e){stop();listener.failure("Подключение Wi-Fi: "+ErrorText.human(e));}
     }
     /** Uses the existing authenticated receiver's UDP discovery endpoint when DHCP omits its IP. */
     private static String discoverPeer(Network network,LinkProperties links){

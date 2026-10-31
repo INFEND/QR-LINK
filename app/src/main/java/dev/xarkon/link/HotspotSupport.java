@@ -66,7 +66,7 @@ public final class HotspotSupport {
                             if(requestGeneration!=generation||reservation!=r)return;
                             stop();
                         }
-                        listener.failure("Не удалось прочитать параметры точки: "+e.getMessage());
+                        listener.failure("Не удалось прочитать параметры точки: "+ErrorText.human(e));
                     }
                 }
                 @Override public void onStopped(){
@@ -92,7 +92,7 @@ public final class HotspotSupport {
                 if(requestGeneration!=generation)return;
                 requesting=false;generation++;
             }
-            listener.failure("Точка доступа: "+e.getMessage());
+            listener.failure("Точка доступа: "+ErrorText.human(e));
         }
     }
     public synchronized void stop(){
