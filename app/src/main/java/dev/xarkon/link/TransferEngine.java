@@ -181,6 +181,7 @@ public final class TransferEngine {
                         reportReceive(inc,false);
                     }
                     boolean finished;
+                    byte[] durableDigest;
                     synchronized(inc){
                         // Replace the in-flight count with a committed chunk atomically
                         // before reporting. Retries never count unfinished chunks as done.
@@ -189,7 +190,7 @@ public final class TransferEngine {
                         channel.force(false);
                         // Persist the digest BEFORE publishing the done bit. A
                         // reboot cannot turn an unverified block into a resume hit.
-                        byte[] durableDigest=checksum.digest();
+                        durableDigest=checksum.digest();
                         ChunkDigestStore.put(digestFile(inc.id),index,durableDigest);
                         inc.done.set(index);
                         try{persist(inc);}catch(IOException failure){inc.done.clear(index);throw failure;}
