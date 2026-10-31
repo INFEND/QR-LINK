@@ -127,8 +127,9 @@ public final class FileBrowserActivity extends Activity {
     }
     private int browserStyle(){return Math.max(0,Math.min(2,
         getSharedPreferences("settings",0).getInt("browser_style",2)));}
+    /** A custom themed dropdown anchored to the sorting control. */
     private void showSortDialog(){
-        final android.app.Dialog dialog=new android.app.Dialog(this);
+        final PopupWindow popup=new PopupWindow(this);
         LinearLayout panel=column();pad(panel,12,12);
         panel.setBackground(shape(card,accent,16));
         TextView heading=label("СОРТИРОВКА",12,muted,true);pad(heading,12,10);panel.addView(heading);
@@ -138,15 +139,12 @@ public final class FileBrowserActivity extends Activity {
             TextView option=label((active?"✓  ":"     ")+names[i],16,active?accent:fg,active);
             pad(option,15,14);option.setBackground(shape(active?bg:card,active?accent:0,10));
             panel.addView(option,new LinearLayout.LayoutParams(-1,-2));
-            option.setOnClickListener(v->{sort=choice;page=0;dialog.dismiss();render();});
+            option.setOnClickListener(v->{sort=choice;page=0;popup.dismiss();render();});
         }
-        dialog.setContentView(panel);dialog.show();
-        Window w=dialog.getWindow();if(w!=null){
-            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-            w.setLayout(dp(230),-2);w.setGravity(Gravity.TOP|Gravity.END);
-            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            WindowManager.LayoutParams attrs=w.getAttributes();attrs.dimAmount=.28f;w.setAttributes(attrs);
-        }
+        popup.setContentView(panel);popup.setWidth(dp(230));popup.setHeight(-2);
+        popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);popup.setFocusable(true);popup.setElevation(dp(12));
+        popup.showAsDropDown(sortButton,0,dp(5),Gravity.END);
     }
     private void buildUi(){
         root=column();root.setBackgroundColor(bg);setContentView(root);
@@ -478,7 +476,8 @@ public final class FileBrowserActivity extends Activity {
         };
         Collections.sort(rows,cmp);
         ArrayList<Entry> flattened=new ArrayList<>();
-        for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp);
+        HashSet<String> renderedKeys=new HashSet<>();
+        for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp,renderedKeys);
         rows=flattened;
         // Search after expanding the tree so a matching SAF child remains visible
         // even when the parent folder's name does not match the query.
@@ -522,6 +521,11 @@ public final class FileBrowserActivity extends Activity {
         row.setBackground(shape(card,stroke,14));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(8);
         list.addView(row,rp);
+        if(e.folder){
+            TextView arrow=label(expandedFolders.contains(e.key())?"⌄":"›",20,accent,true);
+            arrow.setGravity(Gravity.CENTER);
+            row.addView(arrow,new LinearLayout.LayoutParams(dp(20),dp(36)));
+        }
         String glyph=e.folder?"folder":tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
         UiIcon icon=new UiIcon(this,glyph,accent);
         int style=browserStyle();
@@ -539,7 +543,7 @@ public final class FileBrowserActivity extends Activity {
             expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
             Util.readable(e.size)+(e.mime==null||e.mime.isEmpty()?"":" · "+e.mime);
         if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
-        if(style!=1||e.folder){
+        if(style!=1||e.folder||tab==3){
             TextView meta=label(sub,11,muted,false);meta.setSingleLine(true);
             meta.setEllipsize(TextUtils.TruncateAt.END);
             if(tab==3&&!e.folder){
@@ -703,15 +707,16 @@ public final class FileBrowserActivity extends Activity {
         rows.addAll(0,folders.values());
         return rows;
     }
-    private void appendExpanded(ArrayList<Entry> result,Entry entry,int depth,Comparator<Entry> cmp){
-        if(depth>16||result.size()>=MAX_SAF_SCAN)return;
+    private void appendExpanded(ArrayList<Entry> result,Entry entry,int depth,
+                                Comparator<Entry> cmp,Set<String> seen){
+        if(depth>16||result.size()>=MAX_SAF_SCAN||!seen.add(entry.key()))return;
         rowDepths.put(entry.key(),depth);result.add(entry);
         if(!entry.folder||!expandedFolders.contains(entry.key()))return;
         ArrayList<Entry> children=expandedChildren.get(entry.key());
         if(children==null)return;
         ArrayList<Entry> direct=entry.mediaFolder?mediaRows(children,entry.path):new ArrayList<>(children);
         direct.sort(cmp);
-        for(Entry child:direct)appendExpanded(result,child,depth+1,cmp);
+        for(Entry child:direct)appendExpanded(result,child,depth+1,cmp,seen);
     }
     private void expandFolder(Entry e){
         String key=e.key();

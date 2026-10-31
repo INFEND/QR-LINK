@@ -11,6 +11,7 @@ class BrowserUiTests(unittest.TestCase):
     def test_themed_sort_and_system_bars(self):
         src = BROWSER.read_text(encoding="utf-8")
         self.assertIn("showSortDialog()", src)
+        self.assertIn("popup.showAsDropDown(sortButton", src)
         self.assertNotIn("new PopupMenu(", src)
         self.assertIn("setDecorFitsSystemWindows(false)", src)
         self.assertIn("WindowInsets.Type.statusBars()", src)
@@ -22,6 +23,7 @@ class BrowserUiTests(unittest.TestCase):
         self.assertIn("final CancellationSignal signal=new CancellationSignal()", src)
         self.assertIn("if(expansionSignals.get(key)!=signal)return;", src)
         self.assertIn("incompleteFolders.add(key)", src)
+        self.assertIn("!seen.add(entry.key())", src)
         self.assertIn("FileCatalog.fromDocumentFolder(", src)
 
     def test_search_style_and_apk_metadata(self):
