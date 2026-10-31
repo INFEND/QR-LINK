@@ -116,7 +116,12 @@ public final class FileBrowserActivity extends Activity {
         super.onResume();
         if(storagePermissionRequested){
             storagePermissionRequested=false;
-            if(tab==4&&list!=null)load();
+            if(list!=null){
+                for(CancellationSignal signal:expansionSignals.values())signal.cancel();
+                expansionSignals.clear();expandedChildren.clear();expandedFolders.clear();
+                loadingFolders.clear();incompleteFolders.clear();rowDepths.clear();
+                load();
+            }
         }
     }
     private boolean hasLocalStorageAccess(){
@@ -311,6 +316,7 @@ public final class FileBrowserActivity extends Activity {
         if(grant){
             addWide("РАЗРЕШИТЬ ДОСТУП",this::requestMedia);
             addWide("ВЫБРАТЬ ПАПКУ",this::pickTree);
+            addWide("ПОКАЗАТЬ КОРЕНЬ /0",this::requestLocalStorageAccess);
         }
     }
     private void addWide(String text,Runnable action){
@@ -325,10 +331,11 @@ public final class FileBrowserActivity extends Activity {
         final CancellationSignal signal=new CancellationSignal();
         activeQuery=signal;
         int token=++serial;
-        subtitle.setText(isMedia()?TABS[tab]+(mediaPath.isEmpty()?"":" · "+mediaPath):
-            tab==3?"Установленные приложения":
+        subtitle.setText(isMedia()?(hasLocalStorageAccess()?"Внутренняя память · /0 · "+TABS[tab]:
+            "Медиатека · "+TABS[tab]):
+            tab==3?(hasLocalStorageAccess()?"Приложения · /0 и установленные":"Установленные приложения"):
             tree==null?"Внутренняя память · /0":"Папка · "+folderPath);
-        if(isMedia()&&!hasMediaAccess()){
+        if(isMedia()&&!hasMediaAccess()&&!hasLocalStorageAccess()){
             showMessage("Для просмотра медиа требуется разрешение Android.\nМожно также выбрать папку вручную.",true);
             if(permissionPrompted.add(tab))requestMedia();
             return;
@@ -338,7 +345,9 @@ public final class FileBrowserActivity extends Activity {
         final String mediaFolder=mediaPath;final String displayPath=folderPath;
         io.execute(()->{
             try{
-                ArrayList<Entry> result=cat<3?queryMedia(cat,mediaFolder,false,signal):cat==3?queryApps(signal):
+                ArrayList<Entry> result=cat<3?(hasLocalStorageAccess()?
+                    queryLocal(Environment.getExternalStorageDirectory(),signal,cat):
+                    queryMedia(cat,mediaFolder,false,signal)):cat==3?queryApps(signal):
                     queryDocuments(rootTree,doc,displayPath,signal);
                 ui.post(()->{if(token!=serial||isFinishing())return;
                     safTruncated=cat==4&&result instanceof Entries&&((Entries)result).truncated;
@@ -346,7 +355,7 @@ public final class FileBrowserActivity extends Activity {
                     current.clear();current.addAll(result);render();});
             }catch(Exception ex){
                 ui.post(()->{if(token==serial&&!isFinishing())
-                    showMessage("Не удалось открыть каталог: "+ex.getMessage(),false);});
+                    showMessage("Не удалось открыть каталог. "+ErrorText.human(ex),false);});
             }
         });
     }
@@ -411,7 +420,7 @@ public final class FileBrowserActivity extends Activity {
         if(!complete)result.addAll(folders.values());
         return result;
     }
-    private ArrayList<Entry> queryApps(CancellationSignal cancellation){
+    private ArrayList<Entry> queryApps(CancellationSignal cancellation)throws Exception{
         PackageManager pm=getPackageManager();
         Intent launch=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> infos=pm.queryIntentActivities(launch,0);
@@ -436,10 +445,15 @@ public final class FileBrowserActivity extends Activity {
                 result.add(e);
             }catch(Exception ignored){}
         }
+        if(hasLocalStorageAccess())result.addAll(0,
+            queryLocal(Environment.getExternalStorageDirectory(),cancellation,3));
         return result;
     }
     /** Stream the actual shared-storage root, without materialising an unbounded file array. */
     private ArrayList<Entry> queryLocal(File directory,CancellationSignal cancellation)throws Exception{
+        return queryLocal(directory,cancellation,4);
+    }
+    private ArrayList<Entry> queryLocal(File directory,CancellationSignal cancellation,int category)throws Exception{
         if(!hasLocalStorageAccess())throw new SecurityException("Нет разрешения на внутреннюю память");
         File base=Environment.getExternalStorageDirectory().getCanonicalFile();
         File folder=directory.getCanonicalFile();
@@ -469,6 +483,18 @@ public final class FileBrowserActivity extends Activity {
                 e.mime=isDir?DocumentsContract.Document.MIME_TYPE_DIR:
                     java.net.URLConnection.guessContentTypeFromName(file.getName());
                 if(e.mime==null)e.mime="application/octet-stream";
+                // Always display directories; only files are filtered by category.
+                // A selected directory is collected separately, with ALL descendants.
+                if(!isDir&&!BrowserCategoryFilter.accepts(category,file.getName(),e.mime))continue;
+                if(category==3&&!isDir){
+                    e.version="Неизвестна";
+                    if(file.getName().toLowerCase(Locale.ROOT).endsWith(".apk")){
+                        try{
+                            PackageInfo archive=getPackageManager().getPackageArchiveInfo(file.getPath(),0);
+                            if(archive!=null&&archive.versionName!=null)e.version=archive.versionName;
+                        }catch(Exception ignored){}
+                    }
+                }
                 ArrayList<Entry> target=isDir?directories:files;
                 if(target.size()<MAX_QUEUE)target.add(e);
                 else result.truncated=true;
@@ -540,10 +566,16 @@ public final class FileBrowserActivity extends Activity {
                 "Для просмотра всех доступных папок /0 разрешите доступ к файлам в настройках Android. Можно также выбрать отдельную папку через системный проводник.",12,muted,false);
             pad(hint,6,8);list.addView(hint);
         }
+        if(tab<4&&!hasLocalStorageAccess()){
+            addWide("ПОКАЗАТЬ ПАПКИ ВНУТРЕННЕЙ ПАМЯТИ /0",this::requestLocalStorageAccess);
+            TextView limited=label("Сейчас доступны "+(isMedia()?"файлы медиатеки":"установленные приложения")+
+                ". Для просмотра папок от /0 требуется отдельное разрешение Android.",12,muted,false);
+            pad(limited,6,8);list.addView(limited);
+        }
         String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
         // Category search includes indexed files in nested media folders, even
         // when the folder has not yet been expanded. SAF search respects grants.
-        ArrayList<Entry> rows=isMedia()&&filter.isEmpty()?mediaRows(current,mediaPath):
+        ArrayList<Entry> rows=isMedia()&&filter.isEmpty()&&!hasLocalStorageAccess()?mediaRows(current,mediaPath):
             new ArrayList<>(current);
         rowDepths.clear();
         Comparator<Entry> cmp=(a,b)->{
@@ -814,7 +846,7 @@ public final class FileBrowserActivity extends Activity {
         render();
         io.execute(()->{
             try{
-                ArrayList<Entry> children=e.localFile!=null?queryLocal(e.localFile,signal):
+                ArrayList<Entry> children=e.localFile!=null?queryLocal(e.localFile,signal,category):
                     e.mediaFolder?queryMedia(category,e.path,false,signal):
                     queryDocuments(e.tree,e.docId,e.name,signal);
                 ui.post(()->{
@@ -853,7 +885,7 @@ public final class FileBrowserActivity extends Activity {
             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(intent,PICK_TREE);
-        }catch(Exception e){Toast.makeText(this,"Выбор папки недоступен: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        }catch(Exception e){Toast.makeText(this,"Выбор папки недоступен. "+ErrorText.human(e),Toast.LENGTH_LONG).show();}
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
@@ -875,7 +907,7 @@ public final class FileBrowserActivity extends Activity {
             current.clear();safTruncated=false;
             ui.removeCallbacks(searchRefresh);
             search.setText("");updateTabs();load();
-        }catch(Exception e){Toast.makeText(this,"Нет доступа к папке: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        }catch(Exception e){Toast.makeText(this,"Нет доступа к папке. "+ErrorText.human(e),Toast.LENGTH_LONG).show();}
     }
     private void commitSelection(){
         if(busy||selected.isEmpty())return;
@@ -885,24 +917,23 @@ public final class FileBrowserActivity extends Activity {
             try{
                 ArrayList<FileCatalog.Item> jobs=new ArrayList<>();
                 HashSet<String> used=new HashSet<>();
-                HashMap<String,ArrayList<Entry>> media=new HashMap<>();
-                for(Entry e:items){
-                    // Index each folder separately, including older items outside the gallery cap.
-                    if(e.mediaFolder&&!media.containsKey(e.key()))
-                        media.put(e.key(),queryMedia(Arrays.asList(TABS).indexOf(e.group),e.path,true));
-                }
                 for(Entry e:items){
                     if(e.folder){
+                        ArrayList<FileCatalog.Item> folderJobs;
                         if(e.mediaFolder){
-                            for(Entry child:media.get(e.key()))
-                                if(child.path.startsWith(e.path))addJob(jobs,used,child,child.path);
+                            // MediaStore indexes only category files. Never silently send
+                            // an incomplete folder when the user selected ALL descendants.
+                            if(!hasLocalStorageAccess())throw new SecurityException(
+                                "Для отправки всей папки разрешите доступ к /0 или выберите папку через системный проводник.");
+                            File storage=Environment.getExternalStorageDirectory();
+                            folderJobs=FileCatalog.fromLocalFolder(this,new File(storage,e.path),e.path);
                         }else{
-                            ArrayList<FileCatalog.Item> folderJobs=e.localFile!=null?
+                            folderJobs=e.localFile!=null?
                                 FileCatalog.fromLocalFolder(this,e.localFile,e.path):
                                 FileCatalog.fromDocumentFolder(this,e.tree,e.docId,e.name);
-                            for(FileCatalog.Item f:folderJobs)
-                                if(used.add(f.uri))jobs.add(f);
                         }
+                        for(FileCatalog.Item f:folderJobs)
+                            if(used.add(f.uri))jobs.add(f);
                     }else addJob(jobs,used,e,e.path);
                     if(jobs.size()>MAX_QUEUE)throw new IllegalStateException("Не более 12000 файлов в одной операции");
                 }
