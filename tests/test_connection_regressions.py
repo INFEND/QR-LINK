@@ -40,6 +40,7 @@ class ConnectionRegressionTests(unittest.TestCase):
 
     def test_invalid_qr_and_idle_wifi_loss_are_visible(self):
         self.assertIn('peerState="Ошибка QR: "+ErrorText.human(e)',SERVICE)
+        self.assertRegex(SERVICE,r'catch\\(Exception e\\)\\{\\s*peerAttempts\\.next\\(\\);peerVerified=false;[\\s\\S]*?\\.remove\\("pair_qr"\\)\\.commit\\(\\);')
         self.assertIn('if(peerVerified&&!WifiState.localTransferReady(TransferService.this))',SERVICE)
         self.assertIn('peerAttempts.next();peerVerified=false;',SERVICE)
         self.assertIn('throw new java.io.IOException("Локальная сеть отключилась во время подключения")',SERVICE)

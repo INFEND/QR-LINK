@@ -223,6 +223,9 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 }
             }catch(Exception e){
                 peerAttempts.next();peerVerified=false;
+                // Invalid QR must not leave a previously paired receiver available.
+                getSharedPreferences("settings",0).edit().remove("host").remove("key")
+                    .remove("port").remove("peer_name").remove("pair_qr").commit();
                 peerState="Ошибка QR: "+ErrorText.human(e);
                 note(peerState);unlockIfIdle();
             }
