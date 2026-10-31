@@ -21,7 +21,7 @@ public final class TransferEngine {
     public interface Events {
         void note(String s);
         void progress(String s,long current,long total,double speed);
-        void reversePair(String host,String key);
+        boolean reversePair(String host,String key);
     }
     private final Context context;
     private final Events events;
@@ -70,7 +70,7 @@ public final class TransferEngine {
                     try{s.close();}catch(IOException ignored){}
                     if(alive&&epoch==receiveEpoch)events.note("Не удалось принять подключение");
                 }
-            }catch(Exception ex){if(alive&&epoch==receiveEpoch)events.note("Сервер: "+ex.getMessage());}
+            }catch(Exception ex){if(alive&&epoch==receiveEpoch)events.note("Сервер: "+ErrorText.human(ex));}
         },"xarkon-accept");acceptThread.start();
         discoverThread=new Thread(()->discoveryLoop(epoch),"xarkon-discovery");discoverThread.start();
         events.note("Приём включён, порт "+Util.PORT);
@@ -119,7 +119,7 @@ public final class TransferEngine {
                OutputStream out=new BufferedOutputStream(s.getOutputStream(),32*1024)){
             String first=line(in);if(first==null)return;
             String[]pieces=first.split(" ");
-            if(pieces.length!=3){reply(out,400,"Bad Request",error("bad request"));return;}
+            if(pieces.length!=3){reply(out,400,"Bad Request",error("Некорректный HTTP-запрос"));return;}
             Map<String,String>heads=new HashMap<>();String ln;
             int num=0;
             while((ln=line(in))!=null&&!ln.isEmpty()){
@@ -174,8 +174,11 @@ public final class TransferEngine {
                 if(!reverseKey.matches("[0-9a-f]{64}")){
                     reply(out,400,"Bad Request",error("Неверный ключ ответного подключения"));return;
                 }
+                if(!alive||epoch!=receiveEpoch||!events.reversePair(from,reverseKey)){
+                    reply(out,409,"Conflict",error("Ответное соединение не подтверждено"));return;
+                }
+                if(!alive||epoch!=receiveEpoch)return;
                 reply(out,200,"OK",new JSONObject().put("ok",true));
-                if(alive&&epoch==receiveEpoch)events.reversePair(from,reverseKey);
                 return;
             }
             if(method.equals("POST")&&path.equals("/offer")){
@@ -183,12 +186,12 @@ public final class TransferEngine {
                 byte[]data=new byte[(int)contentLength];readFully(in,data);
                 JSONObject offer=new JSONObject(new String(data,StandardCharsets.UTF_8));
                 try{JSONObject result=offer(offer);reply(out,200,"OK",result);}
-                catch(Exception e){reply(out,400,"Bad Request",error(e.getMessage()));}
+                catch(Exception e){reply(out,400,"Bad Request",error(ErrorText.human(e)));}
                 return;
             }
             if(method.equals("PUT")&&path.startsWith("/chunk/")){
                 String[]segments=path.split("/");
-                if(segments.length!=4){reply(out,404,"Not Found",error("Wrong path"));return;}
+                if(segments.length!=4){reply(out,404,"Not Found",error("Некорректный путь запроса"));return;}
                 Incoming inc=incoming.get(segments[2]);
                 if(inc==null){reply(out,404,"Not Found",error("Сначала отправьте /offer"));return;}
                 int index=ChunkIndex.parse(segments[3],inc.count);
@@ -265,7 +268,7 @@ public final class TransferEngine {
                 }
             }
             if(method.equals("PUT")&&path.equals("/bench")){
-                if(contentLength<0||contentLength>16L*1024*1024){reply(out,413,"Too Large",error("Maximum 16 MiB"));return;}
+                if(contentLength<0||contentLength>16L*1024*1024){reply(out,413,"Too Large",error("Тест ограничен 16 МиБ"));return;}
                 byte[]b=new byte[256*1024];long remaining=contentLength;
                 while(remaining>0){int n=in.read(b,0,(int)Math.min(remaining,b.length));if(n<0)throw new EOFException();remaining-=n;}
                 reply(out,200,"OK",new JSONObject().put("received",contentLength));return;

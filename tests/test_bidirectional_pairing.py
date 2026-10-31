@@ -24,10 +24,10 @@ class BidirectionalPairingTests(unittest.TestCase):
         self.assertIn("new SecureRandom().nextBytes(secret)",SERVICE)
         self.assertIn('answer.optBoolean("ok",false)',method)
     def test_reverse_peer_is_verified_before_persisting(self):
-        body=SERVICE.split("@Override public void reversePair(",1)[1].split("private void verifyReceiver(",1)[0]
+        body=SERVICE.split("@Override public boolean reversePair(",1)[1].split("private void verifyReceiver(",1)[0]
         self.assertIn('Util.http(host,Util.PORT,key,"/hello","GET",null)',body)
         self.assertIn("PeerIdentity.compatible",body)
-        self.assertLess(body.index("if(!ok)"),body.index('.putString("host",host)'))
+        self.assertLess(body.index("if(!PeerIdentity.compatible"),body.index('.putString("host",host)'))
         self.assertIn("peerAttempts.current(attempt)",body)
         self.assertIn("if(!editor.commit())",body)
     def test_lan_reconnect_renews_reverse_route(self):
@@ -49,6 +49,6 @@ class BidirectionalPairingTests(unittest.TestCase):
     def test_release_identity(self):
         build=(ROOT/"app/build.gradle").read_text()
         self.assertIn("applicationId = 'dev.xarkon.link'",build)
-        self.assertIn("versionCode = 75",build)
-        self.assertIn("versionName = '0.3.70'",build)
+        self.assertIn("versionCode = 76",build)
+        self.assertIn("versionName = '0.3.71'",build)
 if __name__=="__main__":unittest.main()

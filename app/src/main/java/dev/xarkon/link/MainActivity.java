@@ -764,7 +764,9 @@ public final class MainActivity extends Activity {
         if(paired()){
             String name=prefs().getString("peer_name","Получатель");
             LinearLayout connected=panel("Устройство: "+name,
-                displayedPairState?"Сеанс подтверждён · готово к передаче":"QR сохранён · соединение не подтверждено","wifi");
+                displayedPairState?(TransferService.reverseVerified?
+                    "Двустороннее соединение подтверждено":"Подключено · готово к отправке"):
+                    "QR сохранён · соединение не подтверждено","wifi");
             pairLabel=text(displayedPairState?"Подключено":"Нужна проверка соединения",14,displayedPairState?accent:muted,true);
             margin(connected,pairLabel,12);
             outlineButton(connected,"link","ПЕРЕПОДКЛЮЧИТЬСЯ",this::validatePaired);

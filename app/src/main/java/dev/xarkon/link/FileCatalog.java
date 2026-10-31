@@ -84,6 +84,11 @@ public final class FileCatalog {
             }
         }
         if(out.isEmpty())return out;
+        HashSet<String> uniqueIds=new HashSet<>();
+        for(Item item:out){
+            if(item.id==null||item.id.isEmpty()||!uniqueIds.add(item.id))
+                throw new IllegalStateException("В сохранённой очереди повторяются идентификаторы файлов");
+        }
         try{
             HashMap<String,Item> byId=new HashMap<>();
             for(Item item:out)byId.put(item.id,item);

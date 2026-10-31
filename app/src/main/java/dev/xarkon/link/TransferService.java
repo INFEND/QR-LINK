@@ -52,14 +52,14 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 // A verified idle peer is no longer reachable when the local radio disappears.
                 // Do not keep showing a connected device while Wi-Fi is off.
                 if(peerVerified&&!WifiState.localTransferReady(TransferService.this)){
-                    peerAttempts.next();peerVerified=false;
+                    peerAttempts.next();peerVerified=false;reverseVerified=false;
                     peerState="Соединение потеряно · включите Wi-Fi";
                     status=peerState;refresh();
                 }
                 if(isSending&&!senderWifiLost&&!WifiState.localTransferReady(TransferService.this)){
                     senderWifiLost=true;
                     engine.cancelSending();
-                    peerAttempts.next();peerVerified=false;
+                    peerAttempts.next();peerVerified=false;reverseVerified=false;
                     peerState="Соединение потеряно · передача приостановлена";
                     status=peerState;refresh();
                 }
@@ -112,6 +112,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     public static volatile int hotspotSecurity=0;
     public static volatile String peerState="";
     public static volatile boolean peerVerified=false; // Set only after a successful /hello.
+    public static volatile boolean reverseVerified=false; // Confirmed by reverse /pair.
     public static volatile String systemApHost="";
     public static volatile boolean directReady=false,directStarting=false;
     public static volatile String directMac="",directSsid="",directPass="",directHost="";
@@ -173,7 +174,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         String action=in.getAction();
         if(DISCONNECT_PEER.equals(action)){
             engine.cancelSending();
-            peerAttempts.next();peerVerified=false;peerState="";autoReconnectLan=false;
+            peerAttempts.next();peerVerified=false;reverseVerified=false;peerState="";autoReconnectLan=false;
             getSharedPreferences("settings",0).edit().remove("host").remove("key")
                 .remove("port").remove("peer_name").remove("pair_qr").commit();
             wifiPeer.stop();if(!wantReceive)directWifi.close();
@@ -191,7 +192,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(STOP.equals(action)){
             engine.cancelSending();
             ++directRouteAttempt;
-            peerAttempts.next();peerVerified=false;autoReconnectLan=false;
+            peerAttempts.next();peerVerified=false;reverseVerified=false;autoReconnectLan=false;
             wantReceive=false;getSharedPreferences("settings",0).edit().putBoolean("receive_desired",false).apply();
             engine.stop();hotspot.stop();wifiPeer.stop();directWifi.close();resetHotspot();resetDirect();systemApHost="";isReceiving=false;receiveKey="";peerState="";activeFile="";transferDirection="";progress=0;total=0;status="Служба остановлена";
             unlock();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();MainActivity.changed();return START_NOT_STICKY;
@@ -218,7 +219,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             }catch(Exception e){note("Не удалось запустить приём: "+e.getMessage());}
         }else if(CONNECT.equals(action)){
             if(!WifiState.localTransferReady(this)){
-                peerAttempts.next();peerVerified=false;
+                peerAttempts.next();peerVerified=false;reverseVerified=false;
                 peerState="Нет локального Wi-Fi · подключение не начато";
                 note("Включите Wi-Fi для подключения по QR.");
                 return START_NOT_STICKY;
@@ -226,7 +227,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             String raw=in.getStringExtra("qr");
             final int attempt=peerAttempts.next();
             autoReconnectLan=false;
-            peerVerified=false;peerState="Подключение · проверяем маршрут";refresh();
+            peerVerified=false;reverseVerified=false;peerState="Подключение · проверяем маршрут";refresh();
             wifiPeer.stop();if(!wantReceive)directWifi.close();
             try{
                 Pairing.Info info=Pairing.parse(raw);
@@ -253,7 +254,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     }else fallbackWifi(info,raw,attempt);
                 }
             }catch(Exception e){
-                peerAttempts.next();peerVerified=false;
+                peerAttempts.next();peerVerified=false;reverseVerified=false;
                 // Invalid QR must not leave a previously paired receiver available.
                 getSharedPreferences("settings",0).edit().remove("host").remove("key")
                     .remove("port").remove("peer_name").remove("pair_qr").commit();
@@ -411,16 +412,16 @@ public final class TransferService extends Service implements TransferEngine.Eve
         return receiveKey;
     }
     private boolean registerReverse(String host,int port,String key){
+        final int attempt=peerAttempts.snapshot();
+        if(destroyed||!peerAttempts.current(attempt))return false;
         try{
             String localKey=ensureReverseListener();
+            if(destroyed||!peerAttempts.current(attempt))return false;
             JSONObject answer=new JSONObject(Util.http(host,port,key,"/pair","POST",
                 new JSONObject().put("key",localKey)));
-            if(!answer.optBoolean("ok",false))throw new java.io.IOException("Приёмник не подтвердил ответный маршрут");
-            return true;
+            return !destroyed&&peerAttempts.current(attempt)&&answer.optBoolean("ok",false);
         }catch(Exception ignored){
-            // An older peer may not implement /pair. Keep the proven outgoing
-            // route, but do not advertise a nonexistent reverse listener.
-            if(!wantReceive&&engine.receiving()){
+            if(!destroyed&&peerAttempts.current(attempt)&&!wantReceive&&engine.receiving()){
                 engine.stop();isReceiving=false;receiveKey="";
                 unlockIfIdle();
             }
@@ -440,22 +441,23 @@ public final class TransferService extends Service implements TransferEngine.Eve
         final int attempt=peerAttempts.next();
         peerVerified=false;peerState="Проверяем соединение с устройством";refresh();
         try{work.execute(()->{
-            boolean verified=false;String name="";
+            boolean verified=false,reverse=false;String name="";
             try{
                 JSONObject hello=new JSONObject(Util.http(host,port,key,"/hello","GET",null));
                 verified=PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1));
                 if(verified){
                     name=PeerIdentity.displayName(hello.optString("deviceName","Устройство"));
-                    registerReverse(host,port,key);
+                    reverse=registerReverse(host,port,key);
                 }
             }catch(Exception ignored){}
-            final boolean ok=verified;final String peerName=name;
+            final boolean ok=verified,reverseOk=reverse;final String peerName=name;
             networkHandler.post(()->{
                 if(destroyed||!peerAttempts.current(attempt)||!WifiState.localTransferReady(this))return;
                 if(!host.equals(p.getString("host",""))||!key.equals(p.getString("key","")))return;
-                peerVerified=ok;
+                peerVerified=ok;reverseVerified=ok&&reverseOk;
                 if(ok)p.edit().putString("peer_name",peerName).apply();
-                peerState=ok?"Соединение подтверждено · готово к передаче":
+                peerState=ok?(reverseOk?"Двустороннее соединение подтверждено":
+                    "Подключено · ответный приём недоступен"):
                     "Устройство недоступно · повторите подключение";
                 status=peerState;refresh();
             });
@@ -463,45 +465,33 @@ public final class TransferService extends Service implements TransferEngine.Eve
             peerState="Не удалось запустить повторное подключение";refresh();
         }
     }
-    @Override public void reversePair(String host,String key){
-        if(destroyed||!QrInputValidation.isLocalIpv4(host)||!key.matches("[0-9a-f]{64}"))return;
-        networkHandler.post(()->{
-            if(destroyed||!engine.receiving()||!WifiState.localTransferReady(this))return;
-            final android.content.SharedPreferences saved=getSharedPreferences("settings",0);
-            if(peerVerified&&!host.equals(saved.getString("host","")))return;
-            final int attempt=peerAttempts.next();
-            peerVerified=false;peerState="Проверяем ответное подключение";refresh();
-            try{peerHealth.execute(()->{
-                boolean verified=false;String name="";
-                try{
-                    JSONObject hello=new JSONObject(Util.http(host,Util.PORT,key,"/hello","GET",null));
-                    verified=PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1));
-                    if(verified)name=PeerIdentity.displayName(hello.optString("deviceName","Устройство"));
-                }catch(Exception ignored){}
-                final boolean ok=verified;final String peerName=name;
-                networkHandler.post(()->{
-                    if(destroyed||!peerAttempts.current(attempt)||!engine.receiving()||
-                        !WifiState.localTransferReady(this))return;
-                    if(!ok){
-                        peerState="Ответное соединение не подтверждено";refresh();return;
-                    }
-                    boolean lan=WifiState.clientConnected(this)&&!directReady&&!hotspotReady;
-                    android.content.SharedPreferences.Editor editor=saved.edit()
-                        .putString("host",host).putInt("port",Util.PORT)
-                        .putString("key",key).putString("peer_name",peerName);
-                    if(lan)editor.putString("pair_qr",Pairing.build(host,key));
-                    else editor.remove("pair_qr");
-                    if(!editor.commit()){
-                        peerState="Не удалось сохранить ответное соединение";refresh();return;
-                    }
-                    autoReconnectLan=lan;peerVerified=true;
-                    peerState="Двустороннее соединение подтверждено";
-                    status=peerState;refresh();
-                });
-            });}catch(RejectedExecutionException ignored){
-                peerState="Проверка ответного подключения недоступна";refresh();
-            }
-        });
+    /** A /pair acknowledgement requires a verified TCP route and durable save. */
+    @Override public boolean reversePair(String host,String key){
+        if(destroyed||!engine.receiving()||!WifiState.localTransferReady(this)||
+            !QrInputValidation.isLocalIpv4(host)||!key.matches("[0-9a-f]{64}"))return false;
+        android.content.SharedPreferences saved=getSharedPreferences("settings",0);
+        if(peerVerified&&!host.equals(saved.getString("host","")))return false;
+        final int attempt=peerAttempts.next();
+        try{
+            JSONObject hello=new JSONObject(Util.http(host,Util.PORT,key,"/hello","GET",null));
+            if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))return false;
+            String name=PeerIdentity.displayName(hello.optString("deviceName","Устройство"));
+            if(destroyed||!peerAttempts.current(attempt)||!engine.receiving()||
+                !WifiState.localTransferReady(this))return false;
+            if(peerVerified&&!host.equals(saved.getString("host","")))return false;
+            boolean lan=WifiState.clientConnected(this)&&!directReady&&!hotspotReady;
+            android.content.SharedPreferences.Editor editor=saved.edit()
+                .putString("host",host).putInt("port",Util.PORT)
+                .putString("key",key).putString("peer_name",name);
+            if(lan)editor.putString("pair_qr",Pairing.build(host,key));
+            else editor.remove("pair_qr");
+            if(!editor.commit())return false;
+            if(destroyed||!peerAttempts.current(attempt)||!engine.receiving())return false;
+            autoReconnectLan=lan;peerVerified=true;reverseVerified=true;
+            peerState="Двустороннее соединение подтверждено";
+            status=peerState;refresh();
+            return true;
+        }catch(Exception ignored){return false;}
     }
     private void verifyReceiver(String host,Pairing.Info info,boolean p2pPath,String raw,int attempt){
         if(destroyed||!peerAttempts.current(attempt))return;
@@ -521,7 +511,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     .putString("key",info.key).putString("pair_qr",raw)
                     .putString("peer_name",PeerIdentity.displayName(hello.optString("deviceName","Получатель"))).apply();
                 autoReconnectLan=!info.hotspot;
-                peerVerified=true;
+                peerVerified=true;reverseVerified=bidirectional;
                 peerState=bidirectional?"Двустороннее соединение подтверждено":
                     "Подключено · ответный приём недоступен";
                 status=peerState;
@@ -569,7 +559,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     if(!host.equals(saved.getString("host",""))||
                         !key.equals(saved.getString("key","")))return;
                     if(!ok){
-                        peerAttempts.next();peerVerified=false;
+                        peerAttempts.next();peerVerified=false;reverseVerified=false;
                         peerState="Получатель недоступен · ожидаем восстановления соединения";
                         status=peerState;refresh();
                     }
@@ -590,16 +580,16 @@ public final class TransferService extends Service implements TransferEngine.Eve
         final String pairedQr=saved.getString("pair_qr","");
         final int attempt=peerAttempts.next();
         peerHealth.execute(()->{
-            boolean reachable=false;String name="";
+            boolean reachable=false,reverse=false;String name="";
             try{
                 JSONObject hello=new JSONObject(Util.http(info.host,info.port,info.key,"/hello","GET",null));
                 reachable=PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1));
                 if(reachable){
                     name=PeerIdentity.displayName(hello.optString("deviceName","Получатель"));
-                    registerReverse(info.host,info.port,info.key);
+                    reverse=registerReverse(info.host,info.port,info.key);
                 }
             }catch(Exception ignored){}
-            final boolean ok=reachable,validRoute=reachable;
+            final boolean ok=reachable,reverseOk=reverse;
             final String peerName=name;
             networkHandler.post(()->{
                 peerReconnectBusy=false;
@@ -607,10 +597,12 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     !WifiState.clientConnected(this))return;
                 if(!pairedQr.equals(saved.getString("pair_qr",""))||
                     !info.key.equals(saved.getString("key","")))return;
-                if(ok&&validRoute){
+                if(ok){
                     saved.edit().putString("host",info.host).putInt("port",info.port)
                         .putString("peer_name",peerName).apply();
-                    peerVerified=true;peerState="Соединение восстановлено · готово к отправке";
+                    peerVerified=true;reverseVerified=reverseOk;
+                    peerState=reverseOk?"Двустороннее соединение восстановлено":
+                        "Соединение восстановлено · ответный приём недоступен";
                     status=peerState;refresh();
                 }else{
                     peerState="Ожидаем восстановления соединения с получателем";
@@ -683,6 +675,6 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private void resetHotspot(){hotspotReady=false;hotspotStarting=false;hotspotSsid="";hotspotPassword="";hotspotHost="";hotspotSecurity=0;MainActivity.changed();}
     @Override public void onDestroy(){destroyed=true;peerAttempts.next();autoReconnectLan=false;wantReceive=false;
         ++directRouteAttempt;networkHandler.removeCallbacksAndMessages(null);engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
-        peerVerified=false;peerState="";isReceiving=false;isBusy=false;isSending=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
+        peerVerified=false;reverseVerified=false;peerState="";isReceiving=false;isBusy=false;isSending=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }
