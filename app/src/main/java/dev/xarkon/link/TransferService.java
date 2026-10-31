@@ -391,7 +391,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             }
             @Override public void failure(String reason){
                 if(!peerAttempts.current(attempt))return;
-                peerVerified=false;peerState="Не удалось подключиться: "+ErrorText.human(reason);
+                peerVerified=false;reverseVerified=false;peerState="Не удалось подключиться: "+ErrorText.human(reason);
                 note(peerState);unlockIfIdle();
             }
         });
@@ -435,11 +435,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
         final int port=p.getInt("port",Util.PORT);
         if(!QrInputValidation.isLocalIpv4(host)||!key.matches("[0-9a-f]{64}")||
             !WifiState.localTransferReady(this)){
-            peerVerified=false;peerState="Нет сохранённого доступного соединения";
+            peerVerified=false;reverseVerified=false;peerState="Нет сохранённого доступного соединения";
             refresh();return;
         }
         final int attempt=peerAttempts.next();
-        peerVerified=false;peerState="Проверяем соединение с устройством";refresh();
+        peerVerified=false;reverseVerified=false;peerState="Проверяем соединение с устройством";refresh();
         try{work.execute(()->{
             boolean verified=false,reverse=false;String name="";
             try{
@@ -529,7 +529,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             }
         });}catch(RejectedExecutionException rejected){
             if(!destroyed&&peerAttempts.current(attempt)){
-                peerVerified=false;peerState="Не удалось запустить проверку подключения";
+                peerVerified=false;reverseVerified=false;peerState="Не удалось запустить проверку подключения";
                 note(peerState);unlockIfIdle();
             }
         }

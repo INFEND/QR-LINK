@@ -42,6 +42,6 @@ class PeerConnectionContract(unittest.TestCase):
         self.assertIn('putString("pair_qr",raw)',src)
         self.assertIn("peerVerified=true;",src)
         self.assertIn("peerAttempts.next();peerVerified=false;",src)
-        self.assertIn("peerVerified=false;peerState=\"\";isReceiving=false;",src)
+        self.assertIn("peerVerified=false;reverseVerified=false;peerState=\"\";isReceiving=false;",src)
 if __name__=="__main__":
     unittest.main()
