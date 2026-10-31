@@ -49,6 +49,11 @@ public final class Pairing {
                 !"pair".equals(u.getAuthority())||
                 (u.getPath()!=null&&!u.getPath().isEmpty())||u.getFragment()!=null)
             throw new Exception("Неподдерживаемый QR-код QR LINK");
+        // Reject unknown extensions and ambiguous duplicate fields, including scanner input.
+        for(String field:u.getQueryParameterNames()){
+            if(!QrInputValidation.allowedField(field))
+                throw new Exception("Неизвестный параметр QR: "+field);
+        }
         // Reject ambiguous duplicate fields rather than silently using the first value.
         for(String field:new String[]{"v","host","port","key","ap","ssid","pwd","sec","p2p","mac"}){
             if(u.getQueryParameters(field).size()>1)
@@ -70,11 +75,12 @@ public final class Pairing {
         int port=QrInputValidation.requirePort(u.getQueryParameter("port"),Util.PORT);
         String ssid=ap?u.getQueryParameter("ssid"):"", password=ap?u.getQueryParameter("pwd"):"";
         int security=ap?QrInputValidation.security(u.getQueryParameter("sec")):0;
-        if(ap&&(ssid==null||ssid.isEmpty()||ssid.length()>64||password==null||password.length()<8||password.length()>63))
+        if(ap&&!QrInputValidation.validWifiCredentials(ssid,password))
             throw new Exception("Некорректные параметры точки доступа");
         String mac=direct?u.getQueryParameter("mac"):"";
         if(mac==null)mac="";
-        if(direct&&mac.length()>0&&!mac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))throw new Exception("Некорректный адрес устройства P2P");
+        if(direct&&!QrInputValidation.validP2pMac(mac))throw new Exception("Некорректный или отсутствующий адрес устройства P2P");
+        if(direct&&security!=0)throw new Exception("Несогласованный тип защиты Wi-Fi Direct");
         return new Info(host,port,key,ssid,password,security,ap,direct,mac);
     }
 }

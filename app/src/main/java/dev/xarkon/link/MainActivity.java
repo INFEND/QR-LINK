@@ -932,9 +932,11 @@ public final class MainActivity extends Activity {
         name.setBackground(shape(soft,stroke,14));
         name.setPadding(dp(15),dp(13),dp(15),dp(13));margin(device,name,9);
         outlineButton(device,"check","СОХРАНИТЬ ИМЯ",()->{
-            String value=name.getText().toString().trim();
-            if(value.isEmpty()||value.length()>48){toast("Имя должно содержать от 1 до 48 символов");return;}
-            prefs().edit().putString("device_name",value).apply();toast("Имя устройства сохранено");
+            String rawName=name.getText().toString().trim();
+            if(rawName.isEmpty()||rawName.codePointCount(0,rawName.length())>48){toast("Имя должно содержать от 1 до 48 символов");return;}
+            String value=PeerIdentity.displayName(rawName);
+            prefs().edit().putString("device_name",value).apply();name.setText(value);
+            toast("Имя устройства сохранено");
         });
         LinearLayout performance=section("performance","Передача и скорость",
             "Потоки и замер реальной скорости","speed",false);
@@ -1475,8 +1477,8 @@ public final class MainActivity extends Activity {
         new Thread(()->{
             try{
                 org.json.JSONObject check=new org.json.JSONObject(Util.http(info.host,info.port,info.key,"/hello","GET",null));
-                if(!"XARKON LINK".equals(check.optString("app")))throw new Exception("На этом устройстве не запущен совместимый приёмник QR LINK");
-                String name=check.optString("deviceName","Получатель");
+                if(!PeerIdentity.compatible(check.optString("app"),check.optInt("version",-1)))throw new Exception("На этом устройстве не запущен совместимый приёмник QR LINK");
+                String name=PeerIdentity.displayName(check.optString("deviceName","Получатель"));
                 runOnUiThread(()->{
                     // A late /hello must never resurrect a QR after Disconnect/new scan.
                     if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;
@@ -1517,9 +1519,9 @@ public final class MainActivity extends Activity {
             boolean verified=false;String name="",failure="";
             try{
                 org.json.JSONObject hello=new org.json.JSONObject(Util.http(host,port,key,"/hello","GET",null));
-                if(!"XARKON LINK".equals(hello.optString("app")))
-                    throw new IllegalStateException("Несовместимый приёмник QR LINK");
-                name=hello.optString("deviceName","Получатель");verified=true;
+                if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))
+                    throw new IllegalStateException("Несовместимый протокол приёмника QR LINK");
+                name=PeerIdentity.displayName(hello.optString("deviceName","Получатель"));verified=true;
             }catch(Exception error){failure=ErrorText.human(error);}
             final boolean ok=verified;final String device=name,reason=failure;
             runOnUiThread(()->{

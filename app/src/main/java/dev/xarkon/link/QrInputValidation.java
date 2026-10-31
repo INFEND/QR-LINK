@@ -2,10 +2,43 @@ package dev.xarkon.link;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
+import java.util.Locale;
 
 /** Strict, DNS-free validation of untrusted QR pairing fields. Android-independent for JVM tests. */
 public final class QrInputValidation {
     private QrInputValidation() {}
+
+    private static final Set<String> QR_FIELDS=Set.of(
+        "v","host","port","key","ap","ssid","pwd","sec","p2p","mac");
+
+    /** Unknown fields are not silently ignored: they may alter future protocol semantics. */
+    public static boolean allowedField(String field){return QR_FIELDS.contains(field);}
+
+    /** Reject dummy, multicast and malformed P2P addresses before Android discovery. */
+    public static boolean validP2pMac(String raw){
+        if(raw==null||!raw.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))return false;
+        if((Integer.parseInt(raw.substring(0,2),16)&1)!=0)return false;
+        String compact=raw.replace(":","").toLowerCase(Locale.ROOT);
+        return !"000000000000".equals(compact)&&!"020000000000".equals(compact);
+    }
+
+    /** Android Wi-Fi credentials must be bounded in UTF-8 bytes and contain no controls. */
+    public static boolean validWifiCredentials(String ssid,String password){
+        if(ssid==null||password==null)return false;
+        int ssidBytes=ssid.getBytes(StandardCharsets.UTF_8).length;
+        int passBytes=password.getBytes(StandardCharsets.UTF_8).length;
+        if(ssidBytes<1||ssidBytes>32||passBytes<8||passBytes>63)return false;
+        for(String part:new String[]{ssid,password}){
+            for(int i=0;i<part.length();){
+                int cp=part.codePointAt(i);
+                if(Character.isISOControl(cp)||Character.getType(cp)==Character.FORMAT)return false;
+                i+=Character.charCount(cp);
+            }
+        }
+        return true;
+    }
 
     public static boolean isLocalIpv4(String host) {
         if(host==null||host.isEmpty()||host.length()>15)return false;

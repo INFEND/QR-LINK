@@ -16,15 +16,15 @@ import java.util.*;
 
 public final class FileCatalog {
     public static final String PREF="xarkon_queue";
-    private static final int MAX_FOLDER_FILES=12000;
+    private static final int MAX_FOLDER_FILES=30000;
     // Bound traversal even when a folder contains only empty directories.
-    private static final int MAX_FOLDER_ENTRIES=50000;
+    private static final int MAX_FOLDER_ENTRIES=120000;
     private static final class ScanBudget {
         int entries;
         final HashSet<String> visited=new HashSet<>();
         void step(){
             if(++entries>MAX_FOLDER_ENTRIES)
-                throw new IllegalStateException("Слишком много элементов в папке (предел 50000)");
+                throw new IllegalStateException("Слишком много элементов в папке (предел 120000)");
         }
     }
     private FileCatalog(){}
@@ -143,7 +143,7 @@ public final class FileCatalog {
     private static void collectLocal(Path directory,String root, String relative,
                                      ArrayList<Item> result,int depth,ScanBudget budget)throws Exception{
         if(depth>24||result.size()>MAX_FOLDER_FILES)
-            throw new IllegalStateException("Папка слишком велика: максимум 12000 файлов / 24 уровня");
+            throw new IllegalStateException("Папка слишком велика: максимум 30000 файлов / 24 уровня");
         if(Files.isSymbolicLink(directory)||!Files.isDirectory(directory,LinkOption.NOFOLLOW_LINKS))
             throw new SecurityException("Недоступная папка");
         try(DirectoryStream<Path> stream=Files.newDirectoryStream(directory)){
@@ -162,7 +162,7 @@ public final class FileCatalog {
                     String mime=MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
                     it.mime=mime==null?"application/octet-stream":mime;it.status="В очереди";
                     result.add(it);
-                    if(result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Больше 12000 файлов");
+                    if(result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Больше 30000 файлов");
                 }
             }
         }
@@ -183,7 +183,7 @@ public final class FileCatalog {
     }
     private static void collect(Context c,Uri tree,String docId,String path,ArrayList<Item> result,int depth,ScanBudget budget)throws Exception{
         if(!budget.visited.add(docId))throw new IllegalStateException("Обнаружен циклический каталог");
-        if(depth>24||result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Папка слишком велика: максимум 12000 файлов / 24 уровня");
+        if(depth>24||result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Папка слишком велика: максимум 30000 файлов / 24 уровня");
         Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,docId);
         String[]cols={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                 DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE};
@@ -203,7 +203,7 @@ public final class FileCatalog {
                     it.path=path;it.status="В очереди";
                     it.size=cursor.isNull(3)?-1:cursor.getLong(3);
                     result.add(it);
-                    if(result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Больше 12000 файлов");
+                    if(result.size()>MAX_FOLDER_FILES)throw new IllegalStateException("Больше 30000 файлов");
                 }
             }
         }

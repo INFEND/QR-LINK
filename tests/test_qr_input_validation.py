@@ -32,6 +32,20 @@ public final class QrValidationHarness {
                   throw new AssertionError("Accepted inconsistent QR mode"); }
             catch (IllegalArgumentException expected) { }
         }
+        if (!QrInputValidation.allowedField("host") || QrInputValidation.allowedField("evil"))
+            throw new AssertionError("QR unknown field policy");
+        for (String good : new String[]{"12:34:56:78:9a:bc","02:11:22:33:44:55"})
+            if (!QrInputValidation.validP2pMac(good)) throw new AssertionError("Valid P2P MAC rejected");
+        for (String bad : new String[]{"", "02:00:00:00:00:00", "00:00:00:00:00:00",
+                "ff:ff:ff:ff:ff:ff","01:00:5e:00:00:01","wrong"})
+            if (QrInputValidation.validP2pMac(bad)) throw new AssertionError("Unsafe P2P MAC accepted");
+        if (!QrInputValidation.validWifiCredentials("DIRECT-AB-test","password123"))
+            throw new AssertionError("Valid Wi-Fi credentials rejected");
+        for (String[] bad : new String[][]{
+                {"", "password123"}, {"WiFi", "short"}, {"WiFi\\nBad", "password123"},
+                {"WiFi", "pass\\nword"}, {"123456789012345678901234567890123", "password123"}})
+            if (QrInputValidation.validWifiCredentials(bad[0],bad[1]))
+                throw new AssertionError("Unsafe Wi-Fi credentials accepted");
         for (int i=0; i<=4; i++)
             if (QrInputValidation.security(Integer.toString(i)) != i) throw new AssertionError("Security");
         for (String bad : new String[]{"", "-1", "5", "00", "abc"}) {

@@ -49,7 +49,7 @@ public final class TransferEngine {
         alive=true;
         acceptThread=new Thread(()->{
             while(alive)try{
-                Socket s=socket.accept();s.setSoTimeout(90000);s.setTcpNoDelay(true);s.setReceiveBufferSize(1024*1024);
+                Socket s=socket.accept();s.setSoTimeout(5000);s.setTcpNoDelay(true);s.setReceiveBufferSize(1024*1024);
                 handlers.execute(()->serve(s));
             }catch(Exception ex){if(alive)events.note("Сервер: "+ex.getMessage());}
         },"xarkon-accept");acceptThread.start();
@@ -101,7 +101,13 @@ public final class TransferEngine {
             int num=0;
             while((ln=line(in))!=null&&!ln.isEmpty()){
                 if(++num>40)throw new IOException("Слишком много заголовков");
-                int at=ln.indexOf(':');if(at>0)heads.put(ln.substring(0,at).trim().toLowerCase(Locale.US),ln.substring(at+1).trim());
+                int at=ln.indexOf(':');
+                if(at>0){
+                    String field=ln.substring(0,at).trim().toLowerCase(Locale.US);
+                    if(heads.putIfAbsent(field,ln.substring(at+1).trim())!=null){
+                        reply(out,400,"Bad Request",error("Повторяющийся заголовок"));return;
+                    }
+                }
             }
             String from=s.getInetAddress().getHostAddress();
             BadPin block=lastBadPin.computeIfAbsent(from,k->new BadPin());
@@ -115,12 +121,14 @@ public final class TransferEngine {
                 }
                 block.count=0;block.lockedUntil=0;
             }
+            // Short timeout for unauthenticated peers; full timeout for authenticated chunks.
+            s.setSoTimeout(90000);
             String path=pieces[1];String method=pieces[0];
             if(method.equals("GET")&&path.equals("/hello")){
                 reply(out,200,"OK",new JSONObject().put("app","XARKON LINK")
-                    .put("version",1).put("sha256",true)
-                    .put("deviceName",context.getSharedPreferences("settings",0)
-                        .getString("device_name",android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL)));return;
+                    .put("version",PeerIdentity.PROTOCOL_VERSION).put("sha256",true)
+                    .put("deviceName",PeerIdentity.displayName(context.getSharedPreferences("settings",0)
+                        .getString("device_name",android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL))));return;
             }
             long contentLength;
             try{contentLength=Long.parseLong(heads.getOrDefault("content-length","-1"));}
@@ -419,7 +427,7 @@ public final class TransferEngine {
     public void send(String host,int port,String userPin,List<FileCatalog.Item> jobs,int lanes)throws Exception{
         sendingCancelled=false;
         JSONObject hello=new JSONObject(Util.http(host,port,userPin,"/hello","GET",null));
-        if(!"XARKON LINK".equals(hello.optString("app")))throw new IOException("Это не совместимый приёмник QR LINK");
+        if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new IOException("Это не совместимый приёмник QR LINK");
         final boolean verifySha=hello.optBoolean("sha256",false);
         int failed=0;
         for(FileCatalog.Item job:jobs){
@@ -632,7 +640,7 @@ public final class TransferEngine {
     }
     public static double benchmark(String host,int port,String pin,int lanes)throws Exception{
         JSONObject hello=new JSONObject(Util.http(host,port,pin,"/hello","GET",null));
-        if(!"XARKON LINK".equals(hello.optString("app")))throw new IOException("Недоступный сервер");
+        if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new IOException("Недоступный сервер");
         ExecutorService pool=Executors.newFixedThreadPool(Math.max(1,Math.min(lanes,8)));
         long start=Util.now();ArrayList<Future<?>>calls=new ArrayList<>();
         try{
