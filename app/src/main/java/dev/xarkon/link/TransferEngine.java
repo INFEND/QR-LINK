@@ -30,8 +30,14 @@ public final class TransferEngine {
     private final ConcurrentHashMap<String,BadPin> lastBadPin=new ConcurrentHashMap<>();
     private volatile boolean alive;
     private volatile boolean sendingCancelled;
-    /** Cancels sending, not the pairing or receiver. */
-    public void cancelSending(){sendingCancelled=true;}
+    private final Set<HttpURLConnection> activeUploads=ConcurrentHashMap.newKeySet();
+    /** Stop only outgoing uploads. Disconnect blocked sockets immediately. */
+    public void cancelSending(){
+        sendingCancelled=true;
+        for(HttpURLConnection connection:activeUploads)connection.disconnect();
+    }
+    /** Called by the service BEFORE submitting a new send worker. */
+    public void prepareSending(){sendingCancelled=false;}
     private volatile String sessionKey="";
     private ServerSocket socket;
     private DatagramSocket discovery;
@@ -145,9 +151,9 @@ public final class TransferEngine {
                 String[]segments=path.split("/");
                 if(segments.length!=4){reply(out,404,"Not Found",error("Wrong path"));return;}
                 Incoming inc=incoming.get(segments[2]);
-                int index=Integer.parseInt(segments[3]);
                 if(inc==null){reply(out,404,"Not Found",error("Сначала отправьте /offer"));return;}
-                if(index<0||index>=inc.count){reply(out,400,"Bad Request",error("Индекс блока"));return;}
+                int index=ChunkIndex.parse(segments[3],inc.count);
+                if(index<0){reply(out,400,"Bad Request",error("Неверный индекс блока"));return;}
                 long start=(long)index*Util.CHUNK;
                 long expected=Math.min(Util.CHUNK,inc.size-start);
                 if(contentLength!=expected){reply(out,400,"Bad Request",error("Неверная длина блока"));return;}
@@ -425,7 +431,7 @@ public final class TransferEngine {
     }
 
     public void send(String host,int port,String userPin,List<FileCatalog.Item> jobs,int lanes)throws Exception{
-        sendingCancelled=false;
+        if(sendingCancelled){events.note("Передача остановлена до начала отправки.");return;}
         JSONObject hello=new JSONObject(Util.http(host,port,userPin,"/hello","GET",null));
         if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new IOException("Это не совместимый приёмник QR LINK");
         final boolean verifySha=hello.optBoolean("sha256",false);
@@ -552,7 +558,9 @@ public final class TransferEngine {
         long length=Math.min(Util.CHUNK,job.size-offset);
         URL u=new URL("http",host,port,"/chunk/"+job.id+"/"+index);
         HttpURLConnection con=(HttpURLConnection)u.openConnection();
+        activeUploads.add(con);
         try{
+            if(sendingCancelled)throw new IOException("Передача остановлена");
             con.setRequestMethod("PUT");con.setDoOutput(true);
             con.setConnectTimeout(5000);con.setReadTimeout(90000);
             con.setRequestProperty("X-Xarkon-Key",userPin);
@@ -607,6 +615,7 @@ public final class TransferEngine {
                 throw new ChecksumMismatchException("Получатель не подтвердил контрольную сумму блока");
             }
         }finally{
+            activeUploads.remove(con);
             // Disconnect even when the source stream or a socket write fails.
             con.disconnect();
         }

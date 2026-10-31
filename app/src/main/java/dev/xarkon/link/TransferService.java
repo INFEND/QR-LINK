@@ -38,6 +38,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private final Runnable networkWatch=new Runnable(){
         @Override public void run(){
             try{
+                // A verified idle peer is no longer reachable when the local radio disappears.
+                // Do not keep showing a connected device while Wi-Fi is off.
+                if(peerVerified&&!WifiState.localTransferReady(TransferService.this)){
+                    peerAttempts.next();peerVerified=false;
+                    peerState="Соединение потеряно · включите Wi-Fi";
+                    status=peerState;refresh();
+                }
                 if(isSending&&!senderWifiLost&&!WifiState.localTransferReady(TransferService.this)){
                     senderWifiLost=true;
                     engine.cancelSending();
@@ -181,7 +188,9 @@ public final class TransferService extends Service implements TransferEngine.Eve
             }catch(Exception e){note("Не удалось запустить приём: "+e.getMessage());}
         }else if(CONNECT.equals(action)){
             if(!WifiState.localTransferReady(this)){
-                note("Нет локального Wi-Fi. Включите его и повторно отсканируйте QR.");
+                peerAttempts.next();peerVerified=false;
+                peerState="Нет локального Wi-Fi · подключение не начато";
+                note("Включите Wi-Fi для подключения по QR.");
                 return START_NOT_STICKY;
             }
             String raw=in.getStringExtra("qr");
@@ -190,10 +199,14 @@ public final class TransferService extends Service implements TransferEngine.Eve
             wifiPeer.stop();if(!wantReceive)directWifi.close();
             try{
                 Pairing.Info info=Pairing.parse(raw);
-                if(!info.hotspot){note("Это QR общей Wi-Fi сети, используйте стандартное подключение");}
-                else{
-                    getSharedPreferences("settings",0).edit().remove("host").remove("key").apply();
-                    lock();
+                // Invalidate the previous receiver before attempting ANY new QR, including LAN.
+                getSharedPreferences("settings",0).edit().remove("host").remove("key")
+                    .remove("port").remove("peer_name").putString("pair_qr",raw).commit();
+                lock();
+                if(!info.hotspot){
+                    peerState="Подключаемся через общую сеть Wi-Fi";refresh();
+                    verifyReceiver(info.host,info,false,raw,attempt);
+                }else{
                     if(info.direct){
                         peerState="Ищем Wi-Fi Direct приёмник...";refresh();
                         directWifi.join(info.mac,new DirectWifi.JoinListener(){
@@ -208,7 +221,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
                         });
                     }else fallbackWifi(info,raw,attempt);
                 }
-            }catch(Exception e){note("Ошибка QR: "+e.getMessage());}
+            }catch(Exception e){
+                peerAttempts.next();peerVerified=false;
+                peerState="Ошибка QR: "+ErrorText.human(e);
+                note(peerState);unlockIfIdle();
+            }
         }else if(SEND.equals(action))runJob(()->{
             if(!WifiState.localTransferReady(this))throw new java.io.IOException(
                 "Локальная Wi-Fi сеть недоступна.");
@@ -337,6 +354,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 org.json.JSONObject hello=new org.json.JSONObject(Util.http(host,info.port,info.key,"/hello","GET",null));
                 if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new Exception("Несовместимый протокол приёмника");
                 if(!peerAttempts.current(attempt))return;
+                if(!WifiState.localTransferReady(TransferService.this))
+                    throw new java.io.IOException("Локальная сеть отключилась во время подключения");
                 getSharedPreferences("settings",0).edit().putString("host",host).putInt("port",info.port)
                     .putString("key",info.key).putString("pair_qr",raw)
                     .putString("peer_name",PeerIdentity.displayName(hello.optString("deviceName","Получатель"))).apply();
@@ -359,6 +378,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private void runJob(Work job){runJob(job,false);}
     private void runJob(Work job,boolean sending){
         if(!busy.compareAndSet(false,true)){note("Другая операция ещё выполняется");return;}
+        // Arm cancellation before queueing work: STOP during preparation must win.
+        if(sending)engine.prepareSending();
         isBusy=true;isSending=sending;senderWifiLost=false;
         status="Подготовка...";lock();refresh();
         try{work.submit(()->{

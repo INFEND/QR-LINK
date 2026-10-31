@@ -80,6 +80,7 @@ public final class Util {
     public static String http(String host,int port,String pin,String endpoint,String method,JSONObject body)throws Exception{
         URL u=new URL("http",host,port,endpoint);
         HttpURLConnection conn=(HttpURLConnection)u.openConnection();
+        try{
         conn.setRequestMethod(method);conn.setConnectTimeout(4000);conn.setReadTimeout(12000);
         conn.setRequestProperty("X-Xarkon-Key",pin);
         if(body!=null){
@@ -93,6 +94,7 @@ public final class Util {
             String response=in==null?"":readText(in,524288);
             if(status>=400)throw new IOException("HTTP "+status+": "+response);
             return response;
+        }
         }finally{conn.disconnect();}
     }
     public static String id(){return UUID.randomUUID().toString();}
