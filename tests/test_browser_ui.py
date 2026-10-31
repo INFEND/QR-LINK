@@ -35,7 +35,7 @@ class BrowserUiTests(unittest.TestCase):
         self.assertIn('it.name=Util.safeName(tab==3', src)
         self.assertIn('sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version', src)
         self.assertIn('addWide("СИСТЕМНЫЙ ПРОВОДНИК"', src)
-        self.assertIn('if(!filter.isEmpty())rows.removeIf', src)
+        self.assertIn('if(!filter.isEmpty())rows=new ArrayList<>(BrowserSearchTree.filter(', src)
         settings = MAIN.read_text(encoding="utf-8")
         self.assertIn('"browser_style"', settings)
         self.assertIn('"Текст","Иконки","Текст и иконки"', settings)
