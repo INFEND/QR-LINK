@@ -741,7 +741,11 @@ public final class MainActivity extends Activity {
                 @Override public View getView(int position,View convertView,ViewGroup parent){
                     TextView row=(TextView)super.getView(position,convertView,parent);
                     row.setTextColor(fg);row.setTextSize(12);row.setSingleLine(true);
-                    row.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);return row;
+                    row.setEllipsize(android.text.TextUtils.TruncateAt.MARQUEE);
+                    row.setMarqueeRepeatLimit(-1);
+                    row.setHorizontallyScrolling(true);
+                    row.setSelected(true);
+                    return row;
                 }
             };
             transferFileAdapter.setNotifyOnChange(false);
@@ -1267,7 +1271,8 @@ public final class MainActivity extends Activity {
         for(FileCatalog.Item file:jobs){
             String status=file.status==null?"":file.status;
             String sign="Передан".equals(status)?"✓ ":status.startsWith("Ошибка")?"! ":"○ ";
-            next.add(sign+file.name+" · "+Util.readable(Math.max(0,file.size)));
+            next.add(sign+file.name+" · "+Util.readable(Math.max(0,file.size))+
+                " · "+(status.isEmpty()?"В очереди":ErrorText.human(status)));
         }
         if(transferQueueRows.size()!=next.size()){
             transferQueueRows.clear();

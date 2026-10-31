@@ -237,6 +237,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(!wantReceive||!isReceiving)return;
         String external=WifiState.hostedApAddress(this);
         if(!external.isEmpty()){
+            // A system hotspot supersedes any pending Direct hosting callback.
+            ++directRouteAttempt;
             directWifi.close();hotspot.stop();resetDirect();resetHotspot();
             systemApHost=external;status="Системная точка доступа · готов к приёму";refresh();return;
         }
