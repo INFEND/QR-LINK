@@ -480,14 +480,16 @@ public final class TransferService extends Service implements TransferEngine.Eve
             !QrInputValidation.isLocalIpv4(host)||!key.matches("[0-9a-f]{64}"))return false;
         android.content.SharedPreferences saved=getSharedPreferences("settings",0);
         if(peerVerified&&!host.equals(saved.getString("host","")))return false;
-        final int attempt=peerAttempts.next();
+        final int expectedAttempt=peerAttempts.snapshot();
         try{
             JSONObject hello=new JSONObject(Util.http(host,Util.PORT,key,"/hello","GET",null));
             if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))return false;
             String name=PeerIdentity.displayName(hello.optString("deviceName","Устройство"));
-            if(destroyed||!peerAttempts.current(attempt)||!engine.receiving()||
+            if(destroyed||!peerAttempts.current(expectedAttempt)||!engine.receiving()||
                 !WifiState.localTransferReady(this))return false;
             if(peerVerified&&!host.equals(saved.getString("host","")))return false;
+            final int attempt=peerAttempts.advanceIfCurrent(expectedAttempt);
+            if(attempt<0)return false;
             boolean lan=WifiState.clientConnected(this)&&!directReady&&!hotspotReady;
             android.content.SharedPreferences.Editor editor=saved.edit()
                 .putString("host",host).putInt("port",Util.PORT)
@@ -516,9 +518,10 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 // outgoing connection, including when talking to older clients.
                 boolean bidirectional=registerReverse(host,info.port,info.key);
                 if(destroyed||!peerAttempts.current(attempt))return;
-                getSharedPreferences("settings",0).edit().putString("host",host).putInt("port",info.port)
+                if(!getSharedPreferences("settings",0).edit().putString("host",host).putInt("port",info.port)
                     .putString("key",info.key).putString("pair_qr",raw)
-                    .putString("peer_name",PeerIdentity.displayName(hello.optString("deviceName","Получатель"))).apply();
+                    .putString("peer_name",PeerIdentity.displayName(hello.optString("deviceName","Получатель"))).commit())
+                    throw new java.io.IOException("Не удалось сохранить подтверждённое соединение");
                 autoReconnectLan=!info.hotspot;
                 peerVerified=true;reverseVerified=bidirectional;
                 peerState=bidirectional?"Двустороннее соединение подтверждено":
@@ -633,10 +636,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
             finally{isSending=false;isBusy=false;busy.set(false);
                 // Keep last transfer figures visible after completion.
                 if(transferDirection.isEmpty()){progress=0;total=0;bytesPerSecond=0;activeFile="";}
-                status=isReceiving&&engine.receiving()&&WifiState.localTransferReady(this)?
-                    (directReady&&QrInputValidation.isLocalIpv4(directHost)?
-                        "Wi-Fi Direct готов":"Приём включён · "+Util.ip()+":"+Util.PORT):
-                    isReceiving?"Ожидание восстановления сети":
+                String listenIp=directReady?directHost:hotspotReady?hotspotHost:
+                    !systemApHost.isEmpty()?systemApHost:Util.ip();
+                boolean networkReady=WifiState.localTransferReady(this);
+                status=isReceiving&&engine.receiving()&&networkReady&&
+                    QrInputValidation.isLocalIpv4(listenIp)?
+                    (directReady?"Wi-Fi Direct готов":"Приём включён · "+listenIp+":"+Util.PORT):
+                    isReceiving?(networkReady?"Ожидание IP-адреса для приёма":"Ожидание восстановления сети"):
                     (!peerState.isEmpty()?peerState:"Готов к работе");
                 unlockIfIdle();refresh();}
         });}catch(RejectedExecutionException rejected){

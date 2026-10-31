@@ -110,6 +110,7 @@ public final class FileCatalog {
         // A caller may hold a stale queue snapshot while the transfer service
         // has written newer statuses to SQLite. Merge them BEFORE deleting the
         // status journal, otherwise a queue edit can revert "Передан" to "В очереди".
+        boolean statusesMerged=!mergePendingStatuses||items.isEmpty();
         if(mergePendingStatuses&&!items.isEmpty())try{
             HashMap<String,Item> byId=new HashMap<>();
             for(Item item:items)if(item.id!=null)byId.put(item.id,item);
@@ -119,8 +120,10 @@ public final class FileCatalog {
                     if(item!=null)item.status=cursor.getString(1);
                 }
             }
+            statusesMerged=true;
         }catch(Exception ignored){
-            // Preserve the supplied queue snapshot if the status DB is unavailable.
+            // Keep the journal: a transient SQLite read failure must not erase
+            // newer transfer statuses when the queue snapshot is saved.
         }
         JSONArray a=new JSONArray();
         try{for(Item it:items)a.put(it.json());}
@@ -130,8 +133,9 @@ public final class FileCatalog {
         boolean saved=c.getSharedPreferences(PREF,0).edit()
             .putString("list",snapshot).putString("list_mirror",snapshot).commit();
         if(!saved)throw new IllegalStateException("Android не сохранил очередь файлов");
-        // Never discard the status journal unless the merged snapshot is durable.
-        try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
+        // Do not erase unmerged statuses after a transient database failure.
+        if(statusesMerged&&mergePendingStatuses)
+            try{statusDb(c).delete("item_status",null,null);}catch(Exception ignored){}
         QueueRevision.changed();
     }
     public static synchronized void append(Context c,List<Item> items){

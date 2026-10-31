@@ -105,7 +105,10 @@ public final class TransferEngine {
     private static String line(InputStream in)throws IOException{
         ByteArrayOutputStream b=new ByteArrayOutputStream();int x;
         while((x=in.read())!=-1){if(x=='\n')break;if(x!='\r')b.write(x);if(b.size()>8192)throw new IOException("Заголовок слишком длинный");}
-        if(x==-1&&b.size()==0)return null;
+        if(x==-1){
+            if(b.size()==0)return null;
+            throw new EOFException("Незавершённая строка HTTP-заголовка");
+        }
         return b.toString(StandardCharsets.ISO_8859_1.name());
     }
     private static void reply(OutputStream out,int code,String text,JSONObject j)throws IOException{
@@ -127,7 +130,9 @@ public final class TransferEngine {
             }
             Map<String,String>heads=new HashMap<>();String ln;
             int num=0,headerBytes=0;
-            while((ln=line(in))!=null&&!ln.isEmpty()){
+            boolean headersFinished=false;
+            while((ln=line(in))!=null){
+                if(ln.isEmpty()){headersFinished=true;break;}
                 headerBytes+=ln.length();
                 if(++num>40||headerBytes>16384)
                     throw new IOException("Слишком много данных в заголовках");
@@ -139,6 +144,9 @@ public final class TransferEngine {
                 if(heads.putIfAbsent(field,ln.substring(at+1).trim())!=null){
                     reply(out,400,"Bad Request",error("Повторяющийся заголовок"));return;
                 }
+            }
+            if(!headersFinished){
+                reply(out,400,"Bad Request",error("HTTP-заголовки не завершены"));return;
             }
             // Never allow ambiguous framing between a proxy/client and this server.
             if(heads.containsKey("transfer-encoding")){
@@ -168,10 +176,12 @@ public final class TransferEngine {
                 }
                 block.count=0;block.lockedUntil=0;
             }
-            // Short timeout for unauthenticated peers; full timeout for authenticated chunks.
+            // Control requests must not occupy a receiver worker for 90 seconds.
             if(!alive||epoch!=receiveEpoch)return;
-            s.setSoTimeout(90000);
             String path=pieces[1];String method=pieces[0];
+            boolean streaming=method.equals("PUT")&&
+                (path.startsWith("/chunk/")||path.equals("/bench"));
+            s.setSoTimeout(streaming?90000:10000);
             if(method.equals("GET")&&path.equals("/hello")){
                 reply(out,200,"OK",new JSONObject().put("app","XARKON LINK")
                     .put("version",PeerIdentity.PROTOCOL_VERSION).put("sha256",true)
@@ -355,6 +365,16 @@ public final class TransferEngine {
         }
         if(inc.size!=size||!inc.name.equals(name)||!inc.path.equals(path)||!inc.mime.equals(mime))
             throw new IOException("Конфликт ID файла: имя, путь, размер или формат изменились");
+        // A previously published file can be deleted or truncated without an app restart.
+        // Never acknowledge all chunks when its destination no longer exists.
+        if(inc.completed){
+            try(ParcelFileDescriptor published=context.getContentResolver().openFileDescriptor(inc.uri,"r")){
+                if(published==null)throw new IOException("Полученный файл больше недоступен");
+                long actual=published.getStatSize();
+                if(actual>=0&&actual!=inc.size)
+                    throw new IOException("Размер сохранённого файла изменился");
+            }
+        }
         // A saved bitmap is not evidence that the bytes still match. Verify
         // every restored chunk against its durable SHA-256 before advertising it.
         verifyRestored(inc);

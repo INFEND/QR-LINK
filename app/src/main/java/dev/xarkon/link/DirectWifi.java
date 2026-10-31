@@ -106,6 +106,7 @@ public final class DirectWifi {
     }
     public void host(HostListener listener){
         main.post(()->{
+            if(closed){listener.failure("Wi-Fi Direct уже остановлен");return;}
             final String issue=check();if(!issue.isEmpty()){listener.failure(issue);return;}
             int id=++serial;
             hosting=true;joining=false;connectAttempted=false;
@@ -158,7 +159,7 @@ public final class DirectWifi {
     private void readGroup(int id){
         if(id!=serial||!hosting||hostListener==null)return;
         try{manager.requestGroupInfo(channel,group->{
-            if(id!=serial||!hosting||hostListener==null||group==null||!group.isGroupOwner())return;
+            if(closed||id!=serial||!hosting||hostListener==null||group==null||!group.isGroupOwner())return;
             String ssid=group.getNetworkName(),password=group.getPassphrase();
             WifiP2pDevice owner=group.getOwner();
             String mac=owner==null?"":owner.deviceAddress;
@@ -198,6 +199,7 @@ public final class DirectWifi {
     /** The sender only needs one QR: random P2P MAC plus group credentials. */
     public void join(String mac,JoinListener listener){
         main.post(()->{
+            if(closed){listener.failure("Wi-Fi Direct уже остановлен");return;}
             String issue=check();if(!issue.isEmpty()){listener.failure(issue);return;}
             ++serial;int id=serial;
             joining=true;hosting=false;connectAttempted=false;joinListener=listener;
@@ -246,7 +248,7 @@ public final class DirectWifi {
     private void readConnection(int id){
         if(id!=serial||!joining||joinListener==null)return;
         try{manager.requestConnectionInfo(channel,(WifiP2pInfo info)->{
-            if(id!=serial||!joining||joinListener==null||info==null||!info.groupFormed||info.groupOwnerAddress==null)return;
+            if(closed||id!=serial||!joining||joinListener==null||info==null||!info.groupFormed||info.groupOwnerAddress==null)return;
             if(connectionDelivered.compareAndSet(false,true)){
                 JoinListener l=joinListener;joinListener=null;
                 l.connected(info.groupOwnerAddress.getHostAddress());
