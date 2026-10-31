@@ -525,7 +525,7 @@ public final class TransferEngine {
                             last=e;
                             // A verified mismatch cannot be repaired by retrying a
                             // completed block under the same ID: report an error.
-                            if(e instanceof ChecksumMismatchException)break;
+                            if(sendingCancelled||e instanceof ChecksumMismatchException)break;
                             try{Thread.sleep(250L*(attempt+1));}
                             catch(InterruptedException ie){Thread.currentThread().interrupt();break;}
                         }

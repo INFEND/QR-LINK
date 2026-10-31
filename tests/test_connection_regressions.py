@@ -40,7 +40,7 @@ class ConnectionRegressionTests(unittest.TestCase):
 
     def test_invalid_qr_and_idle_wifi_loss_are_visible(self):
         self.assertIn('peerState="Ошибка QR: "+ErrorText.human(e)',SERVICE)
-        self.assertRegex(SERVICE,r'catch\\(Exception e\\)\\{\\s*peerAttempts\\.next\\(\\);peerVerified=false;[\\s\\S]*?\\.remove\\("pair_qr"\\)\\.commit\\(\\);')
+        self.assertIn('.remove("pair_qr").commit();\n                peerState="Ошибка QR:',SERVICE)
         self.assertIn('if(peerVerified&&!WifiState.localTransferReady(TransferService.this))',SERVICE)
         self.assertIn('peerAttempts.next();peerVerified=false;',SERVICE)
         self.assertIn('throw new java.io.IOException("Локальная сеть отключилась во время подключения")',SERVICE)
@@ -53,6 +53,7 @@ class ConnectionRegressionTests(unittest.TestCase):
         self.assertIn('for(HttpURLConnection connection:activeUploads)connection.disconnect()',ENGINE)
         self.assertIn('activeUploads.add(con);',ENGINE)
         self.assertIn('activeUploads.remove(con);',ENGINE)
+        self.assertIn('if(sendingCancelled||e instanceof ChecksumMismatchException)break;',ENGINE)
 
     def test_http_connection_always_disconnected(self):
         segment=UTIL.split('public static String http(',1)[1].split('public static String id()',1)[0]
