@@ -34,6 +34,7 @@ class PeerConnectionContract(unittest.TestCase):
         self.assertIn("displayedPairState=sessionConfirmed()",src)
         self.assertIn('putString("pair_qr",raw)',src)
         self.assertIn("TransferService.DISCONNECT_PEER",src)
+        self.assertIn("if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;",src)
     def test_callbacks_and_disconnect_are_guarded(self):
         src=(JAVA/"TransferService.java").read_text(encoding="utf-8")
         self.assertIn("peerAttempts.current(attempt)",src)
@@ -41,5 +42,6 @@ class PeerConnectionContract(unittest.TestCase):
         self.assertIn('putString("pair_qr",raw)',src)
         self.assertIn("peerVerified=true;",src)
         self.assertIn("peerAttempts.next();peerVerified=false;",src)
+        self.assertIn("peerVerified=false;peerState=\"\";isReceiving=false;",src)
 if __name__=="__main__":
     unittest.main()

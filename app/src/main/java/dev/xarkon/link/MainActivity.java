@@ -1385,7 +1385,8 @@ public final class MainActivity extends Activity {
     }
     private void connectQr(String raw){final Pairing.Info info;
         try{info=Pairing.parse(raw);}catch(Exception e){toast("QR не подходит: "+e.getMessage());return;}
-        ++peerProbeGeneration;peerProbeBusy=false;TransferService.peerVerified=false;
+        final int attempt=++peerProbeGeneration;
+        peerProbeBusy=false;TransferService.peerVerified=false;
         if(pairLabel!=null)pairLabel.setText("Проверяем QR и соединение...");
         if(info.hotspot){
             if(!ensureWifiEnabled())return;
@@ -1397,7 +1398,8 @@ public final class MainActivity extends Activity {
             }
             Intent i=new Intent(this,TransferService.class);i.setAction(TransferService.CONNECT);
             i.putExtra("qr",raw);launchService(i);
-            toast("Соединяем через Wi-Fi Direct. Подтвердите запрос Android, если появится.");
+            toast(info.direct?"Соединяем через Wi-Fi Direct. Подтвердите запрос Android, если появится.":
+                "Подключаемся к точке доступа. Подтвердите запрос Android, если появится.");
             navigate(SEND);return;
         }
         if(!WifiState.clientConnected(this)&&WifiState.hostedApAddress(this).isEmpty()){
@@ -1408,14 +1410,22 @@ public final class MainActivity extends Activity {
             try{
                 org.json.JSONObject check=new org.json.JSONObject(Util.http(info.host,info.port,info.key,"/hello","GET",null));
                 if(!"XARKON LINK".equals(check.optString("app")))throw new Exception("На этом устройстве не запущен совместимый приёмник QR LINK");
-                prefs().edit().putString("host",info.host).putInt("port",info.port)
-                    .putString("key",info.key).putString("peer_name",check.optString("deviceName","Получатель"))
-                    .putString("pair_qr",raw).apply();
-                TransferService.peerVerified=true;lastPeerProbeAt=Util.now();
-                runOnUiThread(()->{navigate(SEND);toast("QR принят. Можно отправлять файлы.");});
-            }catch(Exception e){runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Не удалось подключиться")
-                .setMessage(ErrorText.human(e.getMessage())+"\n\nПроверьте наличие общего локального соединения и активный QR-код.")
-                .setPositiveButton("Повторить",(d,w)->startScanner()).setNegativeButton("Закрыть",null).show());}
+                String name=check.optString("deviceName","Получатель");
+                runOnUiThread(()->{
+                    // A late /hello must never resurrect a QR after Disconnect/new scan.
+                    if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;
+                    prefs().edit().putString("host",info.host).putInt("port",info.port)
+                        .putString("key",info.key).putString("peer_name",name)
+                        .putString("pair_qr",raw).apply();
+                    TransferService.peerVerified=true;lastPeerProbeAt=Util.now();
+                    navigate(SEND);toast("QR принят. Можно отправлять файлы.");
+                });
+            }catch(Exception e){runOnUiThread(()->{
+                if(attempt!=peerProbeGeneration||isFinishing()||isDestroyed())return;
+                new AlertDialog.Builder(this).setTitle("Не удалось подключиться")
+                    .setMessage(ErrorText.human(e)+"\n\nПроверьте наличие общего локального соединения и активный QR-код.")
+                    .setPositiveButton("Повторить",(d,w)->startScanner()).setNegativeButton("Закрыть",null).show();
+            });}
         },"qr-connect-check").start();
     }
     private void validatePaired(){
@@ -1423,7 +1433,7 @@ public final class MainActivity extends Activity {
         String raw=prefs().getString("pair_qr","");
         try{
             Pairing.Info invitation=Pairing.parse(raw);
-            if(invitation.hotspot){
+            if(invitation.hotspot&&invitation.key.equals(prefs().getString("key",""))){
                 ++peerProbeGeneration;peerProbeBusy=false;
                 TransferService.peerVerified=false;TransferService.peerState="Повторное подключение…";
                 Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);

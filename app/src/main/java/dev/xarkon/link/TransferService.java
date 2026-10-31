@@ -128,6 +128,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
         String action=in.getAction();
         if(DISCONNECT_PEER.equals(action)){
             peerAttempts.next();peerVerified=false;peerState="";
+            getSharedPreferences("settings",0).edit().remove("host").remove("key")
+                .remove("port").remove("peer_name").remove("pair_qr").commit();
             wifiPeer.stop();if(!wantReceive)directWifi.close();
             if(!wantReceive&&!isBusy){unlock();stopSelf();}else refresh();
             MainActivity.changed();return START_NOT_STICKY;
@@ -381,6 +383,6 @@ public final class TransferService extends Service implements TransferEngine.Eve
         directPass="";directHost="";MainActivity.changed();}
     private void resetHotspot(){hotspotReady=false;hotspotStarting=false;hotspotSsid="";hotspotPassword="";hotspotHost="";hotspotSecurity=0;MainActivity.changed();}
     @Override public void onDestroy(){networkHandler.removeCallbacks(networkWatch);engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();unlock();
-        isReceiving=false;isBusy=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
+        peerVerified=false;peerState="";isReceiving=false;isBusy=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }
