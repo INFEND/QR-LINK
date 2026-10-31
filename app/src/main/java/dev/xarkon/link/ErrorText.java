@@ -8,6 +8,18 @@ import java.util.regex.Pattern;
 public final class ErrorText {
     private ErrorText(){}
     private static final Pattern HTTP=Pattern.compile("(?i)\\bHTTP\\s*(\\d{3})\\b");
+    private static String remoteMessage(String raw){
+        int field=raw.indexOf("\"error\"");
+        if(field<0)return "";
+        int colon=raw.indexOf(':',field+7);
+        if(colon<0)return "";
+        int begin=raw.indexOf('"',colon+1);
+        if(begin<0)return "";
+        int end=raw.indexOf('"',begin+1);
+        if(end<=begin||end-begin>241)return "";
+        String value=raw.substring(begin+1,end);
+        return value.matches(".*[А-Яа-яЁё].*")?value:"";
+    }
     public static String human(Throwable error){
         return human(error==null?null:error.getMessage());
     }
@@ -45,8 +57,11 @@ public final class ErrorText {
         if(lower.contains("unable to open")||lower.contains("failed to open"))
             return "Не удалось открыть файл. Проверьте доступ и повторите попытку.";
         Matcher http=HTTP.matcher(message);
-        if(http.find()&&!message.matches(".*[А-Яа-яЁё].*"))
+        if(http.find()){
+            String remote=remoteMessage(message);
+            if(!remote.isEmpty())return remote;
             return "Сервер ответил ошибкой "+http.group(1)+". Повторите попытку.";
+        }
         // Preserve existing informative Russian messages, but never expose
         // unlocalized low-level exception dumps to end users.
         if(message.matches(".*[А-Яа-яЁё].*")){

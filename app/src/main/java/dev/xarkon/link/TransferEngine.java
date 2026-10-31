@@ -29,6 +29,7 @@ public final class TransferEngine {
     private final ConcurrentHashMap<String,Incoming> incoming=new ConcurrentHashMap<>();
     private static final class BadPin {
         long first, lockedUntil;
+        volatile long lastSeen;
         int count;
     }
     private final ConcurrentHashMap<String,BadPin> lastBadPin=new ConcurrentHashMap<>();
@@ -119,23 +120,46 @@ public final class TransferEngine {
                OutputStream out=new BufferedOutputStream(s.getOutputStream(),32*1024)){
             String first=line(in);if(first==null)return;
             String[]pieces=first.split(" ");
-            if(pieces.length!=3){reply(out,400,"Bad Request",error("Некорректный HTTP-запрос"));return;}
+            if(pieces.length!=3||!("HTTP/1.1".equals(pieces[2])||"HTTP/1.0".equals(pieces[2]))||
+                !pieces[1].startsWith("/")||pieces[1].contains("?")||pieces[1].contains("#")||
+                !("GET".equals(pieces[0])||"POST".equals(pieces[0])||"PUT".equals(pieces[0]))){
+                reply(out,400,"Bad Request",error("Некорректный HTTP-запрос"));return;
+            }
             Map<String,String>heads=new HashMap<>();String ln;
-            int num=0;
+            int num=0,headerBytes=0;
             while((ln=line(in))!=null&&!ln.isEmpty()){
-                if(++num>40)throw new IOException("Слишком много заголовков");
+                headerBytes+=ln.length();
+                if(++num>40||headerBytes>16384)
+                    throw new IOException("Слишком много данных в заголовках");
                 int at=ln.indexOf(':');
-                if(at>0){
-                    String field=ln.substring(0,at).trim().toLowerCase(Locale.US);
-                    if(heads.putIfAbsent(field,ln.substring(at+1).trim())!=null){
-                        reply(out,400,"Bad Request",error("Повторяющийся заголовок"));return;
-                    }
+                if(at<=0||!ln.substring(0,at).matches("[A-Za-z0-9-]+")){
+                    reply(out,400,"Bad Request",error("Некорректный HTTP-заголовок"));return;
+                }
+                String field=ln.substring(0,at).toLowerCase(Locale.US);
+                if(heads.putIfAbsent(field,ln.substring(at+1).trim())!=null){
+                    reply(out,400,"Bad Request",error("Повторяющийся заголовок"));return;
                 }
             }
+            // Never allow ambiguous framing between a proxy/client and this server.
+            if(heads.containsKey("transfer-encoding")){
+                reply(out,400,"Bad Request",error("Неподдерживаемый способ передачи запроса"));return;
+            }
             String from=s.getInetAddress().getHostAddress();
-            BadPin block=lastBadPin.computeIfAbsent(from,k->new BadPin());
+            BadPin block=lastBadPin.get(from);
+            if(block==null){
+                // Keep authentication throttling bounded under many source addresses.
+                if(lastBadPin.size()>=4096){
+                    long cutoff=System.currentTimeMillis()-300000L;
+                    lastBadPin.entrySet().removeIf(e->e.getValue().lastSeen<cutoff);
+                    if(lastBadPin.size()>=4096){
+                        reply(out,503,"Busy",error("Слишком много попыток подключения"));return;
+                    }
+                }
+                block=lastBadPin.computeIfAbsent(from,k->new BadPin());
+            }
             synchronized(block){
                 long now=System.currentTimeMillis();
+                block.lastSeen=now;
                 if(now<block.lockedUntil){reply(out,429,"Try Later",error("Слишком много попыток подключения"));return;}
                 if(!sessionKey.equals(heads.get("x-xarkon-key"))){
                     if(now-block.first>60000){block.first=now;block.count=0;}
@@ -157,6 +181,7 @@ public final class TransferEngine {
             long contentLength;
             try{contentLength=Long.parseLong(heads.getOrDefault("content-length","-1"));}
             catch(Exception e){reply(out,411,"Length Required",error("Нужен Content-Length"));return;}
+            if(contentLength<0){reply(out,411,"Length Required",error("Нужен корректный Content-Length"));return;}
             // The original QR holder can offer its own listener to the receiver.
             // Authenticate using the current receive key, derive the reverse host
             // from the actual TCP peer (never from user-supplied JSON), and bound
@@ -489,8 +514,10 @@ public final class TransferEngine {
             catch(Exception e){
                 if(sendingCancelled){FileCatalog.setStatus(context,job.id,"Приостановлен");
                     events.note("Передача остановлена. Можно продолжить позже.");return;}
-                failed++;FileCatalog.setStatus(context,job.id,"Ошибка: "+e.getMessage());
-                events.note("Ошибка отправки "+job.name+": "+e.getMessage());
+                failed++;
+                String readable=ErrorText.human(e);
+                FileCatalog.setStatus(context,job.id,"Ошибка: "+readable);
+                events.note("Ошибка отправки "+job.name+": "+readable);
             }
         }
         if(failed>0)throw new IOException("Не удалось передать "+failed+" из "+jobs.size()+" файлов. Проверьте очередь.");
@@ -503,10 +530,10 @@ public final class TransferEngine {
         int blocks=ChunkState.count(job.size,Util.CHUNK);
         BitSet completed=BitSet.valueOf(Base64.decode(result.optString("done",""),Base64.DEFAULT));
         ChunkState.validate(completed,blocks);
-        ArrayList<Integer>todo=new ArrayList<>();long already=0;
-        for(int i=0;i<blocks;i++){
-            if(completed.get(i))already+=Math.min(Util.CHUNK,job.size-(long)i*Util.CHUNK);else todo.add(i);
-        }
+        // Do not allocate one boxed index per missing block for very large files.
+        long already=0;
+        for(int i=completed.nextSetBit(0);i>=0;i=completed.nextSetBit(i+1))
+            already+=Math.min(Util.CHUNK,job.size-(long)i*Util.CHUNK);
         AtomicLong progress=new AtomicLong(already);
         AtomicLong inFlight=new AtomicLong();
         AtomicLong lastReport=new AtomicLong();
@@ -537,12 +564,12 @@ public final class TransferEngine {
                 sourceStream=null;sourceDescriptor=null;sourceChannel=null;
             }
             final FileChannel sharedSource=sourceChannel;
-            Iterator<Integer> pending=todo.iterator();
-            int active=0;
-            while(pending.hasNext()||active>0){
+            int nextIndex=0,active=0;
+            while(nextIndex<blocks||active>0){
                 if(sendingCancelled)throw new IOException("Передача остановлена");
-                while(active<parallel&&pending.hasNext()){
-                    final int ix=pending.next();
+                while(active<parallel&&nextIndex<blocks){
+                    final int ix=nextIndex++;
+                    if(completed.get(ix))continue;
                     completions.submit(()->{
                     Exception last=null;
                     for(int attempt=0;attempt<3;attempt++){
@@ -578,6 +605,7 @@ public final class TransferEngine {
                     });
                     active++;
                 }
+                if(active==0)continue;
                 // Refill as soon as any worker completes. On the first failure,
                 // stop scheduling more blocks and cancel remaining work in finally.
                 try{completions.take().get();}

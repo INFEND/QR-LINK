@@ -29,7 +29,7 @@ public final class Util {
             if(p.isEmpty() || p.equals(".") || p.equals(".."))continue;
             if(b.length()>0)b.append('/');
             b.append(safeName(p));
-            if(b.length()>400)break;
+            if(b.length()>400)throw new IllegalArgumentException("Слишком длинный путь вложенной папки");
         }
         return b.toString();
     }

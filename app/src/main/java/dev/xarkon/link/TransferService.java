@@ -225,6 +225,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 return START_NOT_STICKY;
             }
             String raw=in.getStringExtra("qr");
+            // A new invitation must never leave an upload running to the old peer.
+            engine.cancelSending();
             final int attempt=peerAttempts.next();
             autoReconnectLan=false;
             peerVerified=false;reverseVerified=false;peerState="Подключение · проверяем маршрут";refresh();
@@ -276,8 +278,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
             if(todo.isEmpty()){note("Нет файлов для отправки");return;}
             if(host.isEmpty()||pin.isEmpty())throw new java.io.IOException(
                 "Нет подключённого получателя. Отсканируйте QR заново.");
+            final int sendAttempt=peerAttempts.snapshot();
             try{engine.send(host,port,pin,todo,lanes);}
-            catch(Exception failure){peerVerified=false;throw failure;}
+            catch(Exception failure){
+                // A failed old upload must not invalidate a newer authenticated peer.
+                if(peerAttempts.current(sendAttempt))peerVerified=false;
+                throw failure;
+            }
         },true);
         else if(BENCH.equals(action))runJob(()->{
             if(!WifiState.localTransferReady(this))throw new java.io.IOException(
@@ -430,6 +437,8 @@ public final class TransferService extends Service implements TransferEngine.Eve
     }
     /** Recheck an existing reverse invitation even if no scanned QR is stored. */
     private void reconnectSavedPeer(){
+        // Switching routes cancels the previous outbound upload, not the queue.
+        engine.cancelSending();
         android.content.SharedPreferences p=getSharedPreferences("settings",0);
         final String host=p.getString("host",""),key=p.getString("key","");
         final int port=p.getInt("port",Util.PORT);
@@ -546,7 +555,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             if(host.isEmpty()||key.isEmpty())return;
             final int attempt=peerAttempts.snapshot();
             peerHealthBusy=true;lastPeerHealthAt=now;
-            peerHealth.execute(()->{
+            try{peerHealth.execute(()->{
                 boolean reachable=false;
                 try{
                     JSONObject hello=new JSONObject(Util.http(host,port,key,"/hello","GET",null));
@@ -564,7 +573,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                         status=peerState;refresh();
                     }
                 });
-            });
+            });}catch(RejectedExecutionException ignored){peerHealthBusy=false;}
             return;
         }
         // Only LAN invitations can be retried silently; Direct/hotspot may need
@@ -579,7 +588,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         peerReconnectBusy=true;lastPeerReconnectAt=now;
         final String pairedQr=saved.getString("pair_qr","");
         final int attempt=peerAttempts.next();
-        peerHealth.execute(()->{
+        try{peerHealth.execute(()->{
             boolean reachable=false,reverse=false;String name="";
             try{
                 JSONObject hello=new JSONObject(Util.http(info.host,info.port,info.key,"/hello","GET",null));
@@ -609,7 +618,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     status=peerState;refresh();
                 }
             });
-        });
+        });}catch(RejectedExecutionException ignored){peerReconnectBusy=false;}
     }
     private interface Work{void run()throws Exception;}
     private void runJob(Work job){runJob(job,false);}
@@ -674,7 +683,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         directPass="";directHost="";MainActivity.changed();}
     private void resetHotspot(){hotspotReady=false;hotspotStarting=false;hotspotSsid="";hotspotPassword="";hotspotHost="";hotspotSecurity=0;MainActivity.changed();}
     @Override public void onDestroy(){destroyed=true;peerAttempts.next();autoReconnectLan=false;wantReceive=false;
-        ++directRouteAttempt;networkHandler.removeCallbacksAndMessages(null);engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
+        ++directRouteAttempt;networkHandler.removeCallbacksAndMessages(null);engine.cancelSending();engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
         peerVerified=false;reverseVerified=false;peerState="";isReceiving=false;isBusy=false;isSending=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }
