@@ -46,7 +46,6 @@ class OtaToolsTests(unittest.TestCase):
             aapt=p/"aapt"
             aapt.write_text(
                 "#!/bin/sh\nprintf \"package: name='dev.xarkon.link' versionCode='66' versionName='0.3.61'\\n\"\n")
-            )
             aapt.chmod(0o755)
             (p/"release_notes").mkdir()
             (p/"release_notes/v0.3.61.txt").write_text("[+] Реальные изменения",encoding="utf-8")
