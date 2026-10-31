@@ -48,6 +48,8 @@ public final class FileBrowserActivity extends Activity {
     private final HashMap<String,ArrayList<Entry>> expandedChildren=new HashMap<>();
     private final HashSet<String> expandedFolders=new HashSet<>();
     private final HashSet<String> loadingFolders=new HashSet<>();
+    private final HashMap<String,CancellationSignal> expansionSignals=new HashMap<>();
+    private final HashSet<String> incompleteFolders=new HashSet<>();
     private final HashMap<String,Integer> rowDepths=new HashMap<>();
     private LinearLayout list,tabs,root;
     private ScrollView scroll;
@@ -234,6 +236,8 @@ public final class FileBrowserActivity extends Activity {
     }
     private void switchTab(int index){
         tab=index;page=0;tree=null;folderId="";folderPath="";mediaPath="";history.clear();
+        for(CancellationSignal signal:expansionSignals.values())signal.cancel();
+        expansionSignals.clear();incompleteFolders.clear();
         expandedChildren.clear();expandedFolders.clear();loadingFolders.clear();rowDepths.clear();
         String[] hints={"Поиск по картинкам","Поиск по видео","Поиск по музыке","Поиск по приложениям","Поиск по файлам"};
         search.setHint(hints[index]);
@@ -458,10 +462,12 @@ public final class FileBrowserActivity extends Activity {
             TextView hint=label("Разрешение выдаётся Android один раз. Затем содержимое открывается здесь, в собственном проводнике.",12,muted,false);
             pad(hint,6,8);list.addView(hint);
         }
-        ArrayList<Entry> rows=isMedia()?mediaRows(current,mediaPath):new ArrayList<>(current);
-        rowDepths.clear();
         String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
-        if(!filter.isEmpty())rows.removeIf(e->!e.name.toLowerCase(Locale.ROOT).contains(filter));
+        // Category search includes indexed files in nested media folders, even
+        // when the folder has not yet been expanded. SAF search respects grants.
+        ArrayList<Entry> rows=isMedia()&&filter.isEmpty()?mediaRows(current,mediaPath):
+            new ArrayList<>(current);
+        rowDepths.clear();
         Comparator<Entry> cmp=(a,b)->{
             if(a.folder!=b.folder)return a.folder?-1:1;
             if(sort==1)return Long.compare(b.size,a.size);
@@ -474,6 +480,9 @@ public final class FileBrowserActivity extends Activity {
         ArrayList<Entry> flattened=new ArrayList<>();
         for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp);
         rows=flattened;
+        // Search after expanding the tree so a matching SAF child remains visible
+        // even when the parent folder's name does not match the query.
+        if(!filter.isEmpty())rows.removeIf(e->!e.name.toLowerCase(Locale.ROOT).contains(filter));
         if(rows.isEmpty()){
             TextView nothing=label(tab==4&&tree==null?"Откройте папку, чтобы увидеть файлы":
                 "В этом разделе пока нет файлов",14,muted,false);
@@ -526,6 +535,7 @@ public final class FileBrowserActivity extends Activity {
         TextView name=label(display,14,fg,true);name.setMaxLines(style==1?1:2);name.setEllipsize(TextUtils.TruncateAt.END);
         detail.addView(name);
         String sub=e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
+            incompleteFolders.contains(e.key())?"Показана часть содержимого · нажмите, чтобы свернуть":
             expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
             Util.readable(e.size)+(e.mime==null||e.mime.isEmpty()?"":" · "+e.mime);
         if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
@@ -705,28 +715,41 @@ public final class FileBrowserActivity extends Activity {
     }
     private void expandFolder(Entry e){
         String key=e.key();
-        if(expandedFolders.remove(key)){render();return;}
+        if(expandedFolders.remove(key)){
+            CancellationSignal old=expansionSignals.remove(key);
+            if(old!=null)old.cancel();
+            loadingFolders.remove(key);render();return;
+        }
         expandedFolders.add(key);
         if(expandedChildren.containsKey(key)){render();return;}
         if(!loadingFolders.add(key))return;
-        render();
         final int token=serial,category=tab;
+        final CancellationSignal signal=new CancellationSignal();
+        expansionSignals.put(key,signal);
+        render();
         io.execute(()->{
             try{
-                CancellationSignal signal=new CancellationSignal();
                 ArrayList<Entry> children=e.mediaFolder?queryMedia(category,e.path,false,signal):
                     queryDocuments(e.tree,e.docId,e.name,signal);
                 ui.post(()->{
-                    loadingFolders.remove(key);
+                    if(expansionSignals.get(key)!=signal)return;
+                    expansionSignals.remove(key);loadingFolders.remove(key);
                     if(token!=serial||isFinishing())return;
+                    if(children instanceof Entries&&((Entries)children).truncated){
+                        incompleteFolders.add(key);
+                        Toast.makeText(this,"Каталог слишком большой: показана часть файлов",
+                            Toast.LENGTH_LONG).show();
+                    }else incompleteFolders.remove(key);
                     expandedChildren.put(key,children);render();
                 });
             }catch(Exception error){
                 ui.post(()->{
-                    loadingFolders.remove(key);
+                    if(expansionSignals.get(key)!=signal)return;
+                    expansionSignals.remove(key);loadingFolders.remove(key);
                     if(token!=serial||isFinishing())return;
                     expandedFolders.remove(key);
-                    Toast.makeText(this,"Не удалось раскрыть папку",Toast.LENGTH_SHORT).show();
+                    if(!(error instanceof OperationCanceledException))
+                        Toast.makeText(this,"Не удалось раскрыть папку",Toast.LENGTH_SHORT).show();
                     render();
                 });
             }
@@ -756,6 +779,8 @@ public final class FileBrowserActivity extends Activity {
             String id=DocumentsContract.getTreeDocumentId(uri);
             Uri rootDocument=DocumentsContract.buildDocumentUriUsingTree(uri,id);
             tab=4;tree=null;folderId="";folderPath="";
+            for(CancellationSignal signal:expansionSignals.values())signal.cancel();
+            expansionSignals.clear();incompleteFolders.clear();
             expandedChildren.clear();expandedFolders.clear();loadingFolders.clear();
             // Show the granted root in the tree instead of navigating into it.
             tree=null;
@@ -814,6 +839,8 @@ public final class FileBrowserActivity extends Activity {
     }
     @Override protected void onDestroy(){
         ++serial;if(activeQuery!=null)activeQuery.cancel();
+        for(CancellationSignal signal:expansionSignals.values())signal.cancel();
+        expansionSignals.clear();
         ui.removeCallbacks(searchRefresh);
         io.shutdownNow();previews.shutdownNow();previewWaiters.clear();
         previewCache.evictAll();super.onDestroy();
