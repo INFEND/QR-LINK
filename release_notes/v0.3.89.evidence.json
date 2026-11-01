@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.88",
+  "entries": [
+    {
+      "note": "[+] В разделе «Файлы» размер и количество файлов в папках подсчитываются автоматически",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "folderMetaViews.put(e.key(),meta);"
+    }
+  ]
+}

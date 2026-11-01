@@ -36,6 +36,8 @@ public final class FileBrowserActivity extends Activity {
     private static final int PICK_TREE=501,MEDIA_PERMISSION=502,STORAGE_PERMISSION=503,MAX_QUEUE=30000,MAX_VISIBLE=60,MAX_MEDIA_SCAN=60000,MAX_SAF_SCAN=120000;
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private final ExecutorService previews=Executors.newFixedThreadPool(2);
+    // Folder metadata cannot block MediaStore or SAF navigation.
+    private final ExecutorService folderStatsIo=Executors.newFixedThreadPool(2);
     private final LruCache<String,Bitmap> previewCache=new LruCache<String,Bitmap>(8*1024*1024){
         @Override protected int sizeOf(String key,Bitmap image){return image.getByteCount();}
     };
@@ -52,6 +54,14 @@ public final class FileBrowserActivity extends Activity {
     // shared by the selection summary. Never assume a selected folder is 0 B.
     private final HashMap<String,BrowserSelectionTotals.FolderStats> folderSizeSnapshots=new HashMap<>();
     private final HashSet<String> folderSizePending=new HashSet<>();
+    // Compact LRU summaries, never 30000 file URIs per unselected card.
+    private final LinkedHashMap<String,BrowserFolderCardStats> folderCardStats=
+        new LinkedHashMap<String,BrowserFolderCardStats>(128,0.75f,true){
+            @Override protected boolean removeEldestEntry(Map.Entry<String,BrowserFolderCardStats> eldest){
+                return size()>128;
+            }
+        };
+    private final HashMap<String,TextView> folderMetaViews=new HashMap<>();
     // Only the current page is bound to views; selection persists across pages and tabs.
     private final HashMap<String,TextView> selectionIndicators=new HashMap<>();
     private final ArrayList<Entry> visibleEntries=new ArrayList<>();
@@ -406,7 +416,7 @@ public final class FileBrowserActivity extends Activity {
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();incompleteFolders.clear();
         expandedChildren.clear();expandedFolders.clear();openedFolders.clear();loadingFolders.clear();rowDepths.clear();
-        arrowState.clear();
+        arrowState.clear();folderMetaViews.clear();
         String[] hints={"Поиск по картинкам","Поиск по видео","Поиск по музыке","Поиск по приложениям","Поиск по файлам"};
         search.setHint(hints[index]);
         selectPage.setText(index==3?"✓  ВЫБРАТЬ ВСЕ":"✓  ВЫБРАТЬ ПАПКУ");
@@ -832,7 +842,7 @@ public final class FileBrowserActivity extends Activity {
         // blank page while the matching rows are being resolved.
         if(!filter.isEmpty())rows=BrowserSearchTree.filter(rows,
             e->rowDepths.getOrDefault(e.key(),0),Entry::foldedName,filter);
-        list.removeAllViews();tileStrip=null;tileCount=0;
+        list.removeAllViews();folderMetaViews.clear();tileStrip=null;tileCount=0;
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
             if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
@@ -1014,9 +1024,7 @@ public final class FileBrowserActivity extends Activity {
         name.setTextColor(fg);name.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         detail.addView(name);
         // Counts describe items currently indexed, not the total in a truncated library.
-        String sub=e.folder?
-            "Файлов: "+(e.mediaFolder&&!mediaTruncated?Integer.toString(e.mediaCount):"неизвестно")+
-            " | Размер: "+(e.mediaFolder&&!mediaTruncated&&e.mediaBytes>=0?Util.readable(e.mediaBytes):"неизвестен"):
+        String sub=e.folder?folderSubtitle(e):
             "Размер: "+(e.size<0?"неизвестен":Util.readable(e.size));
         if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
         if(style!=1||e.folder||tab==3){
@@ -1032,19 +1040,12 @@ public final class FileBrowserActivity extends Activity {
                     rich.setSpan(new StyleSpan(Typeface.BOLD),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
                 meta.setText(rich);
-            }else{
-                SpannableStringBuilder rich=new SpannableStringBuilder(sub);
-                int countStart="Файлов: ".length(),countEnd=sub.indexOf(" | Размер: ");
-                int sizeStart=countEnd+" | Размер: ".length();
-                if(countEnd>countStart){
-                    rich.setSpan(new ForegroundColorSpan(accent),countStart,countEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    rich.setSpan(new StyleSpan(Typeface.BOLD),countStart,countEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                }
-                rich.setSpan(new ForegroundColorSpan(accent),sizeStart,sub.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                rich.setSpan(new StyleSpan(Typeface.BOLD),sizeStart,sub.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                meta.setText(rich);
-            }
+            }else applyFolderMeta(meta,e);
             detail.addView(meta);
+            if(e.folder&&tab==4){
+                folderMetaViews.put(e.key(),meta);
+                requestFolderSize(e);
+            }
         }
         row.addView(detail,new LinearLayout.LayoutParams(0,-2,1));
         boolean checked=selected.containsKey(e.key());
@@ -1204,14 +1205,38 @@ public final class FileBrowserActivity extends Activity {
         if(last>=2&&last<=4)return few;
         return many;
     }
-    /** Resolve exactly the files that will be queued, never blocking the screen. */
+    private String folderSubtitle(Entry folder){
+        if(folder.mediaFolder){
+            return "Файлов: "+(mediaTruncated?"неизвестно":Integer.toString(folder.mediaCount))+
+                " | Размер: "+(mediaTruncated||folder.mediaBytes<0?
+                    "неизвестен":Util.readable(folder.mediaBytes));
+        }
+        BrowserFolderCardStats stats=folderCardStats.get(folder.key());
+        if(stats==null)return "Файлов: подсчёт… | Размер: подсчёт…";
+        return "Файлов: "+(stats.complete?Integer.toString(stats.fileCount):"неизвестно")+
+            " | Размер: "+(stats.bytesKnown?Util.readable(stats.bytes):"неизвестен");
+    }
+    private void applyFolderMeta(TextView meta,Entry folder){
+        String value=folderSubtitle(folder);
+        SpannableStringBuilder rich=new SpannableStringBuilder(value);
+        int countStart="Файлов: ".length(),countEnd=value.indexOf(" | Размер: ");
+        int sizeStart=countEnd+" | Размер: ".length();
+        rich.setSpan(new ForegroundColorSpan(accent),countStart,countEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        rich.setSpan(new StyleSpan(Typeface.BOLD),countStart,countEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        rich.setSpan(new ForegroundColorSpan(accent),sizeStart,value.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        rich.setSpan(new StyleSpan(Typeface.BOLD),sizeStart,value.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        meta.setText(rich);
+    }
+    /** Resolve folder metadata off the UI/query thread, including unselected cards. */
     private void requestFolderSize(Entry folder){
-        if(!folder.folder||folderSizeSnapshots.containsKey(folder.key())||
-           !folderSizePending.add(folder.key()))return;
+        if(!folder.folder)return;
         final String key=folder.key();
-        try{io.execute(()->{
+        boolean needsSnapshot=selected.containsKey(key)&&!folderSizeSnapshots.containsKey(key);
+        if(!needsSnapshot&&folderCardStats.containsKey(key))return;
+        if(!folderSizePending.add(key))return;
+        try{folderStatsIo.execute(()->{
             LinkedHashMap<String,Long> lengths=new LinkedHashMap<>();
-            boolean unknown=false;
+            boolean complete=true;
             try{
                 ArrayList<FileCatalog.Item> files;
                 if(folder.mediaFolder){
@@ -1223,18 +1248,20 @@ public final class FileBrowserActivity extends Activity {
                     files=FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name);
                 }
                 for(FileCatalog.Item file:files){
-                    if(file.uri==null||file.uri.isEmpty()){unknown=true;continue;}
+                    if(file.uri==null||file.uri.isEmpty()){complete=false;continue;}
                     Long prior=lengths.putIfAbsent(file.uri,file.size);
-                    if(prior!=null&&prior.longValue()!=file.size)unknown=true;
-                    if(file.size<0)unknown=true;
+                    if(prior!=null&&prior.longValue()!=file.size)complete=false;
                 }
-            }catch(Exception error){unknown=true;}
-            final BrowserSelectionTotals.FolderStats snapshot=
-                new BrowserSelectionTotals.FolderStats(lengths,unknown);
+            }catch(Exception error){complete=false;}
+            final BrowserFolderCardStats stats=BrowserFolderCardStats.summarize(lengths,complete);
             ui.post(()->{
-                if(isFinishing()||isDestroyed())return;
-                folderSizeSnapshots.put(key,snapshot);
                 folderSizePending.remove(key);
+                if(isFinishing()||isDestroyed())return;
+                folderCardStats.put(key,stats);
+                if(selected.containsKey(key))
+                    folderSizeSnapshots.put(key,new BrowserSelectionTotals.FolderStats(lengths,!stats.bytesKnown));
+                TextView meta=folderMetaViews.get(key);
+                if(meta!=null)applyFolderMeta(meta,folder);
                 if(selected.containsKey(key))updateCount();
             });
         });}catch(RejectedExecutionException error){folderSizePending.remove(key);}
@@ -1470,7 +1497,8 @@ public final class FileBrowserActivity extends Activity {
         if(list!=null)list.removeCallbacks(searchRefresh);
         if(bannerDismiss!=null)ui.removeCallbacks(bannerDismiss);
         if(activeBanner!=null){activeBanner.dismiss();activeBanner=null;}
-        io.shutdownNow();previews.shutdownNow();previewWaiters.clear();
+        io.shutdownNow();folderStatsIo.shutdownNow();previews.shutdownNow();
+        folderMetaViews.clear();previewWaiters.clear();
         previewCache.evictAll();super.onDestroy();
     }
 }
