@@ -516,7 +516,10 @@ public final class FileBrowserActivity extends Activity {
                 try{mediaId=c.getLong(0);}
                 catch(RuntimeException malformedId){continue;}
                 if(mediaId<=0)continue;
-                String name=Util.safeName(c.getString(1));
+                if(c.isNull(1))continue;
+                String rawMediaName=c.getString(1);
+                if(rawMediaName==null||rawMediaName.trim().isEmpty())continue;
+                String name=Util.safeName(rawMediaName);
                 String mime=c.getString(4);
                 if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;
                 if(!showHiddenFiles()&&(hiddenPath(name)||hiddenPath(path)))continue;
