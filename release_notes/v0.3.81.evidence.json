@@ -1,0 +1,65 @@
+{
+  "base_tag": "v0.3.80",
+  "entries": [
+    {
+      "note": "[+] Сохраняются подтверждения SHA-256 блоков отправки для восстановления передачи.",
+      "path": "app/src/main/java/dev/xarkon/link/SenderAckStore.java",
+      "changed_line": "ChunkDigestStore.put(path,index,digest);"
+    },
+    {
+      "note": "[=] Поиск обновляет список сразу при вводе без лишней задержки.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "list.postOnAnimation(searchRefresh);"
+    },
+    {
+      "note": "[=] Поиск по названию папки показывает также её вложенные файлы.",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSearchTree.java",
+      "changed_line": "ancestorMatches.add(matched||insideMatchingFolder);"
+    },
+    {
+      "note": "[=] Повторные записи медиатеки больше не дублируют изображения, видео и музыку.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(mediaId<=0||!seenMediaIds.add(mediaId))continue;"
+    },
+    {
+      "note": "[=] При открытии медиатеки первой раскрывается папка по алфавиту.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "current.addAll(grouped.folders);"
+    },
+    {
+      "note": "[=] Поиск находит файлы и внутри свёрнутых медиа-папок.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "boolean searchClosedMedia=!filter.isEmpty()&&isMedia();"
+    },
+    {
+      "note": "[=] Посторонние файлы медиатеки не расходуют лимит поиска нужного типа.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}"
+    },
+    {
+      "note": "[=] Некорректные записи системного проводника больше не прерывают открытие папки.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(documentId==null||documentId.trim().isEmpty()||"
+    },
+    {
+      "note": "[=] Повторные записи системного проводника больше не дублируют файлы.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(!seenDocumentIds.add(documentId))continue;"
+    },
+    {
+      "note": "[=] Предпросмотр распознаёт формат файла по расширению, когда Android его не сообщает.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "preview.setDataAndType(uri,previewMime(e));"
+    },
+    {
+      "note": "[=] Недоступные миниатюры не запрашиваются повторно при каждом обновлении списка.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(failedPreviews.containsKey(key))return frame;"
+    },
+    {
+      "note": "[=] При недоступности старого адреса обновление загружается с нового адреса.",
+      "path": "app/src/main/java/dev/xarkon/link/UpdateManager.java",
+      "changed_line": "HttpsURLConnection c=openApk(r.apkUrl,r.versionName);"
+    }
+  ]
+}
