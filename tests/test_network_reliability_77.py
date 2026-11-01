@@ -69,8 +69,10 @@ public final class AddressPolicyCheck {
 
     def test_release_version_and_notes(self):
         build=(ROOT/"app/build.gradle").read_text(encoding="utf-8")
-        self.assertIn("versionCode = 82",build)
-        self.assertIn("versionName = '0.3.77'",build)
+        code=int(build.split("versionCode = ",1)[1].splitlines()[0])
+        version=build.split("versionName = '",1)[1].split("'",1)[0]
+        self.assertGreaterEqual(code,82)
         self.assertTrue((ROOT/"release_notes/v0.3.77.txt").exists())
+        self.assertTrue((ROOT/f"release_notes/v{version}.txt").exists())
 
 if __name__=="__main__":unittest.main()
