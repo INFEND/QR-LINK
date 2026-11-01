@@ -1256,7 +1256,7 @@ public final class FileBrowserActivity extends Activity {
             int files=selected.size()-folders;
             String size=total.unknown?"неизвестен":
                 total.pending&&!total.provisional?"Подсчёт…":
-                (total.pending?"≈ ":"")+Util.readable(total.bytes);
+                (total.provisional?"≈ ":"")+Util.readable(total.bytes);
             String summary="Выбрано: "+files+" "+russianCount(files,"файл","файла","файлов")+
                 "; "+folders+" "+russianCount(folders,"папка","папки","папок")+
                 " | Размер: "+size;
