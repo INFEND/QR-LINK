@@ -1376,15 +1376,18 @@ public final class MainActivity extends Activity {
         if(page==RECEIVE)renderQr();
     }
     private void renderQr(){if(qrImage==null||receiveHint==null)return;
+        String lanAddress=WifiState.clientAddress(this);
+        boolean onLan=!lanAddress.isEmpty();
         if(networkBadge!=null){
             networkBadge.setText(!WifiState.localTransferReady(this)?"WI-FI ВЫКЛЮЧЕН":
+                onLan?"ОБЩАЯ СЕТЬ WI-FI":
                 TransferService.hotspotReady?"ТОЧКА ДОСТУПА ГОТОВА":
                 TransferService.hotspotStarting?"СОЗДАЁМ ТОЧКУ ДОСТУПА":
                 TransferService.directReady?"WI-FI DIRECT АКТИВЕН":
                 !TransferService.systemApHost.isEmpty()?"СИСТЕМНАЯ ТОЧКА ДОСТУПА":
                 !WifiState.radioOn(this)?"WI-FI ВЫКЛЮЧЕН":
                 TransferService.directStarting?"СОЗДАЁМ WI-FI DIRECT...":
-                WifiState.clientConnected(this)?"ОБЩАЯ СЕТЬ WI-FI":"ОЖИДАЕМ WI-FI DIRECT");
+                "ОЖИДАЕМ WI-FI DIRECT");
         }
         String key=TransferService.receiveKey;
         if(!WifiState.localTransferReady(this)){
@@ -1398,16 +1401,17 @@ public final class MainActivity extends Activity {
             if(receiveCaption!=null)receiveCaption.setText("Нажмите «Получить» ещё раз. "+TransferService.detail);
             return;
         }
-        boolean direct=TransferService.directReady;
-        if(TransferService.directStarting||TransferService.hotspotStarting){
+        boolean direct=!onLan&&TransferService.directReady;
+        if(!onLan&&(TransferService.directStarting||TransferService.hotspotStarting)){
             receiveHint.setText(TransferService.directStarting?"Создаём Wi-Fi Direct...":"Создаём точку доступа...");
             qrImage.setImageDrawable(null);lastQr="";
             receiveCaption.setText("QR появится после подтверждения готовности сети.");return;
         }
-        boolean externalAp=!TransferService.systemApHost.isEmpty();
-        boolean localAp=TransferService.hotspotReady;
-        String host=direct?TransferService.directHost:(localAp?TransferService.hotspotHost:
-            externalAp?TransferService.systemApHost:Util.ip());
+        boolean externalAp=!onLan&&!TransferService.systemApHost.isEmpty();
+        boolean localAp=!onLan&&TransferService.hotspotReady;
+        String host=onLan?lanAddress:direct?TransferService.directHost:
+            localAp?TransferService.hotspotHost:
+            externalAp?TransferService.systemApHost:"";
         if(direct&&(host.isEmpty()||!QrInputValidation.isLocalIpv4(host)||
             TransferService.directMac.isEmpty())){
             receiveHint.setText("Ожидаем IP и адрес устройства Wi-Fi Direct...");
