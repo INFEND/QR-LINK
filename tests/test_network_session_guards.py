@@ -18,7 +18,7 @@ class NetworkSessionGuards(unittest.TestCase):
         self.assertIn("private void resetDirect(){groupProbeRunning=false;",S)
     def test_hotspot_callbacks_and_address_poll_have_route_guard(self):
         b=S.split("private void startHotspotFallback(",1)[1].split("private void fallbackWifi(",1)[0]
-        self.assertIn("final int route=++directRouteAttempt;",b)
+        self.assertIn("final int route=nextDirectRoute();",b)
         self.assertGreaterEqual(b.count("if(!routeActive(route))return;"),2)
         self.assertIn("resolveHotspotAddress(attempt+1,route)",b)
         self.assertIn("QrInputValidation.isLocalIpv4(ip)",b)

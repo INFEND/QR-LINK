@@ -15,8 +15,8 @@ class DirectReadyTests(unittest.TestCase):
 
     def test_service_rejects_stale_and_unroutable_direct(self):
         src=(ROOT/"TransferService.java").read_text(encoding="utf-8")
-        self.assertIn("final int route=++directRouteAttempt;",src)
-        self.assertGreaterEqual(src.count("++directRouteAttempt;"),4)
+        self.assertIn("final int route=nextDirectRoute();",src)
+        self.assertGreaterEqual(src.count("nextDirectRoute()"),4)
         self.assertIn("if(!routeActive(route))return;",src)
         self.assertIn("route==directRouteAttempt&&wantReceive&&isReceiving",src)
         self.assertIn("!QrInputValidation.isLocalIpv4(host)",src)

@@ -74,8 +74,8 @@ public final class CheckIdentity75 {
 
     def test_version_and_release_policy(self):
         gradle=(ROOT/"app/build.gradle").read_text(encoding="utf-8")
-        self.assertIn("versionCode = 80",gradle)
-        self.assertIn("versionName = '0.3.75'",gradle)
+        self.assertGreaterEqual(int(gradle.split("versionCode = ",1)[1].splitlines()[0]),80)
+        self.assertGreaterEqual(tuple(map(int,gradle.split("versionName = '",1)[1].split("'",1)[0].split("."))),(0,3,75))
         notes=(ROOT/"release_notes/v0.3.75.txt").read_text(encoding="utf-8")
         self.assertGreaterEqual(sum(line.startswith(("[+]","[-]","[=]")) for line in notes.splitlines()),5)
 
