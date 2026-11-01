@@ -830,8 +830,8 @@ public final class MainActivity extends Activity {
             try{Intent i=new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);startActivity(i);}
             catch(Exception e){toast("Откройте системные настройки батареи для QR LINK");}
         });
-        outlineButton(folder,"folder","Открыть Загрузки",()->{try{startActivity(new Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS));}catch(Exception e){toast(e.getMessage());}});
-        outlineButton(folder,"wifi","Настройки Wi-Fi",()->{try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){toast(e.getMessage());}});
+        outlineButton(folder,"folder","Открыть Загрузки",()->{try{startActivity(new Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS));}catch(Exception e){toast(ErrorText.human(e));}});
+        outlineButton(folder,"wifi","Настройки Wi-Fi",()->{try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){toast(ErrorText.human(e));}});
     }
     /** Four discrete stops: actual worker counts are 1, 2, 4 and 8. */
     private void streamSlider(LinearLayout parent){
@@ -961,7 +961,7 @@ public final class MainActivity extends Activity {
             Intent i=new Intent(this,RecoveryActivity.class);i.putExtra("show",true);startActivity(i);
         });
         outlineButton(utilities,"wifi","Настройки Wi-Fi",()->{
-            try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){toast(e.getMessage());}
+            try{startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));}catch(Exception e){toast(ErrorText.human(e));}
         });
         LinearLayout updater=section("updates","Обновления",
             updatesSubtitle(),"receive",false);
@@ -1232,7 +1232,7 @@ public final class MainActivity extends Activity {
             ArrayList<FtpBridge.Entry> entries=new ArrayList<>(client.list(dir));runOnUiThread(()->{
                 ftpDir=dir;ftpEntries.clear();ftpEntries.addAll(entries);show();
             });
-        }catch(Exception e){runOnUiThread(()->{if(ftpListLabel!=null)ftpListLabel.setText("Ошибка: "+e.getMessage());});}},"ftp-list").start();
+        }catch(Exception e){runOnUiThread(()->{if(ftpListLabel!=null)ftpListLabel.setText("Ошибка: "+ErrorText.human(e));});}},"ftp-list").start();
     }
     /** No disk I/O or 12k-row adapter rebuild on the 55 ms animation ticker. */
     private void updateQueue(){
@@ -1421,7 +1421,7 @@ public final class MainActivity extends Activity {
                     qrImage.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(245)
                         .setInterpolator(new OvershootInterpolator(.5f)).start();
                 }
-            }catch(Exception e){receiveHint.setText("Ошибка QR: "+e.getMessage());return;}
+            }catch(Exception e){receiveHint.setText("Ошибка QR: "+ErrorText.human(e));return;}
         }
         if(localAp){
             receiveHint.setText("Локальная точка доступа · готово");
@@ -1553,9 +1553,9 @@ public final class MainActivity extends Activity {
             }else if(req==FOLDER){Uri folder=data.getData();persist(folder);new Thread(()->{
                 try{ArrayList<FileCatalog.Item> all=FileCatalog.fromFolder(this,folder);FileCatalog.append(this,all);
                     runOnUiThread(()->{toast("Из папки добавлено: "+all.size());updateQueue();});
-                }catch(Exception e){runOnUiThread(()->toast("Не удалось прочитать папку: "+e.getMessage()));}
+                }catch(Exception e){runOnUiThread(()->toast("Не удалось прочитать папку: "+ErrorText.human(e)));}
             },"folder-indexer").start();}
-        }catch(Exception e){toast("Ошибка выбора: "+e.getMessage());}
+        }catch(Exception e){toast("Ошибка выбора: "+ErrorText.human(e));}
     }
     private void persist(Uri u){try{getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}}
     /** BROWSABLE URI allows compatible camera and QR-reader apps to open QR LINK directly. */
@@ -1581,7 +1581,7 @@ public final class MainActivity extends Activity {
         Intent i=new Intent(uris.size()==1?Intent.ACTION_SEND:Intent.ACTION_SEND_MULTIPLE);
         i.setType("*/*");i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         if(uris.size()==1)i.putExtra(Intent.EXTRA_STREAM,uris.get(0));else i.putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);
-        try{startActivity(Intent.createChooser(i,"Передать через SHAREit / ShareMe"));}catch(Exception e){toast(e.getMessage());}
+        try{startActivity(Intent.createChooser(i,"Передать через SHAREit / ShareMe"));}catch(Exception e){toast(ErrorText.human(e));}
     }
     private boolean ensureWifiEnabled(){
         if(WifiState.localTransferReady(this))return true;
@@ -1624,6 +1624,6 @@ public final class MainActivity extends Activity {
         if(TransferService.STOP.equals(intent.getAction())||
             TransferService.DISCONNECT_PEER.equals(intent.getAction()))startService(intent);
         else startForegroundService(intent);
-    }catch(Exception e){toast("Служба: "+e.getMessage());}}
+    }catch(Exception e){toast("Служба: "+ErrorText.human(e));}}
     private void toast(String text){Toast.makeText(this,ErrorText.human(text),Toast.LENGTH_LONG).show();}
 }

@@ -142,11 +142,19 @@ public final class FileCatalog {
     public static synchronized void append(Context c,List<Item> items){
         ArrayList<Item> all=load(c);
         HashSet<String> seen=new HashSet<>();
-        for(Item old:all)if(old.uri!=null&&!old.uri.isEmpty())seen.add(old.uri);
+        HashSet<String> seenIds=new HashSet<>();
+        for(Item old:all){
+            if(old.uri!=null&&!old.uri.isEmpty())seen.add(old.uri);
+            if(old.id!=null&&!old.id.isEmpty())seenIds.add(old.id);
+        }
         for(Item item:items){
-            if(item==null||item.uri==null||item.uri.isEmpty())
-                throw new IllegalArgumentException("Файл без адреса нельзя добавить в очередь");
-            if(!seen.add(item.uri))continue;
+            if(item==null||item.uri==null||item.uri.isEmpty()||
+               item.id==null||item.id.isEmpty())
+                throw new IllegalArgumentException("Файл без адреса или ID нельзя добавить в очередь");
+            if(seen.contains(item.uri))continue;
+            if(!seenIds.add(item.id))
+                throw new IllegalStateException("В очереди повторяется идентификатор другого файла");
+            seen.add(item.uri);
             if(all.size()>=MAX_FOLDER_FILES)
                 throw new IllegalStateException("В очереди может быть не более 30000 файлов");
             all.add(item);

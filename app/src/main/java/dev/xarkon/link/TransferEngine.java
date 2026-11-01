@@ -56,8 +56,15 @@ public final class TransferEngine {
     public synchronized void start(String chosenKey)throws Exception{
         if(alive)return;
         sessionKey=chosenKey;
-        socket=new ServerSocket();socket.setReuseAddress(true);
-        socket.bind(new InetSocketAddress(Util.PORT),32);
+        socket=new ServerSocket();
+        try{
+            socket.setReuseAddress(true);
+            socket.bind(new InetSocketAddress(Util.PORT),32);
+        }catch(Exception bindFailure){
+            try{socket.close();}catch(IOException ignored){}
+            socket=null;sessionKey="";
+            throw bindFailure;
+        }
         final long epoch=++receiveEpoch;
         final ServerSocket listening=socket;
         alive=true;
@@ -100,7 +107,7 @@ public final class TransferEngine {
                     }
                 }catch(SocketTimeoutException ignored){}
             }
-        }catch(Exception e){if(alive&&epoch==receiveEpoch)events.note("Поиск устройств: "+e.getMessage());}
+        }catch(Exception e){if(alive&&epoch==receiveEpoch)events.note("Поиск устройств: "+ErrorText.human(e));}
     }
     private static String line(InputStream in)throws IOException{
         ByteArrayOutputStream b=new ByteArrayOutputStream();int x;
@@ -184,7 +191,7 @@ public final class TransferEngine {
             s.setSoTimeout(streaming?90000:10000);
             if(method.equals("GET")&&path.equals("/hello")){
                 reply(out,200,"OK",new JSONObject().put("app","XARKON LINK")
-                    .put("version",PeerIdentity.PROTOCOL_VERSION).put("sha256",true)
+                    .put("version",PeerIdentity.PROTOCOL_VERSION).put("sha256",true).put("fileSha256",true)
                     .put("deviceName",PeerIdentity.displayName(context.getSharedPreferences("settings",0)
                         .getString("device_name",android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL))));return;
             }
@@ -340,8 +347,11 @@ public final class TransferEngine {
         String id=j.getString("id");String name=Util.safeName(j.getString("name"));
         String path=Util.safePath(j.optString("path",""));
         String mime=j.optString("mime","application/octet-stream");
+        String fileHash=j.optString("fileSha256","");
         long size=j.getLong("size");
-        if(!id.matches("[0-9a-fA-F-]{36}")||size<0||size>1000L*1024*1024*1024*10||name.length()==0)
+        if(!TransferFileIdentity.validId(id)||!TransferFileIdentity.validMime(mime)||
+           (!fileHash.isEmpty()&&!TransferFileIdentity.validSha256(fileHash))||
+           size<0||size>1000L*1024*1024*1024*10||name.length()==0)
             throw new IOException("Некорректные параметры файла");
         int count=ChunkState.count(size,Util.CHUNK);
         Incoming inc;
@@ -355,6 +365,7 @@ public final class TransferEngine {
                 Uri uri=context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,cv);
                 if(uri==null)throw new IOException("Не удалось создать файл в загрузках");
                 inc=new Incoming(id,name,path,mime,uri,size,count);
+                inc.fileSha256=fileHash;
                 try{persist(inc);}catch(IOException failure){
                     try{context.getContentResolver().delete(uri,null,null);}catch(Exception ignored){}
                     throw failure;
@@ -365,6 +376,15 @@ public final class TransferEngine {
         }
         if(inc.size!=size||!inc.name.equals(name)||!inc.path.equals(path)||!inc.mime.equals(mime))
             throw new IOException("Конфликт ID файла: имя, путь, размер или формат изменились");
+        synchronized(inc){
+            if(!inc.fileSha256.equalsIgnoreCase(fileHash)){
+                // Never merge chunks from two different versions of the same-size source.
+                if(inc.fileSha256.isEmpty()&&!fileHash.isEmpty()&&inc.done.isEmpty()&&!inc.completed){
+                    inc.fileSha256=fileHash;
+                    persist(inc);
+                }else throw new IOException("Содержимое исходного файла изменилось. Добавьте его в очередь заново.");
+            }
+        }
         // A previously published file can be deleted or truncated without an app restart.
         // Never acknowledge all chunks when its destination no longer exists.
         if(inc.completed){
@@ -373,6 +393,9 @@ public final class TransferEngine {
                 long actual=published.getStatSize();
                 if(actual>=0&&actual!=inc.size)
                     throw new IOException("Размер сохранённого файла изменился");
+                if(!inc.fileSha256.isEmpty()&&
+                   !inc.fileSha256.equalsIgnoreCase(hashReceivedFile(inc)))
+                    throw new IOException("Содержимое сохранённого файла изменилось. Отправьте файл заново.");
             }
         }
         // A saved bitmap is not evidence that the bytes still match. Verify
@@ -387,6 +410,7 @@ public final class TransferEngine {
     private static class Incoming {
         final String id,name,path,mime; final Uri uri;final long size;final int count;final BitSet done=new BitSet();
         boolean completed,restored;
+        String fileSha256="";
         final BitSet writing=new BitSet();
         final AtomicLong activeBytes=new AtomicLong();
         final AtomicLong lastReport=new AtomicLong();
@@ -437,7 +461,7 @@ public final class TransferEngine {
     private synchronized void persist(Incoming inc)throws IOException{
         try{
             JSONObject obj=new JSONObject();obj.put("name",inc.name).put("path",inc.path).put("mime",inc.mime)
-                .put("uri",inc.uri.toString()).put("size",inc.size)
+                .put("uri",inc.uri.toString()).put("size",inc.size).put("fileSha256",inc.fileSha256)
                 .put("bits",Base64.encodeToString(inc.done.toByteArray(),Base64.NO_WRAP));
             if(!context.getSharedPreferences(SESSIONS,0).edit()
                     .putString(inc.id,obj.toString()).commit())
@@ -447,7 +471,7 @@ public final class TransferEngine {
     }
     /** A digest sidecar is private app data; IDs are validated before use. */
     private File digestFile(String id){
-        if(!id.matches("[0-9a-fA-F-]{36}"))throw new IllegalArgumentException("Неверный ID файла");
+        if(!TransferFileIdentity.validId(id))throw new IllegalArgumentException("Неверный ID файла");
         return new File(new File(context.getFilesDir(),"chunk_sha256"),id+".sha");
     }
     /** Verify once after a process restart; never trust a bitmap alone. */
@@ -478,18 +502,55 @@ public final class TransferEngine {
     private void restore(){
         Map<String,?> prefs=context.getSharedPreferences(SESSIONS,0).getAll();
         for(Map.Entry<String,?>e:prefs.entrySet())try{
-            if(!e.getKey().matches("[0-9a-fA-F-]{36}"))continue;
+            if(!TransferFileIdentity.validId(e.getKey()))continue;
             JSONObject j=new JSONObject(String.valueOf(e.getValue()));long size=j.getLong("size");
             if(size<0||size>10L*1000*1024*1024*1024)continue;
             Uri restoredUri=Uri.parse(j.getString("uri"));
             if(!"content".equals(restoredUri.getScheme()))continue;
             int count=ChunkState.count(size,Util.CHUNK);
             Incoming in=new Incoming(e.getKey(),j.getString("name"),j.optString("path"),j.getString("mime"),restoredUri,size,count);
+            in.fileSha256=j.optString("fileSha256","");
+            if(!in.fileSha256.isEmpty()&&!TransferFileIdentity.validSha256(in.fileSha256))continue;
+            if(!TransferFileIdentity.validMime(in.mime))continue;
             in.done.or(BitSet.valueOf(Base64.decode(j.optString("bits",""),Base64.DEFAULT)));
             ChunkState.validate(in.done,count);
             in.restored=true;
             incoming.put(in.id,in);
         }catch(Exception ignored){}
+    }
+    private String hashReceivedFile(Incoming inc)throws Exception{
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");
+        try(InputStream in=context.getContentResolver().openInputStream(inc.uri)){
+            if(in==null)throw new IOException("Полученный файл недоступен");
+            byte[] buffer=new byte[256*1024];
+            long remaining=inc.size;
+            while(remaining>0){
+                int n=in.read(buffer,0,(int)Math.min(buffer.length,remaining));
+                if(n<0)throw new EOFException("Полученный файл неполный");
+                if(n==0)continue;
+                digest.update(buffer,0,n);remaining-=n;
+            }
+            if(in.read()!=-1)throw new IOException("Размер полученного файла изменился");
+        }
+        return hex(digest.digest());
+    }
+    private String hashSource(Uri source,long expectedSize)throws Exception{
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");
+        try(InputStream in=context.getContentResolver().openInputStream(source)){
+            if(in==null)throw new IOException("Исходный файл недоступен");
+            byte[] buffer=new byte[256*1024];
+            long remaining=expectedSize;
+            while(remaining>0){
+                if(sendingCancelled||Thread.currentThread().isInterrupted())
+                    throw new IOException("Проверка файла остановлена");
+                int n=in.read(buffer,0,(int)Math.min(buffer.length,remaining));
+                if(n<0)throw new EOFException("Размер исходного файла изменился");
+                if(n==0)continue;
+                digest.update(buffer,0,n);remaining-=n;
+            }
+            if(in.read()!=-1)throw new IOException("Размер исходного файла изменился");
+        }
+        return hex(digest.digest());
     }
     private void complete(Incoming inc)throws IOException{
         synchronized(inc){
@@ -507,6 +568,9 @@ public final class TransferEngine {
                         // Some Android storage providers do not implement fsync.
                     }
                 }
+                if(!inc.fileSha256.isEmpty()&&
+                   !inc.fileSha256.equalsIgnoreCase(hashReceivedFile(inc)))
+                    throw new IOException("Контрольная сумма файла не совпала. Отправьте файл заново.");
                 ContentValues cv=new ContentValues();
                 cv.put(MediaStore.Downloads.IS_PENDING,0);
                 if(context.getContentResolver().update(inc.uri,cv,null,null)!=1)
@@ -524,6 +588,7 @@ public final class TransferEngine {
         JSONObject hello=new JSONObject(Util.http(host,port,userPin,"/hello","GET",null));
         if(!PeerIdentity.compatible(hello.optString("app"),hello.optInt("version",-1)))throw new IOException("Это не совместимый приёмник QR LINK");
         final boolean verifySha=hello.optBoolean("sha256",false);
+        final boolean verifyFileSha=hello.optBoolean("fileSha256",false);
         // Never silently report an unchecked transfer as successful.
         if(!verifySha)throw new IOException("Приёмник не подтверждает SHA-256. Обновите QR LINK на втором телефоне.");
         int failed=0;
@@ -532,7 +597,7 @@ public final class TransferEngine {
                 events.note("Передача остановлена. Очередь сохранена.");return;
             }
             if(job.size<0){failed++;FileCatalog.setStatus(context,job.id,"Ошибка: неизвестный размер");events.note("Пропуск: неизвестный размер файла "+job.name);continue;}
-            try{sendOne(host,port,userPin,job,lanes,verifySha);FileCatalog.setStatus(context,job.id,"Передан");events.note("Отправлено: "+job.name);}
+            try{sendOne(host,port,userPin,job,lanes,verifySha,verifyFileSha);FileCatalog.setStatus(context,job.id,"Передан");events.note("Отправлено: "+job.name);}
             catch(Exception e){
                 if(sendingCancelled){FileCatalog.setStatus(context,job.id,"Приостановлен");
                     events.note("Передача остановлена. Можно продолжить позже.");return;}
@@ -544,9 +609,18 @@ public final class TransferEngine {
         }
         if(failed>0)throw new IOException("Не удалось передать "+failed+" из "+jobs.size()+" файлов. Проверьте очередь.");
     }
-    private void sendOne(String host,int port,String userPin,FileCatalog.Item job,int lanes,boolean verifySha)throws Exception{
+    private void sendOne(String host,int port,String userPin,FileCatalog.Item job,int lanes,
+                         boolean verifySha,boolean verifyFileSha)throws Exception{
+        Uri sourceUri=Uri.parse(job.uri);
+        long actual=Util.size(context,sourceUri);
+        if(actual>=0&&actual!=job.size)
+            throw new IOException("Размер исходного файла изменился");
+        // Fingerprint before /offer so a receiver cannot reuse chunks belonging
+        // to an older version of a file with exactly the same byte length.
+        String sourceHash=verifyFileSha?hashSource(sourceUri,job.size):"";
         JSONObject offer=new JSONObject().put("id",job.id).put("name",job.name)
             .put("path",job.path).put("mime",job.mime).put("size",job.size);
+        if(verifyFileSha)offer.put("fileSha256",sourceHash);
         JSONObject result=new JSONObject(Util.http(host,port,userPin,"/offer","POST",offer));
         if(result.getInt("chunk")!=Util.CHUNK)throw new IOException("Несовместимая версия протокола");
         int blocks=ChunkState.count(job.size,Util.CHUNK);
@@ -554,10 +628,6 @@ public final class TransferEngine {
         ChunkState.validate(completed,blocks);
         // Check the source before ANY resumed chunks are skipped, not only
         // when the receiver reports that the whole file is already complete.
-        Uri sourceUri=Uri.parse(job.uri);
-        long actual=Util.size(context,sourceUri);
-        if(actual>=0&&actual!=job.size)
-            throw new IOException("Размер исходного файла изменился");
         if(completed.cardinality()==blocks){
             try(InputStream probe=context.getContentResolver().openInputStream(sourceUri)){
                 if(probe==null)throw new IOException("Исходный файл больше недоступен");
@@ -654,6 +724,8 @@ public final class TransferEngine {
             if(sourceStream!=null)try{sourceStream.close();}catch(IOException ignored){}
             if(sourceDescriptor!=null)try{sourceDescriptor.close();}catch(IOException ignored){}
         }
+        if(verifyFileSha&&!sourceHash.equalsIgnoreCase(hashSource(sourceUri,job.size)))
+            throw new IOException("Исходный файл изменился во время передачи. Добавьте его заново.");
         events.progress("Готово: "+job.name,job.size,job.size,Math.max(0,job.size-initial)/Math.max(.001,(Util.now()-start)/1000.0));
     }
     /** SHA-256 acknowledgement is optional for older receivers (protocol v1 compatible). */
