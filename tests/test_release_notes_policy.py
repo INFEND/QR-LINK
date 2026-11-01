@@ -23,6 +23,10 @@ public final class ReleaseNotesCheck {
     yes(!visible.contains("30000"));
     yes(!visible.contains("Samsung"));
     yes(ReleaseNotes.visible("Только внутренний отчёт").isEmpty());
+    StringBuilder longNotes=new StringBuilder();
+    for(int i=0;i<90;i++)longNotes.append("[=] Исправление "+i+" для всех экранов и длинных описаний передачи файлов номер "+i+"\\n");
+    yes(longNotes.length()>6000);
+    yes(ReleaseNotes.visible(longNotes.toString()).contains("Исправление 89"));
   }
 }
 '''
@@ -40,6 +44,24 @@ class ReleaseNotesPolicyTests(unittest.TestCase):
                 else:
                     with self.assertRaises(SystemExit):
                         load_release_notes("0.3.63")
+            finally:
+                os.chdir(previous)
+
+    def test_new_release_requires_ten_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            previous=os.getcwd()
+            try:
+                os.chdir(tmp)
+                Path("release_notes").mkdir()
+                path=Path("release_notes/v0.3.79.txt")
+                def body(count):
+                    return "QR LINK 0.3.79\\n" + "\\n".join(
+                        f"[=] Исправлена самостоятельная функция номер {i}" for i in range(count))
+                path.write_text(body(9),encoding="utf-8")
+                with self.assertRaises(SystemExit):
+                    load_release_notes("0.3.79")
+                path.write_text(body(10),encoding="utf-8")
+                self.assertEqual(load_release_notes("0.3.79").count("[=]"),10)
             finally:
                 os.chdir(previous)
 
