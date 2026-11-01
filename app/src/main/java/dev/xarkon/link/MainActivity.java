@@ -490,7 +490,7 @@ public final class MainActivity extends Activity {
         margin(parent,text("СТИЛЬ ПРОВОДНИКА",11,muted,true),18);
         LinearLayout choices=row();margin(parent,choices,10);
         String[] names={"Текст","Иконки","Текст и иконки"};
-        String[] glyphs={"file","image","folder"};
+        String[] glyphs={"file","image","text_image"};
         int current=Math.max(0,Math.min(2,prefs().getInt("browser_style",2)));
         for(int i=0;i<names.length;i++){
             final int value=i;boolean selected=i==current;
@@ -926,6 +926,9 @@ public final class MainActivity extends Activity {
         themeChoice(themes,"light","Светлая","sun");
         colorPalette(appearance);
         browserAppearance(appearance);
+        settingToggle(appearance,"folder","Показывать скрытые файлы",
+            "По умолчанию скрытые файлы не отображаются в проводнике.",
+            "browser_show_hidden",false);
         LinearLayout animations=section("animations","Анимация и отклик",
             "Скорость переходов и тактильная обратная связь","sparkles",false);
         settingToggle(animations,"sparkles","Плавные анимации",
@@ -977,11 +980,18 @@ public final class MainActivity extends Activity {
         if(versionStart>=0)versionStyle.setSpan(new android.text.style.ForegroundColorSpan(accent),versionStart+1,versionStyle.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         aboutVersion.setText(versionStyle);
         about.addView(aboutVersion);space(about,9);
-        about.addView(text("Android 10+  ·  Wi-Fi / Wi-Fi Direct  ·  соединение по QR",13,muted,false));space(about,13);
-        about.addView(text("Данные передаются по HTTP без шифрования. Случайный ключ QR защищает от случайного подключения, но не скрывает содержимое передачи. Используйте доверенную локальную сеть.",13,fg,false));
-        space(about,11);
-        about.addView(text("Режим ShareMe FTP и Android «Поделиться» доступны отдельно. Нативные протоколы SHAREit и ShareMe не эмулируются.",12,muted,false));
-        space(about,8);
+        LinearLayout info=row();info.setGravity(Gravity.CENTER_VERTICAL);
+        info.addView(icon("share",accent,26));
+        TextView description=text("Передавайте фотографии, видео, музыку и документы между своими устройствами.",13,fg,false);
+        description.setPadding(dp(12),0,0,0);
+        info.addView(description,new LinearLayout.LayoutParams(0,-2,1));
+        margin(about,info,11);
+        LinearLayout safety=row();safety.setGravity(Gravity.CENTER_VERTICAL);
+        safety.addView(icon("info",accent,26));
+        TextView caution=text("Передача не зашифрована. Подключайтесь только к устройствам и локальным сетям, которым доверяете.",12,muted,false);
+        caution.setPadding(dp(12),0,0,0);
+        safety.addView(caution,new LinearLayout.LayoutParams(0,-2,1));
+        margin(about,safety,13);
     }
     private Switch otaSwitch(LinearLayout parent,String glyph,String title,String detail,
                              boolean on,java.util.function.Consumer<Boolean> changed){
