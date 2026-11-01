@@ -27,6 +27,13 @@ public final class UiIcon extends View {
             case "video":rect(nativeCanvas,2,5,15,14,2);l(nativeCanvas,17,9,22,6);l(nativeCanvas,22,6,22,18);l(nativeCanvas,22,18,17,15);l(nativeCanvas,9,9,13,12);l(nativeCanvas,13,12,9,15);l(nativeCanvas,9,15,9,9);break;
             case "music":l(nativeCanvas,10,5,20,3);l(nativeCanvas,20,3,20,17);l(nativeCanvas,10,5,10,19);circle(nativeCanvas,7,19,3);circle(nativeCanvas,17,17,3);break;
             case "apps":rect(nativeCanvas,3,3,7,7,2);rect(nativeCanvas,14,3,7,7,2);rect(nativeCanvas,3,14,7,7,2);rect(nativeCanvas,14,14,7,7,2);break;
+            case "text_image":
+                rect(nativeCanvas,2,3,9,9,1.5f);
+                circle(nativeCanvas,8,6,1);
+                l(nativeCanvas,3,11,6,8);l(nativeCanvas,6,8,10,11);
+                l(nativeCanvas,14,5,22,5);l(nativeCanvas,14,9,22,9);
+                l(nativeCanvas,2,17,22,17);l(nativeCanvas,2,21,18,21);
+                break;
             case "folder":l(nativeCanvas,2,7,2,20);l(nativeCanvas,2,20,22,20);l(nativeCanvas,22,20,22,9);l(nativeCanvas,22,9,11,9);l(nativeCanvas,11,9,9,5);l(nativeCanvas,9,5,2,5);l(nativeCanvas,2,5,2,7);break;
             case "theme":circle(nativeCanvas,12,12,9);circle(nativeCanvas,7,11,1);circle(nativeCanvas,13,7,1);circle(nativeCanvas,18,12,1);circle(nativeCanvas,12,17,1);break;
             case "history":circle(nativeCanvas,12,12,9);l(nativeCanvas,12,6,12,12);l(nativeCanvas,12,12,17,15);break;
