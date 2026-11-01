@@ -609,6 +609,10 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     fallbackWifi(info,raw,attempt);
                 }else{
                     peerState="Ошибка проверки приёмника: "+ErrorText.human(e);
+                    if(!info.hotspot)
+                        peerState+=". Если телефоны подключены к разным Wi-Fi-сетям, "+
+                            "на приёмнике выберите «СОЗДАТЬ СЕТЬ ДЛЯ ДРУГОГО WI-FI» "+
+                            "и отсканируйте новый QR.";
                     note(peerState);unlockIfIdle();
                 }
             }
