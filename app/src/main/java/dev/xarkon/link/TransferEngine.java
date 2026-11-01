@@ -645,6 +645,10 @@ public final class TransferEngine {
         JSONObject offer=new JSONObject().put("id",job.id).put("name",job.name)
             .put("path",job.path).put("mime",TransferFileIdentity.safeMime(job.mime)).put("size",job.size);
         if(verifyFileSha)offer.put("fileSha256",sourceHash);
+        // Receiver bitmap is authoritative. Local durable receipts are never
+        // sufficient to skip an upload after a crash.
+        final SenderAckStore senderAcks=verifyFileSha?
+            new SenderAckStore(context.getFilesDir(),job.id,sourceHash):null;
         JSONObject result=new JSONObject(Util.http(host,port,userPin,"/offer","POST",offer));
         if(result.getInt("chunk")!=Util.CHUNK)throw new IOException("Несовместимая версия протокола");
         int blocks=ChunkState.count(job.size,Util.CHUNK);
@@ -704,7 +708,7 @@ public final class TransferEngine {
                         try{
                             AtomicLong thisAttempt=new AtomicLong();
                             try{
-                                sendChunk(host,port,userPin,job,ix,sharedSource,verifySha,n->{
+                                sendChunk(host,port,userPin,job,ix,sharedSource,verifySha,senderAcks,n->{
                                     thisAttempt.addAndGet(n);
                                     inFlight.addAndGet(n);
                                     reportSend(job,progress,inFlight,lastReport,false);
@@ -754,7 +758,8 @@ public final class TransferEngine {
     }
     /** SHA-256 acknowledgement is optional for older receivers (protocol v1 compatible). */
     private void sendChunk(String host,int port,String userPin,FileCatalog.Item job,int index,
-                           FileChannel sharedSource,boolean verifySha,java.util.function.IntConsumer delivered)throws Exception{
+                           FileChannel sharedSource,boolean verifySha,SenderAckStore senderAcks,
+                            java.util.function.IntConsumer delivered)throws Exception{
         long offset=(long)index*Util.CHUNK;
         long length=Math.min(Util.CHUNK,job.size-offset);
         URL u=new URL("http",host,port,"/chunk/"+job.id+"/"+index);
@@ -815,6 +820,8 @@ public final class TransferEngine {
             }else if(verifySha){
                 throw new ChecksumMismatchException("Получатель не подтвердил контрольную сумму блока");
             }
+            // Commit a verified receipt before reporting this chunk complete.
+            if(senderAcks!=null)senderAcks.acknowledge(index,remote);
         }finally{
             activeUploads.remove(con);
             // Disconnect even when the source stream or a socket write fails.
