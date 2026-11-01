@@ -35,8 +35,9 @@ class ProductFixes81(unittest.TestCase):
     def test_duplicate_saf_rows_are_skipped(self):
         self.assertIn("HashSet<String> seenDocumentIds=new HashSet<>();",BROWSER)
         self.assertIn("if(!seenDocumentIds.add(documentId))continue;",BROWSER)
-        self.assertLess(BROWSER.index("if(!seenDocumentIds.add(documentId))continue;"),
-                        BROWSER.index("if(++scanned>MAX_SAF_SCAN)"))
+        saf=BROWSER.split("private ArrayList<Entry> queryDocuments(",1)[1]
+        self.assertLess(saf.index("if(!seenDocumentIds.add(documentId))continue;"),
+                        saf.index("if(++scanned>MAX_SAF_SCAN)"))
 
     def test_preview_guesses_missing_mime(self):
         self.assertIn("preview.setDataAndType(uri,previewMime(e));",BROWSER)
