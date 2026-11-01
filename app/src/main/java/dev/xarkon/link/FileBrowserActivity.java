@@ -1264,9 +1264,20 @@ public final class FileBrowserActivity extends Activity {
                         if(prior!=null&&prior.longValue()!=file.size)complete=false;
                     }
                 }
-            }catch(Exception error){complete=false;}
+            }catch(Exception error){
+                complete=false;
+                // Selecting a huge folder before its card was scanned must
+                // still resolve a truthful size, even if queue enumeration
+                // stopped at the separate transfer limit.
+                if(snapshotRequested&&folder.localFile!=null)try{
+                    if(hasLocalStorageAccess())
+                        direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
+                            Environment.getExternalStorageDirectory().getCanonicalFile().toPath());
+                }catch(Exception ignored){}
+            }
             final BrowserFolderCardStats stats=direct!=null?direct:
                 BrowserFolderCardStats.summarize(lengths,complete);
+            final boolean snapshotUnknown=direct!=null||!stats.bytesKnown;
             ui.post(()->{
                 folderSizePending.remove(key);
                 if(isFinishing()||isDestroyed())return;
@@ -1274,7 +1285,7 @@ public final class FileBrowserActivity extends Activity {
                 if(stats.complete||!folderCardStats.containsKey(key))
                     folderCardStats.put(key,stats);
                 if(snapshotRequested&&selected.containsKey(key))
-                    folderSizeSnapshots.put(key,new BrowserSelectionTotals.FolderStats(lengths,!stats.bytesKnown));
+                    folderSizeSnapshots.put(key,new BrowserSelectionTotals.FolderStats(lengths,snapshotUnknown));
                 TextView meta=folderMetaViews.get(key);
                 if(meta!=null)applyFolderMeta(meta,folder);
                 if(selected.containsKey(key)){
