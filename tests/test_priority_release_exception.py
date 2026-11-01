@@ -85,8 +85,10 @@ class PriorityReleaseExceptionTests(unittest.TestCase):
             self.verify(self.evidence(ids=("F24",), entry_task="F24"))
 
     def test_two_claims_need_two_distinct_code_anchors(self):
+        before = self.BEFORE + "| T08 | Resume transfer | **Не готово** | old |\n"
+        after = self.AFTER + "| T08 | Resume transfer | **Готово** | updated |\n"
         with self.assertRaisesRegex(ValueError, "Нет доказательства"):
-            self.verify(self.evidence(ids=("U25", "T08")))
+            self.verify(self.evidence(ids=("U25", "T08")), (before, after))
 
     def test_fake_diff_anchor_is_blocked(self):
         with self.assertRaisesRegex(ValueError, "не найдено в diff"):
