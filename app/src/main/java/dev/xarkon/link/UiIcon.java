@@ -27,6 +27,11 @@ public final class UiIcon extends View {
             case "video":rect(nativeCanvas,2,5,15,14,2);l(nativeCanvas,17,9,22,6);l(nativeCanvas,22,6,22,18);l(nativeCanvas,22,18,17,15);l(nativeCanvas,9,9,13,12);l(nativeCanvas,13,12,9,15);l(nativeCanvas,9,15,9,9);break;
             case "music":l(nativeCanvas,10,5,20,3);l(nativeCanvas,20,3,20,17);l(nativeCanvas,10,5,10,19);circle(nativeCanvas,7,19,3);circle(nativeCanvas,17,17,3);break;
             case "apps":rect(nativeCanvas,3,3,7,7,2);rect(nativeCanvas,14,3,7,7,2);rect(nativeCanvas,3,14,7,7,2);rect(nativeCanvas,14,14,7,7,2);break;
+            case "sort":
+                l(nativeCanvas,4,5,20,5);
+                l(nativeCanvas,7,12,17,12);
+                l(nativeCanvas,10,19,14,19);
+                break;
             case "text_image":
                 rect(nativeCanvas,2,3,9,9,1.5f);
                 circle(nativeCanvas,8,6,1);
