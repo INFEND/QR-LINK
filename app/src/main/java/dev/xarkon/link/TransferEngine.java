@@ -107,8 +107,15 @@ public final class TransferEngine {
                 try{
                     DatagramPacket p=new DatagramPacket(buf,buf.length);ds.receive(p);
                     String msg=new String(p.getData(),p.getOffset(),p.getLength(),StandardCharsets.UTF_8);
+                    String response=null;
                     if(msg.equals("XARKON_DISCOVER_1")){
-                        String response="XARKON_LINK_1|"+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+"|"+Util.PORT;
+                        // Legacy receivers can still answer older clients, but the
+                        // new sender accepts only authenticated v2 discovery.
+                        response="XARKON_LINK_1|"+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+"|"+Util.PORT;
+                    }else{
+                        response=DiscoveryAuth.reply(msg,sessionKey,Util.PORT);
+                    }
+                    if(response!=null&&alive&&epoch==receiveEpoch){
                         byte[] data=response.getBytes(StandardCharsets.UTF_8);
                         ds.send(new DatagramPacket(data,data.length,p.getAddress(),p.getPort()));
                     }

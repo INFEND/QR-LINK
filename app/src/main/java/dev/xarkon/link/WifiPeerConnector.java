@@ -92,7 +92,7 @@ public final class WifiPeerConnector {
                         synchronized(discovering){if(discovering[0])return;discovering[0]=true;}
                         final LinkProperties properties=lp;
                         new Thread(()->{
-                            String found=discoverPeer(n,properties);
+                            String found=discoverPeer(n,properties,info.key);
                             if(!active()||failed.get())return;
                             if(!found.isEmpty()){
                                 synchronized(delivered){if(delivered[0])return;delivered[0]=true;}
@@ -117,13 +117,14 @@ public final class WifiPeerConnector {
         }catch(Exception e){stop();listener.failure("Подключение Wi-Fi: "+ErrorText.human(e));}
     }
     /** Uses the existing authenticated receiver's UDP discovery endpoint when DHCP omits its IP. */
-    private static String discoverPeer(Network network,LinkProperties links){
+    private static String discoverPeer(Network network,LinkProperties links,String key){
         try(DatagramSocket socket=new DatagramSocket(null)){
             socket.setReuseAddress(true);
             socket.bind(new InetSocketAddress(0));
             network.bindSocket(socket);
             socket.setBroadcast(true);socket.setSoTimeout(2500);
-            byte[] data="XARKON_DISCOVER_1".getBytes(StandardCharsets.UTF_8);
+            String nonce=DiscoveryAuth.newNonce();
+            byte[] data=DiscoveryAuth.request(nonce).getBytes(StandardCharsets.UTF_8);
             for(LinkAddress la:links.getLinkAddresses()){
                 if(!(la.getAddress() instanceof Inet4Address))continue;
                 byte[] ip=la.getAddress().getAddress();int prefix=la.getPrefixLength();
@@ -146,7 +147,7 @@ public final class WifiPeerConnector {
                 try{socket.receive(packet);}
                 catch(SocketTimeoutException timeout){break;}
                 String answer=new String(packet.getData(),packet.getOffset(),packet.getLength(),StandardCharsets.UTF_8);
-                if(answer.startsWith("XARKON_LINK_1|")&&answer.endsWith("|"+Util.PORT)&&
+                if(DiscoveryAuth.verifies(answer,nonce,key,Util.PORT)&&
                    localAddress(packet.getAddress()))return packet.getAddress().getHostAddress();
             }
         }catch(Exception ignored){}
