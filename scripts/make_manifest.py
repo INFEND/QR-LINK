@@ -9,6 +9,17 @@ import re
 import subprocess
 from urllib.parse import quote
 
+MAX_RELEASE_NOTES_CHARS = 100_000
+MIN_NEW_RELEASE_CHANGES = 10
+MIN_POLICY_VERSION = (0, 3, 78)
+
+def requires_ten_changes(version):
+    try:
+        parts = tuple(int(part) for part in version.split("."))
+    except ValueError:
+        raise SystemExit("Invalid release notes version: " + version)
+    return parts >= MIN_POLICY_VERSION
+
 def load_release_notes(version):
     filename = Path("release_notes") / f"v{version}.txt"
     if not filename.is_file():
@@ -16,7 +27,7 @@ def load_release_notes(version):
     notes = filename.read_text(encoding="utf-8").strip()
     if not notes:
         raise SystemExit("Empty release notes: " + str(filename))
-    if len(notes) > 6000:
+    if len(notes) > MAX_RELEASE_NOTES_CHARS:
         raise SystemExit("Release notes too long: " + str(filename))
     # Release notes are customer-facing. A CI/QA report must never leak into OTA.
     entries = []
@@ -44,6 +55,8 @@ def load_release_notes(version):
         entries.append(line)
     if not entries:
         raise SystemExit("No user-visible release changes: " + str(filename))
+    if requires_ten_changes(version) and len(entries) < MIN_NEW_RELEASE_CHANGES:
+        raise SystemExit("New release requires at least 10 distinct user-facing changes: " + str(filename))
     return "\n".join(([heading, ""] if heading else []) + entries)
 
 def main():
