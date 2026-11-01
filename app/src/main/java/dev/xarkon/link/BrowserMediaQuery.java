@@ -7,6 +7,8 @@ final class BrowserMediaQuery {
         return column+" LIKE ? ESCAPE '\\'";
     }
     static String likeArgument(String prefix){
+        if(!BrowserMediaFolders.validRelativePath(prefix))
+            throw new IllegalArgumentException("Недопустимый путь медиатеки");
         String path=BrowserMediaFolders.normalize(prefix);
         StringBuilder result=new StringBuilder(path.length()+8);
         for(int i=0;i<path.length();i++){
@@ -17,6 +19,8 @@ final class BrowserMediaQuery {
         return result.append('%').toString();
     }
     static boolean matches(String path,String prefix){
+        if(!BrowserMediaFolders.validRelativePath(path)||
+           !BrowserMediaFolders.validRelativePath(prefix))return false;
         return BrowserMediaFolders.normalize(path)
             .startsWith(BrowserMediaFolders.normalize(prefix));
     }
