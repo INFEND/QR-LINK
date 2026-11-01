@@ -18,6 +18,8 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
+import android.transition.ChangeBounds;
+import android.transition.TransitionManager;
 import android.text.*;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
@@ -60,6 +62,8 @@ public final class FileBrowserActivity extends Activity {
     private final HashMap<String,CancellationSignal> expansionSignals=new HashMap<>();
     private final HashSet<String> incompleteFolders=new HashSet<>();
     private final HashMap<String,Integer> rowDepths=new HashMap<>();
+    // Reuse the sorted/expanded tree between keystrokes; only the text filter changes.
+    private final BrowserSearchIndex<Entry> searchIndex=new BrowserSearchIndex<>();
     private LinearLayout list,tabs,root;
     private ScrollView scroll;
     private int page=0;
@@ -85,7 +89,11 @@ public final class FileBrowserActivity extends Activity {
         page=0;
         if(list!=null){
             list.animate().cancel();
-            list.setAlpha(0.88f);
+            if(scroll!=null){
+                TransitionManager.endTransitions(scroll);
+                TransitionManager.beginDelayedTransition(scroll,new ChangeBounds().setDuration(150));
+            }
+            list.setAlpha(0.92f);
             render();
             list.animate().alpha(1f).setDuration(140).start();
         }
@@ -98,6 +106,11 @@ public final class FileBrowserActivity extends Activity {
         boolean folder=false,mediaFolder=false;
         int mediaCount=0;
         File localFile;
+        String foldedName(){
+            if(folded==null)folded=name.toLowerCase(Locale.ROOT);
+            return folded;
+        }
+        private String folded;
         String key(){return (folder?"dir:":"file:")+(tree==null?"":tree.toString()+"|")+
             (mediaFolder?group+"|"+path:docId.isEmpty()?uri.toString():docId);}
     }
@@ -221,7 +234,7 @@ public final class FileBrowserActivity extends Activity {
             TextView option=label((active?"✓  ":"     ")+names[i],16,active?accent:fg,active);
             pad(option,15,14);option.setBackground(shape(active?bg:card,active?accent:0,10));
             panel.addView(option,new LinearLayout.LayoutParams(-1,-2));
-            option.setOnClickListener(v->{sort=choice;
+            option.setOnClickListener(v->{sort=choice;searchIndex.invalidate();
                 getSharedPreferences("settings",0).edit().putInt("browser_sort_"+tab,choice).apply();
                 page=0;popup.dismiss();render();});
         }
@@ -382,6 +395,7 @@ public final class FileBrowserActivity extends Activity {
         }
     }
     private void switchTab(int index){
+        searchIndex.invalidate();
         tab=index;page=0;tree=null;folderId="";folderPath="";mediaPath="";history.clear();
         failedPreviews.clear();
         sort=getSharedPreferences("settings",0).getInt("browser_sort_"+index,0);
@@ -475,6 +489,7 @@ public final class FileBrowserActivity extends Activity {
         list.addView(b,lp);b.setOnClickListener(v->action.run());
     }
     private void load(){
+        searchIndex.invalidate();
         page=0;
         if(activeQuery!=null)activeQuery.cancel();
         final CancellationSignal signal=new CancellationSignal();
@@ -498,6 +513,7 @@ public final class FileBrowserActivity extends Activity {
                 ui.post(()->{if(token!=serial||isFinishing())return;
                     safTruncated=cat==4&&result instanceof Entries&&((Entries)result).truncated;
                     mediaTruncated=cat<3&&result instanceof Entries&&((Entries)result).truncated;
+                    searchIndex.invalidate();
                     current.clear();
                     if(grouped==null)current.addAll(result);
                     else{
@@ -786,18 +802,10 @@ public final class FileBrowserActivity extends Activity {
         }
         subtitle.setText(crumb);
         if(pathScroller!=null)pathScroller.post(()->pathScroller.fullScroll(View.FOCUS_RIGHT));
-        list.removeAllViews();tileStrip=null;tileCount=0;
-        selectionIndicators.clear();visibleEntries.clear();
-        if(tab==4&&tree==null){
-            if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
-            addWide("СИСТЕМНЫЙ ПРОВОДНИК",this::pickTree);
-        }
-
         String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
-        // Category search includes indexed files in nested media folders, even
-        // when the folder has not yet been expanded. SAF search respects grants.
-        ArrayList<Entry> rows=new ArrayList<>(current);
-        rowDepths.clear();
+        // Reuse the sorted/expanded tree during typing. The tree is invalidated
+        // on tab, sort, data and folder changes; never requery a provider per key.
+        boolean searchClosedMedia=!filter.isEmpty()&&isMedia();
         Comparator<Entry> cmp=(a,b)->{
             if(a.folder!=b.folder)return a.folder?-1:1;
             if(sort==1)return Long.compare(b.size,a.size);
@@ -806,16 +814,26 @@ public final class FileBrowserActivity extends Activity {
                 int r=am.compareToIgnoreCase(bm);if(r!=0)return r;}
             return a.name.compareToIgnoreCase(b.name);
         };
-        Collections.sort(rows,cmp);
-        ArrayList<Entry> flattened=new ArrayList<>();
-        HashSet<String> renderedKeys=new HashSet<>();
-        boolean searchClosedMedia=!filter.isEmpty()&&isMedia();
-        for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp,renderedKeys,searchClosedMedia);
-        rows=flattened;
-        // Search after expanding the tree so a matching SAF child remains visible
-        // even when the parent folder's name does not match the query.
-        if(!filter.isEmpty())rows=new ArrayList<>(BrowserSearchTree.filter(rows,
-            e->rowDepths.getOrDefault(e.key(),0),e->e.name,filter));
+        List<Entry> rows=searchIndex.get(sort,searchClosedMedia,()->{
+            ArrayList<Entry> roots=new ArrayList<>(current);
+            roots.sort(cmp);
+            rowDepths.clear();
+            ArrayList<Entry> flattened=new ArrayList<>();
+            HashSet<String> renderedKeys=new HashSet<>();
+            for(Entry entry:roots)
+                appendExpanded(flattened,entry,0,cmp,renderedKeys,searchClosedMedia);
+            return flattened;
+        });
+        // Compute before replacing views so a large search cannot expose a
+        // blank page while the matching rows are being resolved.
+        if(!filter.isEmpty())rows=BrowserSearchTree.filter(rows,
+            e->rowDepths.getOrDefault(e.key(),0),Entry::foldedName,filter);
+        list.removeAllViews();tileStrip=null;tileCount=0;
+        selectionIndicators.clear();visibleEntries.clear();
+        if(tab==4&&tree==null){
+            if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
+            addWide("СИСТЕМНЫЙ ПРОВОДНИК",this::pickTree);
+        }
         if(rows.isEmpty()){
             TextView nothing=label(tab==4&&tree==null?"Нет доступных файлов. Проверьте разрешения или выберите папку":
                 "В этом разделе пока нет файлов",14,muted,false);
@@ -1257,6 +1275,7 @@ public final class FileBrowserActivity extends Activity {
             child.docId.startsWith(parent.docId+"/");
     }
     private void expandFolder(Entry e){
+        searchIndex.invalidate();
         String key=e.key();
         if(expandedFolders.remove(key)){
             for(Entry opened:new ArrayList<>(openedFolders.values())){
@@ -1299,14 +1318,14 @@ public final class FileBrowserActivity extends Activity {
                         incompleteFolders.add(key);
                         showBanner("Каталог слишком большой: показана часть файлов",true);
                     }else incompleteFolders.remove(key);
-                    expandedChildren.put(key,children);render();
+                    expandedChildren.put(key,children);searchIndex.invalidate();render();
                 });
             }catch(Exception error){
                 ui.post(()->{
                     if(expansionSignals.get(key)!=signal)return;
                     expansionSignals.remove(key);loadingFolders.remove(key);
                     if(token!=serial||isFinishing())return;
-                    expandedFolders.remove(key);
+                    expandedFolders.remove(key);searchIndex.invalidate();
                     if(!(error instanceof OperationCanceledException))
                         showBanner("Не удалось раскрыть папку",true);
                     render();
