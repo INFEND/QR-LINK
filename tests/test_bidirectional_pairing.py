@@ -49,8 +49,8 @@ class BidirectionalPairingTests(unittest.TestCase):
     def test_release_identity(self):
         build=(ROOT/"app/build.gradle").read_text()
         self.assertIn("applicationId = 'dev.xarkon.link'",build)
-        version_code=re.search(r"versionCode\\s*=\\s*(\\d+)",build)
-        version_name=re.search(r"versionName\\s*=\\s*'([^']+)'",build)
+        version_code=re.search(r"versionCode\s*=\s*(\d+)",build)
+        version_name=re.search(r"versionName\s*=\s*'([^']+)'",build)
         self.assertIsNotNone(version_code)
         self.assertIsNotNone(version_name)
         self.assertGreaterEqual(int(version_code.group(1)),79)
