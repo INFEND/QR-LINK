@@ -59,6 +59,8 @@ public final class FileBrowserActivity extends Activity {
     private int page=0;
     private TextView title,subtitle,count,action,empty,selectPage;
     private View sortButton;
+    private LinearLayout tileStrip;
+    private int tileCount=0;
     private EditText search;
     private int accent,bg,card,fg,muted,stroke,tab=0,serial=0,sort=0;
     private String mediaPath="",folderPath="",folderId="";
@@ -181,6 +183,15 @@ public final class FileBrowserActivity extends Activity {
     }
     private int browserStyle(){return Math.max(0,Math.min(2,
         getSharedPreferences("settings",0).getInt("browser_style",2)));}
+    private boolean tileMode(){
+        return getSharedPreferences("settings",0).getBoolean("browser_tile_"+tab,tab==0||tab==1);
+    }
+    private int tileColumns(){
+        return Math.max(2,Math.min(5,getSharedPreferences("settings",0).getInt("browser_tile_columns_"+tab,3)));
+    }
+    private int listScale(){
+        return Math.max(75,Math.min(140,getSharedPreferences("settings",0).getInt("browser_list_scale_"+tab,100)));
+    }
     /** A custom themed dropdown anchored to the sorting control. */
     private void showSortDialog(){
         final PopupWindow popup=new PopupWindow(this);
@@ -197,7 +208,62 @@ public final class FileBrowserActivity extends Activity {
                 getSharedPreferences("settings",0).edit().putInt("browser_sort_"+tab,choice).apply();
                 page=0;popup.dismiss();render();});
         }
-        popup.setContentView(panel);popup.setWidth(dp(230));popup.setHeight(-2);
+        TextView viewHeading=label("ОТОБРАЖЕНИЕ",12,muted,true);
+        pad(viewHeading,12,10);panel.addView(viewHeading);
+        LinearLayout modes=new LinearLayout(this);
+        for(int i=0;i<2;i++){
+            final boolean tiles=i==1;
+            boolean active=tileMode()==tiles;
+            TextView option=label((active?"✓ ":"")+ (tiles?"Плитка":"Список"),
+                13,active?accent:fg,true);
+            option.setGravity(Gravity.CENTER);
+            option.setBackground(shape(active?bg:card,active?accent:stroke,9));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(40),1);
+            if(i==0)lp.rightMargin=dp(6);
+            modes.addView(option,lp);
+            option.setOnClickListener(v->{
+                getSharedPreferences("settings",0).edit().putBoolean("browser_tile_"+tab,tiles).apply();
+                popup.dismiss();page=0;render();
+            });
+        }
+        panel.addView(modes);
+        TextView gridTitle=label("Плитка: "+tileColumns()+" в ряд",12,fg,false);
+        pad(gridTitle,6,8);panel.addView(gridTitle);
+        SeekBar grid=new SeekBar(this);grid.setMax(3);grid.setProgress(tileColumns()-2);
+        if(Build.VERSION.SDK_INT>=21){
+            grid.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));
+            grid.setThumbTintList(android.content.res.ColorStateList.valueOf(accent));
+        }
+        panel.addView(grid);
+        grid.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+            public void onProgressChanged(SeekBar b,int progress,boolean user){
+                if(!user)return;
+                int columns=progress+2;gridTitle.setText("Плитка: "+columns+" в ряд");
+                getSharedPreferences("settings",0).edit().putInt("browser_tile_columns_"+tab,columns).apply();
+                if(tileMode())render();
+            }
+        });
+        TextView listTitle=label("Размер списка: "+listScale()+"%",12,fg,false);
+        pad(listTitle,6,8);panel.addView(listTitle);
+        SeekBar scale=new SeekBar(this);scale.setMax(65);scale.setProgress(listScale()-75);
+        if(Build.VERSION.SDK_INT>=21){
+            scale.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));
+            scale.setThumbTintList(android.content.res.ColorStateList.valueOf(accent));
+        }
+        panel.addView(scale);
+        scale.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onStartTrackingTouch(SeekBar b){}
+            public void onStopTrackingTouch(SeekBar b){}
+            public void onProgressChanged(SeekBar b,int progress,boolean user){
+                if(!user)return;
+                int value=progress+75;listTitle.setText("Размер списка: "+value+"%");
+                getSharedPreferences("settings",0).edit().putInt("browser_list_scale_"+tab,value).apply();
+                if(!tileMode())render();
+            }
+        });
+        popup.setContentView(panel);popup.setWidth(dp(258));popup.setHeight(-2);
         popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);popup.setFocusable(true);popup.setElevation(dp(12));
         popup.showAsDropDown(sortButton,0,dp(5),Gravity.END);
@@ -632,7 +698,7 @@ public final class FileBrowserActivity extends Activity {
             crumb.setSpan(new StyleSpan(Typeface.BOLD),i,i+1,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         subtitle.setText(crumb);
-        list.removeAllViews();
+        list.removeAllViews();tileStrip=null;tileCount=0;
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
             if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);
@@ -672,7 +738,9 @@ public final class FileBrowserActivity extends Activity {
         page=Math.max(0,Math.min(page,pages-1));
         int from=page*MAX_VISIBLE,to=Math.min(rows.size(),from+MAX_VISIBLE);
         for(int i=from;i<to;i++){
-            Entry entry=rows.get(i);visibleEntries.add(entry);drawRow(entry,rowDepths.getOrDefault(entry.key(),0));
+            Entry entry=rows.get(i);visibleEntries.add(entry);
+            if(tileMode()&&!entry.folder)drawTile(entry);
+            else{tileStrip=null;tileCount=0;drawRow(entry,rowDepths.getOrDefault(entry.key(),0));}
         }
         if(rows.size()>MAX_VISIBLE){
             TextView position=label("Показаны "+(from+1)+"–"+to+" из "+rows.size()+
@@ -706,9 +774,72 @@ public final class FileBrowserActivity extends Activity {
         }
         return arrow;
     }
+    /** File tiles are edge-to-edge; folders always remain ordinary expandable rows. */
+    private void drawTile(Entry e){
+        final int columns=tileColumns();
+        if(tileStrip==null||tileCount>=columns){
+            tileStrip=new LinearLayout(this);
+            tileStrip.setOrientation(LinearLayout.HORIZONTAL);
+            list.addView(tileStrip,new LinearLayout.LayoutParams(-1,-2));
+            tileCount=0;
+        }
+        int width=Math.max(dp(55),(getResources().getDisplayMetrics().widthPixels-dp(32))/columns);
+        FrameLayout tile=new FrameLayout(this);
+        tile.setBackgroundColor(card);
+        UiIcon icon=new UiIcon(this,tab==0?"image":tab==1?"video":tab==2?"music":
+            tab==3?"apps":"file",accent);
+        FrameLayout cover=previewFrame(e,icon,tab);
+        tile.addView(cover,new FrameLayout.LayoutParams(-1,-1));
+        TextView name=label(e.name,11,Color.WHITE,true);
+        name.setSingleLine(true);name.setEllipsize(TextUtils.TruncateAt.END);
+        name.setPadding(dp(5),dp(5),dp(5),dp(5));
+        name.setBackgroundColor(0xbb101018);
+        tile.addView(name,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
+        boolean checked=selected.containsKey(e.key());
+        TextView check=label(checked?"✓":"＋",16,checked?Color.BLACK:accent,true);
+        check.setGravity(Gravity.CENTER);
+        check.setBackground(shape(checked?accent:0xdd101018,checked?0:stroke,8));
+        FrameLayout.LayoutParams checkLp=new FrameLayout.LayoutParams(dp(29),dp(29),Gravity.TOP|Gravity.END);
+        checkLp.setMargins(0,dp(3),dp(3),0);
+        tile.addView(check,checkLp);
+        selectionIndicators.put(e.key(),check);
+        check.setOnClickListener(v->toggle(e));
+        tile.setOnClickListener(v->{if(tab==3)toggle(e);else openPreview(e);});
+        tile.setOnLongClickListener(v->{toggle(e);return true;});
+        tile.setContentDescription("Файл "+e.name);
+        tileStrip.addView(tile,new LinearLayout.LayoutParams(width,width));
+        tileCount++;
+    }
+    /** Preview uses a temporary read grant; selecting a file is a separate action. */
+    private void openPreview(Entry e){
+        if(e==null||e.folder||tab==3||e.uri==null)return;
+        try{
+            Uri uri=e.uri;
+            if("file".equalsIgnoreCase(uri.getScheme())){
+                File root=Environment.getExternalStorageDirectory().getCanonicalFile();
+                File file=new File(uri.getPath()).getCanonicalFile();
+                String prefix=root.getPath()+File.separator;
+                if(!file.isFile()||!file.getPath().startsWith(prefix))
+                    throw new SecurityException("Файл недоступен для просмотра");
+                String relative=file.getPath().substring(prefix.length());
+                uri=Uri.parse("content://dev.xarkon.link.preview/file")
+                    .buildUpon().appendPath(relative).build();
+            }
+            Intent preview=new Intent(Intent.ACTION_VIEW);
+            preview.setDataAndType(uri,e.mime==null||e.mime.isEmpty()?
+                "application/octet-stream":e.mime);
+            preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(preview);
+        }catch(Exception error){
+            Toast.makeText(this,"Не удалось открыть предпросмотр: "+
+                ErrorText.human(error),Toast.LENGTH_LONG).show();
+        }
+    }
     private void drawRow(Entry e,int depth){
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(12+Math.min(7,depth)*10),dp(11),dp(9),dp(11));
+        int scale=listScale();
+        row.setPadding(dp(12+Math.min(7,depth)*10),dp(11*scale/100f),
+            dp(9),dp(11*scale/100f));
         row.setBackground(shape(card,stroke,14));
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,-2);rp.bottomMargin=dp(8);
         list.addView(row,rp);
@@ -748,12 +879,12 @@ public final class FileBrowserActivity extends Activity {
         UiIcon icon=new UiIcon(this,glyph,accent);
         if(style!=0){
             if(!e.folder&&(tab==0||tab==1||tab==2||tab==3))addPreview(row,e,icon,tab);
-            else row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
+            else row.addView(icon,new LinearLayout.LayoutParams(dp(36*listScale()/100f),dp(36*listScale()/100f)));
         }
         LinearLayout detail=column();detail.setPadding(dp(10),0,dp(4),0);
         String display=e.name;
         if(tab==3&&display.toLowerCase(Locale.ROOT).endsWith(".apk"))display=display.substring(0,display.length()-4);
-        TextView name=label(display,14,fg,true);name.setSingleLine(true);
+        TextView name=label(display,Math.max(11,14*listScale()/100),fg,true);name.setSingleLine(true);
         if(display.length()>24){
             name.setEllipsize(TextUtils.TruncateAt.MARQUEE);
             name.setMarqueeRepeatLimit(-1);
@@ -818,6 +949,10 @@ public final class FileBrowserActivity extends Activity {
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setVisibility(View.GONE);
         frame.addView(image,new FrameLayout.LayoutParams(-1,-1));
+        if(!entry.folder&&category!=3){
+            frame.setContentDescription("Предпросмотр: "+entry.name);
+            frame.setOnClickListener(v->openPreview(entry));
+        }
         String key=entry.uri.toString();
         Bitmap cached=previewCache.get(key);
         if(cached!=null){

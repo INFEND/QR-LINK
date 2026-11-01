@@ -53,6 +53,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".QrScannerActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/AppTheme" />
+        <provider android:name=".PreviewProvider" android:authorities="dev.xarkon.link.preview"
+            android:exported="false" android:grantUriPermissions="true" />
         <provider android:name=".ApkProvider" android:authorities="dev.xarkon.link.updates"
             android:exported="false" android:grantUriPermissions="true" />
         <service android:name=".BackgroundUpdateJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
