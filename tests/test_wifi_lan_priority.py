@@ -43,10 +43,10 @@ class WifiLanPriorityTests(unittest.TestCase):
         self.assertIn("establishNetworkRoute();return;",hosted)
         fallback=self.service.split("private void startHotspotFallback(String reason){",1)[1].split(
             "private void resolveHotspotAddress(",1)[0]
-        self.assertIn("if(WifiState.clientConnected(this)){establishNetworkRoute();return;}",fallback)
+        self.assertIn("if(!forceHotspot&&WifiState.clientConnected(this)){establishNetworkRoute();return;}",fallback)
 
     def test_refresh_rotates_key_but_not_route(self):
-        self.assertIn('if(ROTATE.equals(action)){engine.stop();isReceiving=false;receiveKey="";}',self.service)
+        self.assertIn('if(ROTATE.equals(action)||modeChange){engine.stop();isReceiving=false;receiveKey="";}',self.service)
         self.assertIn("establishNetworkRoute();",self.service)
         self.assertIn('outlineButton(qrPanel,"scan","ОБНОВИТЬ QR-КОД",()->{lastQr="";start(TransferService.ROTATE);});',
                       self.main)
