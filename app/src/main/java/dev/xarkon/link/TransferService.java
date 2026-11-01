@@ -441,9 +441,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
         }
         if(attempt<24)networkHandler.postDelayed(()->resolveHotspotAddress(attempt+1,route),250);
         else{
-            hotspot.stop();resetHotspot();
-            status="Не удалось определить адрес точки доступа";
-            detail="Android не сообщил IP. Перезапустите приём.";refresh();
+            // The host may remain hidden by the OEM; the QR can still carry
+            // SSID/password and the sender can discover the IP on its
+            // explicitly requested Wi-Fi network through DHCP/UDP.
+            hotspotHost="";
+            status="Точка доступа готова · адрес определится при подключении";
+            detail="Сканируйте QR и подтвердите запрос Wi-Fi на отправителе.";
+            refresh();
         }
     }
     private void fallbackWifi(Pairing.Info info,String raw,int attempt){
