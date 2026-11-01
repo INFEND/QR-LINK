@@ -10,6 +10,16 @@ public final class OtaUrlPolicy {
         "https://github.com/INFEND/QR-LINK/releases/latest/download/update.json";
     private OtaUrlPolicy(){}
 
+    /** Retry only the exact historical release asset on the canonical owner. */
+    public static String canonicalApkFallback(String raw,String version){
+        if(!trustedApk(raw,version))return null;
+        String legacy="https://github.com/ANTIFERMENT/QR-LINK/releases/download/v"+
+            version+"/QR-LINK.apk";
+        if(!legacy.equals(raw))return null;
+        return "https://github.com/INFEND/QR-LINK/releases/download/v"+
+            version+"/QR-LINK.apk";
+    }
+
     /** Never accept arbitrary GitHub repositories or mismatched version tags. */
     public static boolean trustedApk(String raw,String version){
         if(raw==null||version==null||!version.matches("[A-Za-z0-9._-]{1,40}"))return false;

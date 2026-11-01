@@ -39,6 +39,12 @@ public final class FileBrowserActivity extends Activity {
     };
     // Accessed on the UI thread. Weak references never retain off-screen rows.
     private final HashMap<String,ArrayList<WeakReference<ImageView>>> previewWaiters=new HashMap<>();
+    // Provider failures are cached only for this screen/category; no infinite retries on redraw.
+    private final LinkedHashMap<String,Boolean> failedPreviews=new LinkedHashMap<String,Boolean>(128,0.75f,true){
+        @Override protected boolean removeEldestEntry(Map.Entry<String,Boolean> eldest){
+            return size()>512;
+        }
+    };
     private final LinkedHashMap<String,Entry> selected=new LinkedHashMap<>();
     // Only the current page is bound to views; selection persists across pages and tabs.
     private final HashMap<String,TextView> selectionIndicators=new HashMap<>();
@@ -367,6 +373,7 @@ public final class FileBrowserActivity extends Activity {
     }
     private void switchTab(int index){
         tab=index;page=0;tree=null;folderId="";folderPath="";mediaPath="";history.clear();
+        failedPreviews.clear();
         sort=getSharedPreferences("settings",0).getInt("browser_sort_"+index,0);
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();incompleteFolders.clear();
@@ -406,7 +413,9 @@ public final class FileBrowserActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int req,String[] p,int[] grants){
         super.onRequestPermissionsResult(req,p,grants);
-        if(req==MEDIA_PERMISSION||req==STORAGE_PERMISSION)load();
+        if(req==MEDIA_PERMISSION||req==STORAGE_PERMISSION){
+            failedPreviews.clear();load();
+        }
     }
     private void showMessage(String message,boolean grant){
         list.removeAllViews();
@@ -452,8 +461,8 @@ public final class FileBrowserActivity extends Activity {
                     if(grouped==null)current.addAll(result);
                     else{
                         expandedFolders.clear();expandedChildren.clear();openedFolders.clear();
-                        current.addAll(grouped.folders);
                         Collections.sort(grouped.folders,(a,b)->a.name.compareToIgnoreCase(b.name));
+                        current.addAll(grouped.folders);
                         for(Entry folder:grouped.folders){
                             String key=folder.key();
                             expandedChildren.put(key,grouped.children.get(key));
@@ -505,11 +514,11 @@ public final class FileBrowserActivity extends Activity {
                 if(c.isNull(0))continue;
                 long mediaId=c.getLong(0);
                 if(mediaId<=0||!seenMediaIds.add(mediaId))continue;
-                if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 String name=Util.safeName(c.getString(1));
                 String mime=c.getString(4);
                 if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;
                 if(!showHiddenFiles()&&(hiddenPath(name)||hiddenPath(path)))continue;
+                if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 if(result.size()>=MAX_QUEUE){
                     if(complete)throw new IllegalStateException(
                         "В папке больше 30000 файлов. Выберите меньшую папку или отдельные файлы.");
@@ -669,15 +678,24 @@ public final class FileBrowserActivity extends Activity {
             // of files first. Bound memory and mark incomplete listings explicitly.
             ArrayList<Entry> directories=new ArrayList<>();
             ArrayList<Entry> files=new ArrayList<>();
+            HashSet<String> seenDocumentIds=new HashSet<>();
             int scanned=0;
             while(c.moveToNext()){
                 if(cancellation.isCanceled())throw new OperationCanceledException();
+                String documentId=c.getString(0),documentName=c.getString(1);
+                // A malformed provider row must not abort the whole authorised tree.
+                if(documentId==null||documentId.trim().isEmpty()||
+                   documentName==null||documentName.trim().isEmpty())continue;
+                if(!showHiddenFiles()&&hiddenPath(documentName))continue;
+                // Provider duplicates must not appear twice or exhaust the page budget.
+                if(!seenDocumentIds.add(documentId))continue;
                 if(++scanned>MAX_SAF_SCAN){result.truncated=true;break;}
-                Entry e=new Entry();e.docId=c.getString(0);e.name=Util.safeName(c.getString(1));
-                if(!showHiddenFiles()&&hiddenPath(e.name))continue;
+                Entry e=new Entry();e.docId=documentId;e.name=Util.safeName(documentName);
                 e.mime=c.getString(2);e.folder=DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime);
                 e.size=c.isNull(3)?-1:c.getLong(3);e.date=c.isNull(4)?0:c.getLong(4)/1000;
-                e.tree=rootTree;e.uri=DocumentsContract.buildDocumentUriUsingTree(rootTree,e.docId);
+                e.tree=rootTree;
+                try{e.uri=DocumentsContract.buildDocumentUriUsingTree(rootTree,e.docId);}
+                catch(IllegalArgumentException invalidDocument){continue;}
                 e.path=displayPath;
                 ArrayList<Entry> target=e.folder?directories:files;
                 if(target.size()<MAX_QUEUE)target.add(e);
@@ -737,7 +755,8 @@ public final class FileBrowserActivity extends Activity {
         Collections.sort(rows,cmp);
         ArrayList<Entry> flattened=new ArrayList<>();
         HashSet<String> renderedKeys=new HashSet<>();
-        for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp,renderedKeys);
+        boolean searchClosedMedia=!filter.isEmpty()&&isMedia();
+        for(Entry entry:rows)appendExpanded(flattened,entry,0,cmp,renderedKeys,searchClosedMedia);
         rows=flattened;
         // Search after expanding the tree so a matching SAF child remains visible
         // even when the parent folder's name does not match the query.
@@ -843,14 +862,27 @@ public final class FileBrowserActivity extends Activity {
                     .buildUpon().appendPath(relative).build();
             }
             Intent preview=new Intent(Intent.ACTION_VIEW);
-            preview.setDataAndType(uri,e.mime==null||e.mime.isEmpty()?
-                "application/octet-stream":e.mime);
+            preview.setDataAndType(uri,previewMime(e));
             preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(preview);
         }catch(Exception error){
             Toast.makeText(this,"Не удалось открыть предпросмотр: "+
                 ErrorText.human(error),Toast.LENGTH_LONG).show();
         }
+    }
+    private static String previewMime(Entry e){
+        String mime=e.mime;
+        if(mime==null||mime.trim().isEmpty()||
+            "application/octet-stream".equalsIgnoreCase(mime)){
+            int dot=e.name.lastIndexOf('.');
+            if(dot>=0&&dot+1<e.name.length()){
+                String extension=e.name.substring(dot+1).toLowerCase(Locale.ROOT);
+                String guessed=android.webkit.MimeTypeMap.getSingleton()
+                    .getMimeTypeFromExtension(extension);
+                if(guessed!=null&&!guessed.isEmpty())return guessed;
+            }
+        }
+        return mime==null||mime.isEmpty()?"application/octet-stream":mime;
     }
     private void drawRow(Entry e,int depth){
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
@@ -972,6 +1004,7 @@ public final class FileBrowserActivity extends Activity {
         if(cached!=null){
             image.setImageBitmap(cached);image.setVisibility(View.VISIBLE);return frame;
         }
+        if(failedPreviews.containsKey(key))return frame;
         ArrayList<WeakReference<ImageView>> waiting=previewWaiters.get(key);
         if(waiting==null){
             waiting=new ArrayList<>();previewWaiters.put(key,waiting);
@@ -995,6 +1028,7 @@ public final class FileBrowserActivity extends Activity {
                 ui.post(()->{
                     if(isDestroyed())return;
                     if(ready!=null)previewCache.put(key,ready);
+                    else failedPreviews.put(key,Boolean.TRUE);
                     ArrayList<WeakReference<ImageView>> listeners=previewWaiters.remove(key);
                     if(listeners==null||ready==null)return;
                     for(WeakReference<ImageView> ref:listeners){
@@ -1148,15 +1182,16 @@ public final class FileBrowserActivity extends Activity {
         return rows;
     }
     private void appendExpanded(ArrayList<Entry> result,Entry entry,int depth,
-                                Comparator<Entry> cmp,Set<String> seen){
+                                Comparator<Entry> cmp,Set<String> seen,boolean searchClosedMedia){
         if(depth>16||result.size()>=MAX_SAF_SCAN||!seen.add(entry.key()))return;
         rowDepths.put(entry.key(),depth);result.add(entry);
-        if(!entry.folder||!expandedFolders.contains(entry.key()))return;
+        if(!entry.folder||(!expandedFolders.contains(entry.key())&&
+            !(searchClosedMedia&&entry.mediaFolder)))return;
         ArrayList<Entry> children=expandedChildren.get(entry.key());
         if(children==null)return;
         ArrayList<Entry> direct=entry.mediaFolder?mediaRows(children,entry.path):new ArrayList<>(children);
         direct.sort(cmp);
-        for(Entry child:direct)appendExpanded(result,child,depth+1,cmp,seen);
+        for(Entry child:direct)appendExpanded(result,child,depth+1,cmp,seen,searchClosedMedia);
     }
     private boolean descendantOf(Entry child,Entry parent){
         if(child==parent)return true;

@@ -104,6 +104,23 @@ public final class UpdateManager {
         h.setRequestProperty("User-Agent","QR-LINK-Updater/1.0");
         return h;
     }
+    /** If an owner rename breaks the legacy APK URL, retry only the pinned same-version asset. */
+    private static HttpsURLConnection openApk(String url,String version)throws IOException{
+        IOException oldFailure;
+        try{
+            HttpsURLConnection original=connection(url);
+            try{requireOk(original,"Загрузка APK");return original;}
+            catch(IOException unavailable){original.disconnect();throw unavailable;}
+        }catch(IOException unavailable){oldFailure=unavailable;}
+        String fallback=OtaUrlPolicy.canonicalApkFallback(url,version);
+        if(fallback==null)throw oldFailure;
+        HttpsURLConnection canonical=connection(fallback);
+        try{requireOk(canonical,"Загрузка APK");return canonical;}
+        catch(IOException unavailable){
+            canonical.disconnect();unavailable.addSuppressed(oldFailure);throw unavailable;
+        }
+    }
+
     /** The original URL remains primary for installed OTA clients. */
     public static Release fetchLatest(Context context)throws Exception{
         internetReady(context);
@@ -159,12 +176,11 @@ public final class UpdateManager {
                 if(r.sizeBytes>MAX_APK)throw new IOException("Размер обновления превышает 512 МБ.");
                 if(r.sizeBytes>0&&folder.getUsableSpace()<r.sizeBytes+4L*1024*1024)
                     throw new IOException("Недостаточно свободного места для обновления. Освободите память устройства.");
-                HttpsURLConnection c=connection(r.apkUrl);
+                HttpsURLConnection c=openApk(r.apkUrl,r.versionName);
                 long received=0L;
                 long total;
                 MessageDigest digest=MessageDigest.getInstance("SHA-256");
                 try{
-                    requireOk(c,"Загрузка APK");
                     long serverLength=c.getContentLengthLong();
                     if(serverLength>MAX_APK)throw new IOException("Слишком большой APK.");
                     if(r.sizeBytes>0&&serverLength>0&&serverLength!=r.sizeBytes)
