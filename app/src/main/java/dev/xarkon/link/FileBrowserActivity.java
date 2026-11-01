@@ -904,6 +904,13 @@ public final class FileBrowserActivity extends Activity {
         for(String key:selectionIndicators.keySet())refreshIndicator(key);
         updateCount();
     }
+    private static String russianCount(int number,String one,String few,String many){
+        int lastTwo=number%100,last=number%10;
+        if(lastTwo>=11&&lastTwo<=14)return many;
+        if(last==1)return one;
+        if(last>=2&&last<=4)return few;
+        return many;
+    }
     private void updateCount(){
         if(count==null)return;
         if(selected.isEmpty())count.setText("Ничего не выбрано");
@@ -915,14 +922,23 @@ public final class FileBrowserActivity extends Activity {
                 if(e.size<0){unknown++;continue;}
                 bytes=Long.MAX_VALUE-bytes<e.size?Long.MAX_VALUE:bytes+e.size;
             }
-            String summary="Выбрано: "+selected.size()+" · файлов: "+(selected.size()-folders)+
-                " · папок: "+folders+" · размер файлов: "+Util.readable(bytes);
-            if(folders>0||unknown>0)summary+=" (без размера папок"+(unknown>0?", неизвестно: "+unknown:"")+")";
-            if(selected.size()==1&&folders==1){
-                Entry folder=selected.values().iterator().next();
-                summary="Папка: "+folder.name+" · все вложенные файлы будут проверены при отправке";
+            int files=selected.size()-folders;
+            String size=folders>0||unknown>0?"неизвестен":Util.readable(bytes);
+            String summary="Выбрано: "+files+" "+russianCount(files,"файл","файла","файлов")+
+                "; "+folders+" "+russianCount(folders,"папка","папки","папок")+
+                " | Размер: "+size;
+            SpannableStringBuilder rich=new SpannableStringBuilder(summary);
+            int fileStart="Выбрано: ".length();
+            int folderStart=summary.indexOf("; ")+2;
+            int sizeStart=summary.indexOf(" | Размер: ")+" | Размер: ".length();
+            int[] starts={fileStart,folderStart,sizeStart};
+            int[] ends={fileStart+Integer.toString(files).length(),
+                folderStart+Integer.toString(folders).length(),summary.length()};
+            for(int i=0;i<starts.length;i++){
+                rich.setSpan(new ForegroundColorSpan(accent),starts[i],ends[i],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                rich.setSpan(new StyleSpan(Typeface.BOLD),starts[i],ends[i],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            count.setText(summary);
+            count.setText(rich);
         }
         action.setAlpha(selected.isEmpty()||busy?.42f:1f);
         action.setBackground(shape(accent,0,14));
