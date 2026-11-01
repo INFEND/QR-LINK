@@ -253,9 +253,11 @@ public final class FileCatalog {
             if(cursor==null)throw new IllegalStateException("Каталог недоступен");
             while(cursor.moveToNext()){
                 budget.step();
-                String childId=cursor.getString(0),name=Util.safeName(cursor.getString(1)),mime=cursor.getString(2);
-                if(childId==null||childId.isEmpty())
-                    throw new IOException("Папка содержит элемент без идентификатора");
+                String childId=cursor.getString(0),rawName=cursor.getString(1),mime=cursor.getString(2);
+                if(childId==null||childId.trim().isEmpty()||
+                   rawName==null||rawName.trim().isEmpty())
+                    throw new IOException("Папка содержит элемент без имени или идентификатора");
+                String name=Util.safeName(rawName);
                 if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime))collect(c,tree,childId,path+"/"+name,result,depth+1,budget);
                 else {
                     Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,childId);
