@@ -760,8 +760,8 @@ public final class FileBrowserActivity extends Activity {
         detail.addView(name);
         // Counts describe items currently indexed, not the total in a truncated library.
         String sub=e.folder?
-            "Файлов: "+(e.mediaFolder?Integer.toString(e.mediaCount):"неизвестно")+
-            " | Размер: "+(e.mediaFolder&&e.mediaBytes>=0?Util.readable(e.mediaBytes):"неизвестен"):
+            "Файлов: "+(e.mediaFolder&&!mediaTruncated?Integer.toString(e.mediaCount):"неизвестно")+
+            " | Размер: "+(e.mediaFolder&&!mediaTruncated&&e.mediaBytes>=0?Util.readable(e.mediaBytes):"неизвестен"):
             "Размер: "+(e.size<0?"неизвестен":Util.readable(e.size));
         if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
         if(style!=1||e.folder||tab==3){
