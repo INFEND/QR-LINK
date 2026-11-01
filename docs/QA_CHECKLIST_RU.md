@@ -24,7 +24,7 @@
 | N02 | Автоматически восстанавливать приём и обновлять QR после включения Wi-Fi | **Готово** | networkWatch/establishNetworkRoute; два телефона |
 | N03 | Подтверждать P2P-группу, адрес, разрешения и потерю группы | **Готово** | DirectWifi.confirmHosting, test_direct_ready |
 | N04 | Различать LAN, Wi-Fi-станцию, системную AP, LocalOnlyHotspot и Direct | **Готово** | WifiState/TransferService; разные OEM |
-| N05 | При подключении к общей Wi-Fi-сети выбирать LAN; без неё использовать Direct → LocalOnlyHotspot | **Готово** | v0.3.85 опубликован: WifiState.clientAddress, TransferService.establishNetworkRoute, QR ROTATE; CI 41321449603 SUCCESS |
+| N05 | При общей Wi-Fi-сети выбирать LAN; без неё LocalOnlyHotspot → Wi-Fi Direct как резерв | **Готово** | v0.3.85–0.3.88: WifiState.clientAddress, TransferService.establishNetworkRoute и проверка запоздавшего AP-callback; CI 41331193004 SUCCESS |
 | N06 | Уважать существующую системную точку доступа | **Готово** | WifiState.receiveHint, test_reliability_74 |
 | N07 | Не считать подключение готовым без TCP /hello и проверки IP | **Готово** | v0.3.67–0.3.74, test_connection_regressions/test_reliability_74, CI 115 |
 | N08 | Отменять устаревшие callbacks и попытки после уничтожения службы | **Готово** | TransferService.onDestroy, PeerAttemptGuard, v0.3.76 nextDirectRoute, test_network_session_guards, CI 133 |
