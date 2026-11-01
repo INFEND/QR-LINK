@@ -55,7 +55,10 @@ class November79Tests(unittest.TestCase):
         self.assertIn("private static String russianCount(",self.browser)
         self.assertIn('russianCount(files,"файл","файла","файлов")',self.browser)
         self.assertIn('russianCount(folders,"папка","папки","папок")',self.browser)
-        self.assertIn('folders>0||unknown>0?"неизвестен"',self.browser)
+        self.assertIn("BrowserSelectionTotals.sum(entries,folderSizeSnapshots)",self.browser)
+        self.assertIn("if(e.folder&&selected.containsKey(key))requestFolderSize(e);",self.browser)
+        self.assertIn('total.pending?"≈ ":"',self.browser)
+        self.assertNotIn('folders>0||unknown>0?"неизвестен"',self.browser)
 
     def test_settings_icon_and_about_screen(self):
         self.assertIn('String[] glyphs={"file","image","text_image"}',self.main)
