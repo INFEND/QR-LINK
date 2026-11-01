@@ -13,6 +13,7 @@ import android.widget.*;
 
 /** Small independent launcher. It stays usable even if MainActivity's rich UI fails. */
 public final class RecoveryActivity extends Activity {
+    private final UiNotice notices=new UiNotice();
     private final int bg=0xff080304, panel=0xff1a1013, text=0xfff8ecee, muted=0xffc1a8aa,accent=0xffd65a63;
     private int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
     private GradientDrawable shape(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(17));return d;}
@@ -53,13 +54,13 @@ public final class RecoveryActivity extends Activity {
         button(c,"Открыть QR LINK",true,()->open(false));
         button(c,"Безопасный запуск",false,()->open(true));
         button(c,"Скопировать отчёт",false,()->{
-            if(crash.isEmpty()){Toast.makeText(this,"Отчёта пока нет",Toast.LENGTH_SHORT).show();return;}
+            if(crash.isEmpty()){notices.show(this,"Отчёта пока нет",accent,panel,text,UiNotice.INFO);return;}
             ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
             clipboard.setPrimaryClip(ClipData.newPlainText("QR LINK crash",crash));
-            Toast.makeText(this,"Отчёт скопирован",Toast.LENGTH_SHORT).show();
+            notices.show(this,"Отчёт скопирован",accent,panel,text,UiNotice.SUCCESS);
         });
         button(c,"Поделиться отчётом",false,()->{
-            if(crash.isEmpty()){Toast.makeText(this,"Отчёта пока нет",Toast.LENGTH_SHORT).show();return;}
+            if(crash.isEmpty()){notices.show(this,"Отчёта пока нет",accent,panel,text,UiNotice.INFO);return;}
             Intent i=new Intent(Intent.ACTION_SEND);i.setType("text/plain");i.putExtra(Intent.EXTRA_TEXT,crash);
             startActivity(Intent.createChooser(i,"Отправить отчёт QR LINK"));
         });

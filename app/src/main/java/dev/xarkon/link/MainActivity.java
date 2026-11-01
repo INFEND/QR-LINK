@@ -1643,5 +1643,12 @@ public final class MainActivity extends Activity {
             TransferService.DISCONNECT_PEER.equals(intent.getAction()))startService(intent);
         else startForegroundService(intent);
     }catch(Exception e){toast("Служба: "+ErrorText.human(e));}}
-    private void toast(String text){Toast.makeText(this,ErrorText.human(text),Toast.LENGTH_LONG).show();}
+    private final UiNotice notices=new UiNotice();
+    private void toast(String text){
+        String message=ErrorText.human(text);
+        String lower=message.toLowerCase(java.util.Locale.ROOT);
+        int kind=lower.contains("ошиб")||lower.contains("не удалось")||
+            lower.contains("недоступ")||lower.contains("отказ")?UiNotice.ERROR:UiNotice.INFO;
+        notices.show(this,message,accent,card,fg,kind);
+    }
 }
