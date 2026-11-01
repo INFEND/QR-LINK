@@ -45,7 +45,8 @@ class QueueIntegrityTests(unittest.TestCase):
         self.assertIn("Thread.currentThread().isInterrupted()",code)
         self.assertIn("Папка содержит символическую ссылку",code)
         self.assertIn("Не удалось прочитать элемент папки",code)
-        self.assertIn("Папка содержит элемент без идентификатора",code)
+        self.assertIn("Папка содержит элемент без имени или идентификатора",code)
+        self.assertIn("rawName==null||rawName.trim().isEmpty()",code)
 
     def test_recursive_saf_folder_deduplicates_file_ids(self):
         code=(JAVA/"FileCatalog.java").read_text(encoding="utf-8")
