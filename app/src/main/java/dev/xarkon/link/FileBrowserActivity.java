@@ -79,7 +79,15 @@ public final class FileBrowserActivity extends Activity {
     private CancellationSignal activeQuery;
     private final Handler ui=new Handler(Looper.getMainLooper());
     // Coalesce all keystrokes within one display frame, without a 45 ms debounce.
-    private final Runnable searchRefresh=()->{page=0;render();};
+    private final Runnable searchRefresh=()->{
+        page=0;
+        if(list!=null){
+            list.animate().cancel();
+            list.setAlpha(0.88f);
+            render();
+            list.animate().alpha(1f).setDuration(140).start();
+        }
+    };
 
     private static final class Entry {
         Uri uri,tree;
