@@ -24,7 +24,7 @@ public final class ReleaseNotesCheck {
     yes(!visible.contains("Samsung"));
     yes(ReleaseNotes.visible("Только внутренний отчёт").isEmpty());
     StringBuilder longNotes=new StringBuilder();
-    for(int i=0;i<90;i++)longNotes.append("[=] Исправление "+i+" для всех экранов и длинных описаний передачи файлов номер "+i+"\\n");
+    for(int i=0;i<90;i++)longNotes.append("[=] Исправление "+i+" для всех экранов и длинных описаний передачи файлов номер "+i+"\n");
     yes(longNotes.length()>6000);
     yes(ReleaseNotes.visible(longNotes.toString()).contains("Исправление 89"));
   }
@@ -55,7 +55,7 @@ class ReleaseNotesPolicyTests(unittest.TestCase):
                 Path("release_notes").mkdir()
                 path=Path("release_notes/v0.3.79.txt")
                 def body(count):
-                    return "QR LINK 0.3.79\\n" + "\\n".join(
+                    return "QR LINK 0.3.79\n" + "\n".join(
                         f"[=] Исправлена самостоятельная функция номер {i}" for i in range(count))
                 path.write_text(body(9),encoding="utf-8")
                 with self.assertRaises(SystemExit):
