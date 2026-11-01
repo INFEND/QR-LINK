@@ -842,7 +842,8 @@ public final class FileBrowserActivity extends Activity {
         // blank page while the matching rows are being resolved.
         if(!filter.isEmpty())rows=BrowserSearchTree.filter(rows,
             e->rowDepths.getOrDefault(e.key(),0),Entry::foldedName,filter);
-        list.removeAllViews();folderMetaViews.clear();tileStrip=null;tileCount=0;
+        list.removeAllViews();tileStrip=null;tileCount=0;
+        folderMetaViews.clear();
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
             if(!hasLocalStorageAccess())addWide("РАЗРЕШИТЬ ДОСТУП К ВНУТРЕННЕЙ ПАМЯТИ",this::requestLocalStorageAccess);

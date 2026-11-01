@@ -54,7 +54,7 @@ class MediaTabsTests(unittest.TestCase):
         self.assertIn("folder.uri=item.getValue().get(0).uri",src)
         self.assertIn("if(!e.folder&&(tab==0||tab==1||tab==2||tab==3))addPreview(row,e,icon,tab)",src)
         self.assertIn("BrowserCategoryFilter.accepts(cat,name,mime)",src)
-        self.assertIn('"Файлов: "+(e.mediaFolder&&!mediaTruncated?',src)
+        self.assertIn('mediaTruncated?"неизвестно":Integer.toString(folder.mediaCount)',src)
         self.assertIn('folder.mediaBytes=unknown?-1:bytes',src)
         self.assertIn("row.setContentDescription(e.folder?",src)
         self.assertIn("previewFrame(e,centered,tab)",src)
