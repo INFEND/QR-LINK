@@ -1428,8 +1428,9 @@ public final class MainActivity extends Activity {
             receiveCaption.setText("QR появится только после подтверждения параметров Wi-Fi Direct.");return;
         }
         if(localAp&&host.isEmpty()){
-            receiveHint.setText("Ожидаем адрес локальной точки доступа...");
-            qrImage.setImageDrawable(null);lastQr="";return;
+            // No guessed IP: the scanner connects to the protected SSID first,
+            // then discovers the receiver using DHCP or authenticated UDP.
+            receiveHint.setText("Точка доступа готова · сканируйте QR");
         }
         if(externalAp&&!host.equals(WifiState.hostedApAddress(this))){
             receiveHint.setText("Системная точка доступа отключилась");
@@ -1457,7 +1458,7 @@ public final class MainActivity extends Activity {
         }
         if(localAp){
             receiveHint.setText("Локальная точка доступа · готово");
-            receiveCaption.setText("Отсканируйте QR на отправителе. При необходимости подтвердите подключение Android.");
+            receiveCaption.setText("Пароль уже записан в QR. Отсканируйте код и подтвердите системный запрос Android на отправителе.");
         }else if(externalAp){
             receiveHint.setText("Системная точка доступа · приём готов");
             receiveCaption.setText("Подключите второй телефон к этой точке доступа через Android, затем отсканируйте QR LINK. Данные системной точки доступа защищены самой ОС.");
