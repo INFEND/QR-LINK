@@ -67,5 +67,8 @@ class November79Tests(unittest.TestCase):
         script=(ROOT/"scripts/make_manifest.py").read_text(encoding="utf-8")
         self.assertIn("MIN_NEW_RELEASE_CHANGES = 10",script)
         self.assertIn("MAX_RELEASE_NOTES_CHARS = 100_000",script)
+        manager=(JAVA/"UpdateManager.java").read_text(encoding="utf-8")
+        self.assertIn("notes.length()>100_000",manager)
+        self.assertIn("memory.size()+n>512*1024",manager)
 
 if __name__=="__main__":unittest.main()
