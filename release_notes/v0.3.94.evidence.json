@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.93",
+  "entries": [
+    {
+      "note": "[=] При возобновлении передачи сохранённые подтверждения блоков проверяются надёжнее",
+      "path": "app/src/main/java/dev/xarkon/link/SenderAckStore.java",
+      "changed_line": "if(in.read()!=PRESENT)return false;"
+    }
+  ]
+}

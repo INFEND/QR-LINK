@@ -20,6 +20,10 @@ public class SenderAckStoreCheck {
         SenderAckStore store=new SenderAckStore(root,id,hash);
         yes(!store.hasAcknowledgement(2,ack));
         store.acknowledge(2,ack);
+        String zeroHash="0".repeat(64);
+        yes(!store.hasAcknowledgement(1,zeroHash)); // Sparse gap is not a receipt.
+        store.acknowledge(1,zeroHash);
+        yes(new SenderAckStore(root,id,hash).hasAcknowledgement(1,zeroHash));
         SenderAckStore reopened=new SenderAckStore(root,id,hash);
         yes(reopened.hasAcknowledgement(2,ack));
         yes(!reopened.hasAcknowledgement(2,second));
@@ -38,6 +42,14 @@ public class SenderAckStoreCheck {
             for(Future<?> f:futures)f.get();
         }finally{pool.shutdownNow();}
         for(int i=0;i<32;i++)yes(reopened.hasAcknowledgement(i,ack));
+        File record=new File(new File(root,"sender_chunk_sha256"),id+"-"+hash+".ack2");
+        try(RandomAccessFile f=new RandomAccessFile(record,"rw")){
+            f.seek(2L*33+32);f.write(0);
+        }
+        yes(!reopened.hasAcknowledgement(2,ack)); // Missing marker must fail closed.
+        File legacy=new File(new File(root,"sender_chunk_sha256"),id+"-"+hash+".sha");
+        ChunkDigestStore.put(legacy,2,new byte[32]);
+        yes(!reopened.hasAcknowledgement(2,zeroHash)); // Old unmarked files are not trusted.
         try{store.acknowledge(-1,ack);throw new AssertionError();}
         catch(IllegalArgumentException expected){}
         try{store.acknowledge(0,"invalid");throw new AssertionError();}
