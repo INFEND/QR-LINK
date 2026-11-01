@@ -266,8 +266,19 @@ public final class UpdateManager {
             if(Build.VERSION.SDK_INT>=26&&!pm.canRequestPackageInstalls()){
                 Intent settings=new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:"+a.getPackageName()));
-                a.startActivity(settings);
-                android.widget.Toast.makeText(a,"Разрешите установку и вернитесь в QR LINK",android.widget.Toast.LENGTH_LONG).show();
+                android.content.SharedPreferences style=a.getSharedPreferences("settings",0);
+                String mode=style.getString("theme_mode","dark");
+                boolean light="light".equals(mode),amoled="amoled".equals(mode);
+                int accent=style.getInt("accent",0xff55dfcb);
+                int panel=light?0xffffffff:amoled?0xff101013:0xff14212d;
+                int text=light?0xff182837:0xfff5f7f9;
+                UiNotice notice=new UiNotice();
+                notice.show(a,"Разрешите установку и вернитесь в QR LINK",accent,panel,text,UiNotice.INFO);
+                a.getWindow().getDecorView().postDelayed(()->{
+                    if(a.isFinishing()||a.isDestroyed())return;
+                    try{a.startActivity(settings);}
+                    catch(Exception error){notice.show(a,friendly(error),accent,panel,text,UiNotice.ERROR);}
+                },750L);
                 return;
             }
             // Both APK identity and signing certificate are checked again before installation.

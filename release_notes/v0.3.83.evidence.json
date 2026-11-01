@@ -1,0 +1,26 @@
+{
+  "base_tag": "v0.3.82",
+  "completed_tasks": [
+    "U25"
+  ],
+  "entries": [
+    {
+      "note": "[=] Окно скачивания файла из ShareMe оформлено в стиле приложения",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "else actionDialog=UiConfirmDialog.show(this,\"Скачать из ShareMe?\",e.name,\"СКАЧАТЬ\",()->{",
+      "task_id": "U25"
+    },
+    {
+      "note": "[=] При отказе в доступе к камере открывается тематическое окно",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "else actionDialog=UiConfirmDialog.show(this,\"Доступ к камере\",",
+      "task_id": "U25"
+    },
+    {
+      "note": "[=] Подсказка о разрешении установки обновления теперь тематическая",
+      "path": "app/src/main/java/dev/xarkon/link/UpdateManager.java",
+      "changed_line": "notice.show(a,\"Разрешите установку и вернитесь в QR LINK\",accent,panel,text,UiNotice.INFO);",
+      "task_id": "U25"
+    }
+  ]
+}
