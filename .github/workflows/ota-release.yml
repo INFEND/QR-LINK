@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Fetch source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Compare every future release with its preceding published tag.
 
       - name: Import source ZIP when Android project is not checked in
         shell: bash
@@ -122,6 +124,10 @@ jobs:
             --output dist/update.json \
             --github-output "$GITHUB_OUTPUT"
           python3 -m json.tool dist/update.json >/dev/null
+
+      - name: Verify independent release changes against product-code diff
+        shell: bash
+        run: python3 scripts/check_release_changes.py --version "${{ steps.metadata.outputs.version }}"
 
       - name: Save APK and manifest as workflow artifacts
         uses: actions/upload-artifact@v4
