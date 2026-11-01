@@ -269,6 +269,7 @@ public final class MainActivity extends Activity {
         super.onPause();
     }
     @Override protected void onDestroy(){
+        notices.dismiss();
         queueReader.shutdownNow();
         if(current.get()==this)current.clear();
         super.onDestroy();

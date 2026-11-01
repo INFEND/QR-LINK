@@ -73,6 +73,10 @@ public final class RecoveryActivity extends Activity {
             add(c,details,16);
         }
     }
+    @Override protected void onDestroy(){
+        notices.dismiss();
+        super.onDestroy();
+    }
     private void open(boolean safe){
         if(safe)getSharedPreferences("settings",0).edit().putString("theme_mode","dark")
             .putBoolean("motion",false).putBoolean("haptics",false).apply();
