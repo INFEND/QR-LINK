@@ -12,6 +12,9 @@ import re
 import subprocess
 
 from make_manifest import load_release_notes
+from release_exceptions import (
+    MIN_STANDARD_CHANGES, declared_completions, require_new_completion,
+)
 
 MIN_EVIDENCE_VERSION = (0, 3, 81)
 PREFIXES = ("[+] ", "[-] ", "[=] ")
@@ -57,9 +60,17 @@ def changed_lines(base_tag, path):
             not line.startswith(("+++", "---")) and len(line[1:].strip()) >= 12}
 
 
-def validate_evidence(notes, evidence, lookup):
-    if len(notes) < 10:
-        raise ValueError("Релиз требует минимум 10 реальных изменений")
+def validate_evidence(notes, evidence, lookup, qa_transition=None):
+    # Standard releases require 10 distinct product changes. A completed
+    # priority task may justify a shorter release, but only if it was
+    # unfinished in the previous published tag and is now actually finished.
+    claims = declared_completions(evidence)
+    if len(notes) < MIN_STANDARD_CHANGES and not claims:
+        raise ValueError("Релиз требует минимум 10 изменений или завершённую приоритетную задачу")
+    if claims:
+        if qa_transition is None or len(qa_transition) != 2:
+            raise ValueError("Нужно сравнить статусы QA с предыдущим релизом")
+        require_new_completion(qa_transition[0], qa_transition[1], claims)
     entries = evidence.get("entries") if isinstance(evidence, dict) else None
     if not isinstance(entries, list) or len(entries) != len(notes):
         raise ValueError("Для каждой строки OTA требуется отдельное доказательство")
@@ -68,6 +79,9 @@ def validate_evidence(notes, evidence, lookup):
         if not isinstance(item, dict) or item.get("note") != note:
             raise ValueError(f"Доказательство {index} не соответствует строке OTA")
         path, anchor = item.get("path"), item.get("changed_line")
+        task_id = item.get("task_id")
+        if task_id is not None and task_id not in claims:
+            raise ValueError("Доказательство ссылается на незаявленную задачу")
         if not product_path(path) or not isinstance(anchor, str) or len(anchor.strip()) < 12:
             raise ValueError(f"Недопустимое доказательство изменения {index}")
         key = (path, anchor.strip())
@@ -76,6 +90,9 @@ def validate_evidence(notes, evidence, lookup):
         used.add(key)
         if anchor.strip() not in lookup(path):
             raise ValueError(f"Изменение {index} не найдено в diff: {path}")
+    for task_id in claims:
+        if not any(item.get("task_id") == task_id for item in entries):
+            raise ValueError("Нет доказательства изменённого Android-кода для " + task_id)
     return len(used)
 
 
@@ -96,9 +113,21 @@ def main():
         base = previous_tag(args.version)
         if evidence.get("base_tag") != base:
             raise ValueError("Базовый тег доказательств не совпадает с предыдущим релизом")
-        count = validate_evidence(notes, evidence, lambda file: changed_lines(base, file))
+        transition = None
+        if declared_completions(evidence):
+            old_qa = subprocess.check_output(
+                ["git", "show", base + ":docs/QA_CHECKLIST_RU.md"], text=True
+            )
+            new_qa = Path("docs/QA_CHECKLIST_RU.md").read_text(encoding="utf-8")
+            transition = (old_qa, new_qa)
+        count = validate_evidence(
+            notes, evidence, lambda file: changed_lines(base, file), transition
+        )
     except (ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         raise SystemExit("Проверка независимых изменений не пройдена: " + str(error))
+    claims = declared_completions(evidence)
+    if claims and count < MIN_STANDARD_CHANGES:
+        print("Приоритетный релиз по завершению: " + ", ".join(claims))
     print(f"Подтверждено {count} отдельных строк кода для {count} записей OTA; база {base}")
     print("Смысловую независимость каждой функции дополнительно проверяет ревью кода.")
 
