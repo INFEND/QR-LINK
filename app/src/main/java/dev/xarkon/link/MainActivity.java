@@ -809,7 +809,7 @@ public final class MainActivity extends Activity {
         outlineButton(extra,"share","Передать через SHAREit / ShareMe",this::shareExternal);
     }
     private void receivePage(){
-        LinearLayout connection=panel("Соединение","Общая сеть Wi-Fi или прямое соединение Wi-Fi Direct без роутера.","wifi");
+        LinearLayout connection=panel("Соединение","Одна сеть Wi-Fi: прямое подключение. Разные сети: создайте защищённую локальную точку доступа.","wifi");
         LinearLayout state=row();state.setGravity(Gravity.CENTER_VERTICAL);
         state.setPadding(dp(14),dp(13),dp(14),dp(13));state.setBackground(shape(soft,stroke,16));
         UiIcon wifiGlyph=new UiIcon(this,"wifi",accent);
@@ -818,7 +818,7 @@ public final class MainActivity extends Activity {
         networkBadge.setPadding(dp(13),0,0,0);
         state.addView(networkBadge,new LinearLayout.LayoutParams(0,-2,1));
         margin(connection,state,3);
-        LinearLayout qrPanel=panel("Мой QR-код","Без общей сети QR LINK создаёт Wi-Fi Direct группу. Отправителю достаточно сканировать QR.","scan");
+        LinearLayout qrPanel=panel("Мой QR-код","Без роутера сначала запускается локальная точка доступа. Для разных Wi-Fi-сетей выберите специальный режим ниже.","scan");
         receiveHint=text("Создаём защищённый ключ подключения...",15,muted,true);margin(qrPanel,receiveHint,12);
         FrameLayout wrapper=new FrameLayout(this);wrapper.setBackground(shape(0xffffffff,0,16));
         qrImage=new ImageView(this);qrImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -827,6 +827,15 @@ public final class MainActivity extends Activity {
         qrPanel.addView(wrapper,wrap);
         receiveCaption=text("Ожидание подключения...",13,muted,false);margin(qrPanel,receiveCaption,15);
         outlineButton(qrPanel,"scan","ОБНОВИТЬ QR-КОД",()->{lastQr="";start(TransferService.ROTATE);});
+        outlineButton(qrPanel,"wifi","СОЗДАТЬ СЕТЬ ДЛЯ ДРУГОГО WI-FI",()->{
+            if(!ensureWifiEnabled())return;
+            lastQr="";
+            start(TransferService.USE_HOTSPOT);
+            toast("Создаём защищённую сеть. Отправитель подключится после сканирования QR и подтверждения Android.");
+        });
+        outlineButton(qrPanel,"wifi","ВОЗВРАТ К ОБЫЧНОМУ WI-FI",()->{
+            lastQr="";start(TransferService.USE_AUTO);
+        });
         outlineButton(qrPanel,"trash","ОСТАНОВИТЬ ПРИЁМ",()->{start(TransferService.STOP);navigate(HOME);});
         liveStatus();
         LinearLayout folder=panel("Фоновая передача","Загрузки / QR LINK · Приём продолжится при блокировке экрана благодаря постоянному уведомлению и защите Wi-Fi от сна. В энергосбережении производитель может ограничивать работу.","folder");
@@ -1377,7 +1386,7 @@ public final class MainActivity extends Activity {
     }
     private void renderQr(){if(qrImage==null||receiveHint==null)return;
         String lanAddress=WifiState.clientAddress(this);
-        boolean onLan=!lanAddress.isEmpty();
+        boolean onLan=!TransferService.forceHotspot&&!lanAddress.isEmpty();
         if(networkBadge!=null){
             networkBadge.setText(!WifiState.localTransferReady(this)?"WI-FI ВЫКЛЮЧЕН":
                 onLan?"ОБЩАЯ СЕТЬ WI-FI":
@@ -1502,8 +1511,11 @@ public final class MainActivity extends Activity {
                 return;
             }
         }else if(!WifiState.clientConnected(this)&&WifiState.hostedApAddress(this).isEmpty()){
-            toast("Для этого QR нужен доступ к общей локальной сети. Проверьте Wi-Fi.");
+            toast("Для этого QR нужна общая сеть. На приёмнике можно создать сеть для другого Wi-Fi.");
             return;
+        }
+        if(info.hotspot){
+            toast("Подтвердите запрос Android на подключение к сети приёмника. Пароль уже содержится в QR.");
         }
         // Only TransferService verifies QR and invalidates stale connection attempts.
         Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);
