@@ -119,7 +119,9 @@ public final class HotspotSupport {
                 boolean accessPoint=name.startsWith("ap")||name.startsWith("swlan")||
                     name.startsWith("softap");
                 boolean secondaryWifi=name.startsWith("wlan")&&!name.equals("wlan0");
-                if(!accessPoint&&!name.startsWith("wlan"))continue;
+                // wlan0 can be the ordinary station: never advertise it as an AP.
+                // An unknown AP address is safer than a misleading LAN QR.
+                if(!HotspotAddressPolicy.isCandidateInterface(name))continue;
                 Enumeration<InetAddress> addresses=ni.getInetAddresses();
                 while(addresses.hasMoreElements()){
                     InetAddress a=addresses.nextElement();
@@ -127,7 +129,6 @@ public final class HotspotSupport {
                        a.getHostAddress().equals(station))continue;
                     if(accessPoint)return a.getHostAddress();
                     if(secondaryWifi)candidate=a.getHostAddress();
-                    else if(candidate.isEmpty())candidate=a.getHostAddress();
                 }
             }
         }catch(Exception ignored){}

@@ -405,6 +405,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
         hotspot.start(new HotspotSupport.Listener(){
             @Override public void ready(String ssid,String pass,int security,String host){
                 if(!routeActive(route))return;
+                // A router may reconnect while Android finishes starting the AP.
+                // Discard that stale AP before exposing a QR for the wrong route.
+                if(!forceHotspot&&WifiState.clientConnected(TransferService.this)){
+                    establishNetworkRoute();return;
+                }
                 if(!QrInputValidation.validWifiCredentials(ssid,pass)){
                     hotspot.stop();resetHotspot();
                     status="Android не предоставил параметры точки доступа";refresh();return;

@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.87",
+  "entries": [
+    {
+      "note": "[=] При подключении к общей Wi-Fi-сети больше не появляется устаревший QR локальной точки",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "if(!forceHotspot&&WifiState.clientConnected(TransferService.this)){"
+    },
+    {
+      "note": "[=] В QR точки доступа больше не подставляется адрес обычного Wi-Fi",
+      "path": "app/src/main/java/dev/xarkon/link/HotspotSupport.java",
+      "changed_line": "if(!HotspotAddressPolicy.isCandidateInterface(name))continue;"
+    }
+  ]
+}
