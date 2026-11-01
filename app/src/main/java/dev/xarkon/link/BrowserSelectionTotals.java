@@ -40,6 +40,13 @@ final class BrowserSelectionTotals {
     private static boolean inside(String folder,String path){
         return folder.isEmpty()||path.equals(folder)||path.startsWith(folder+"/");
     }
+    private static boolean sameSharedStorage(String folderUri,String fileUri){
+        return isSharedUri(folderUri)&&isSharedUri(fileUri);
+    }
+    private static boolean isSharedUri(String uri){
+        return uri!=null&&(uri.startsWith("file:/")||
+            uri.startsWith("content://media/"));
+    }
     private static long add(long a,long b){
         return b<0||Long.MAX_VALUE-a<b?Long.MAX_VALUE:a+b;
     }
@@ -73,13 +80,18 @@ final class BrowserSelectionTotals {
         for(Selection entry:selected){
             if(entry.folder)continue;
             if(covered.contains(entry.uri))continue;
-            // For pending folders only, infer overlap from the displayed
-            // relative path; exact snapshots above use real file URIs.
-            boolean insidePending=false;
-            for(Selection folder:provisionalFolders){
-                if(inside(folder.path,entry.path)){insidePending=true;break;}
+            // A media file has a content://media URI while a recursive local
+            // folder scan returns file:// URIs. Both represent the same shared
+            // storage file. Relative paths prevent this cross-provider double
+            // count; never equate unrelated SAF providers by path alone.
+            boolean enclosed=false;
+            for(Selection folder:selected){
+                if(!folder.folder)continue;
+                if(sameSharedStorage(folder.uri,entry.uri)&&inside(folder.path,entry.path)){
+                    enclosed=true;break;
+                }
             }
-            if(insidePending)continue;
+            if(enclosed)continue;
             if(entry.bytes<0)unknown=true;
             else total=add(total,entry.bytes);
         }
