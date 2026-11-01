@@ -564,8 +564,13 @@ public final class FileBrowserActivity extends Activity {
                 String mime=c.getString(4);
                 if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;
                 if(!showHiddenFiles()&&(hiddenPath(name)||hiddenPath(path)))continue;
-                // A corrupt or wrong-category row must not hide a later valid
-                // MediaStore record with the same ID.
+                // Validate size/date before reserving this ID. A broken row
+                // must not hide a later valid record with the same MediaStore ID.
+                Entry e=new Entry();
+                try{
+                    e.size=c.isNull(2)?-1:c.getLong(2);
+                    e.date=c.isNull(3)?0:c.getLong(3);
+                }catch(RuntimeException invalidMediaMetadata){continue;}
                 if(!seenMediaIds.add(mediaId))continue;
                 if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 if(result.size()>=MAX_QUEUE){
@@ -573,11 +578,8 @@ public final class FileBrowserActivity extends Activity {
                         "В папке больше 30000 файлов. Выберите меньшую папку или отдельные файлы.");
                     result.truncated=true;break;
                 }
-                Entry e=new Entry();
                 e.uri=ContentUris.withAppendedId(base,mediaId);
-                e.name=name;e.size=c.isNull(2)?-1:c.getLong(2);
-                e.date=c.isNull(3)?0:c.getLong(3);
-                e.mime=mime;e.path=BrowserMediaFolders.normalize(path);
+                e.name=name;e.mime=mime;e.path=BrowserMediaFolders.normalize(path);
                 result.add(e);
             }
         }
