@@ -65,6 +65,14 @@ final class BrowserSelectionTotals {
                 if(entry.provisionalBytes>=0)provisional=true;
                 continue;
             }
+            if(stats.unknown&&stats.files.isEmpty()&&entry.provisionalBytes>=0){
+                // A storage permission/scan failure must not erase the real
+                // MediaStore estimate already shown on the folder card.
+                // The ≈ symbol makes it clear that this is not an exact scan.
+                provisional=true;
+                total=add(total,entry.provisionalBytes);
+                continue;
+            }
             unknown|=stats.unknown;
             for(Map.Entry<String,Long> file:stats.files.entrySet()){
                 if(!covered.add(file.getKey()))continue;
