@@ -43,9 +43,10 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private final Handler networkHandler=new Handler(Looper.getMainLooper());
     private boolean wantReceive;
     private boolean senderWifiLost;
-    private boolean groupProbeRunning;
+    private volatile boolean groupProbeRunning;
     // Invalidates delayed Wi-Fi Direct callbacks after radio loss or STOP.
-    private int directRouteAttempt;
+    private volatile int directRouteAttempt;
+    private synchronized int nextDirectRoute(){groupProbeRunning=false;return ++directRouteAttempt;}
     private final Runnable networkWatch=new Runnable(){
         @Override public void run(){
             if(destroyed)return;
@@ -72,7 +73,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 }
                 if(wantReceive){
                     if(!WifiState.localTransferReady(TransferService.this)){
-                        ++directRouteAttempt;
+                        nextDirectRoute();
                         peerVerified=false;
                         if(isReceiving||directReady||hotspotReady){
                             engine.stop();directWifi.close();hotspot.stop();resetDirect();resetHotspot();
@@ -192,7 +193,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         }
         if(STOP.equals(action)){
             engine.cancelSending();
-            ++directRouteAttempt;
+            nextDirectRoute();
             peerAttempts.next();peerVerified=false;reverseVerified=false;autoReconnectLan=false;failedPeerHealthChecks=0;
             wantReceive=false;getSharedPreferences("settings",0).edit().putBoolean("receive_desired",false).apply();
             engine.stop();hotspot.stop();wifiPeer.stop();directWifi.close();resetHotspot();resetDirect();systemApHost="";isReceiving=false;receiveKey="";peerState="";activeFile="";transferDirection="";progress=0;total=0;status="Служба остановлена";
@@ -203,7 +204,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             try{
                 wantReceive=true;getSharedPreferences("settings",0).edit().putBoolean("receive_desired",true).apply();
                 if(!WifiState.localTransferReady(this)){
-                    ++directRouteAttempt;
+                    nextDirectRoute();
                     engine.stop();directWifi.close();hotspot.stop();resetDirect();resetHotspot();
                     systemApHost="";isReceiving=false;receiveKey="";
                     note("Wi-Fi выключен. После включения приём запустится автоматически.");
@@ -217,7 +218,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 }
                 lock();
                 establishNetworkRoute();
-            }catch(Exception e){note("Не удалось запустить приём: "+e.getMessage());}
+            }catch(Exception e){note("Не удалось запустить приём: "+ErrorText.human(e));}
         }else if(CONNECT.equals(action)){
             if(!WifiState.localTransferReady(this)){
                 peerAttempts.next();peerVerified=false;reverseVerified=false;
@@ -312,7 +313,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         String external=WifiState.hostedApAddress(this);
         if(!external.isEmpty()){
             // A system hotspot supersedes any pending Direct hosting callback.
-            ++directRouteAttempt;
+            nextDirectRoute();
             directWifi.close();hotspot.stop();resetDirect();resetHotspot();
             systemApHost=external;status="Системная точка доступа · готов к приёму";refresh();return;
         }
@@ -323,7 +324,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(directStarting||hotspotStarting)return;
         if(directWifi.available()){
             directStarting=true;status="Создаём прямое соединение...";refresh();
-            final int route=++directRouteAttempt;
+            final int route=nextDirectRoute();
             directWifi.host(new DirectWifi.HostListener(){
                 @Override public void ready(String mac,String ssid,String pass,String host){
                     if(!routeActive(route))return;
@@ -347,7 +348,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         if(!wantReceive||!isReceiving)return;
         if(hotspotReady||hotspotStarting)return;
         hotspotStarting=true;
-        final int route=++directRouteAttempt;
+        final int route=nextDirectRoute();
         status="Создаём локальную точку доступа...";detail=reason;refresh();
         hotspot.start(new HotspotSupport.Listener(){
             @Override public void ready(String ssid,String pass,int security,String host){
@@ -706,7 +707,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
         directPass="";directHost="";MainActivity.changed();}
     private void resetHotspot(){hotspotReady=false;hotspotStarting=false;hotspotSsid="";hotspotPassword="";hotspotHost="";hotspotSecurity=0;MainActivity.changed();}
     @Override public void onDestroy(){destroyed=true;peerAttempts.next();autoReconnectLan=false;wantReceive=false;
-        ++directRouteAttempt;networkHandler.removeCallbacksAndMessages(null);engine.cancelSending();engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
+        nextDirectRoute();networkHandler.removeCallbacksAndMessages(null);engine.cancelSending();engine.shutdown();hotspot.stop();wifiPeer.stop();directWifi.destroy();resetHotspot();resetDirect();systemApHost="";work.shutdownNow();peerHealth.shutdownNow();unlock();
         peerVerified=false;reverseVerified=false;peerState="";isReceiving=false;isBusy=false;isSending=false;receiveKey="";activeFile="";transferDirection="";progress=0;total=0;status="Служба выключена";MainActivity.changed();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }

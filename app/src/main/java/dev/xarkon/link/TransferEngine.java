@@ -25,7 +25,9 @@ public final class TransferEngine {
     }
     private final Context context;
     private final Events events;
-    private final ExecutorService handlers=Executors.newFixedThreadPool(16);
+    private final ThreadPoolExecutor handlers=new ThreadPoolExecutor(16,16,0L,TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<Runnable>(64));
+    private final Set<Socket> activeConnections=ConcurrentHashMap.newKeySet();
     private final ConcurrentHashMap<String,Incoming> incoming=new ConcurrentHashMap<>();
     private static final class BadPin {
         long first, lockedUntil;
@@ -55,6 +57,7 @@ public final class TransferEngine {
     public String key(){return sessionKey;}
     public synchronized void start(String chosenKey)throws Exception{
         if(alive)return;
+        if(!SessionKeyPolicy.valid(chosenKey))throw new IllegalArgumentException("Неверный ключ сеанса приёма");
         sessionKey=chosenKey;
         socket=new ServerSocket();
         try{
@@ -73,8 +76,10 @@ public final class TransferEngine {
                 Socket s=listening.accept();
                 try{
                     s.setSoTimeout(5000);s.setTcpNoDelay(true);s.setReceiveBufferSize(1024*1024);
-                    handlers.execute(()->serve(s,epoch));
+                    activeConnections.add(s);
+                    handlers.execute(()->{try{serve(s,epoch);}finally{activeConnections.remove(s);}});
                 }catch(Exception rejected){
+                    activeConnections.remove(s);
                     try{s.close();}catch(IOException ignored){}
                     if(alive&&epoch==receiveEpoch)events.note("Не удалось принять подключение");
                 }
@@ -86,6 +91,8 @@ public final class TransferEngine {
     public synchronized void stop(){
         ++receiveEpoch;alive=false;sessionKey="";try{if(socket!=null)socket.close();}catch(Exception ignored){}
         if(discovery!=null)discovery.close();
+        for(Socket active:activeConnections){try{active.close();}catch(IOException ignored){}}
+        activeConnections.clear();
         for(Incoming item:incoming.values())closeDestination(item,false);
     }
     public void shutdown(){stop();handlers.shutdownNow();}
@@ -176,7 +183,7 @@ public final class TransferEngine {
                 long now=System.currentTimeMillis();
                 block.lastSeen=now;
                 if(now<block.lockedUntil){reply(out,429,"Try Later",error("Слишком много попыток подключения"));return;}
-                if(!sessionKey.equals(heads.get("x-xarkon-key"))){
+                if(!SessionKeyPolicy.matches(sessionKey,heads.get("x-xarkon-key"))){
                     if(now-block.first>60000){block.first=now;block.count=0;}
                     if(++block.count>=5)block.lockedUntil=now+60000;
                     reply(out,403,"Forbidden",error("Неверный ключ сеанса"));return;
@@ -213,7 +220,7 @@ public final class TransferEngine {
                 byte[] data=new byte[(int)contentLength];readFully(in,data);
                 JSONObject request=new JSONObject(new String(data,StandardCharsets.UTF_8));
                 String reverseKey=request.optString("key","");
-                if(!reverseKey.matches("[0-9a-f]{64}")){
+                if(!SessionKeyPolicy.valid(reverseKey)){
                     reply(out,400,"Bad Request",error("Неверный ключ ответного подключения"));return;
                 }
                 if(!alive||epoch!=receiveEpoch||!events.reversePair(from,reverseKey)){
@@ -462,7 +469,8 @@ public final class TransferEngine {
         try{
             JSONObject obj=new JSONObject();obj.put("name",inc.name).put("path",inc.path).put("mime",inc.mime)
                 .put("uri",inc.uri.toString()).put("size",inc.size).put("fileSha256",inc.fileSha256)
-                .put("bits",Base64.encodeToString(inc.done.toByteArray(),Base64.NO_WRAP));
+                .put("bits",Base64.encodeToString(inc.done.toByteArray(),Base64.NO_WRAP))
+                .put("completed",inc.completed);
             if(!context.getSharedPreferences(SESSIONS,0).edit()
                     .putString(inc.id,obj.toString()).commit())
                 throw new IOException("Не удалось сохранить карту принятых блоков");
@@ -494,7 +502,10 @@ public final class TransferEngine {
                     index=next;
                 }
             }
-            if(invalid>0)persist(inc);
+            if(invalid>0){
+                if(inc.completed)throw new IOException("Сохранённый файл повреждён. Добавьте файл в очередь заново.");
+                persist(inc);
+            }
             inc.restored=false;
             if(invalid>0)events.note("Повторная отправка неподтверждённых блоков: "+invalid);
         }
@@ -506,14 +517,19 @@ public final class TransferEngine {
             JSONObject j=new JSONObject(String.valueOf(e.getValue()));long size=j.getLong("size");
             if(size<0||size>10L*1000*1024*1024*1024)continue;
             Uri restoredUri=Uri.parse(j.getString("uri"));
-            if(!"content".equals(restoredUri.getScheme()))continue;
+            if(!"content".equals(restoredUri.getScheme())||
+               !MediaStore.AUTHORITY.equals(restoredUri.getAuthority()))continue;
             int count=ChunkState.count(size,Util.CHUNK);
-            Incoming in=new Incoming(e.getKey(),j.getString("name"),j.optString("path"),j.getString("mime"),restoredUri,size,count);
+            String restoredName=j.getString("name"),restoredPath=j.optString("path","");
+            if(!restoredName.equals(Util.safeName(restoredName))||
+               !restoredPath.equals(Util.safePath(restoredPath)))continue;
+            Incoming in=new Incoming(e.getKey(),restoredName,restoredPath,j.getString("mime"),restoredUri,size,count);
             in.fileSha256=j.optString("fileSha256","");
             if(!in.fileSha256.isEmpty()&&!TransferFileIdentity.validSha256(in.fileSha256))continue;
             if(!TransferFileIdentity.validMime(in.mime))continue;
             in.done.or(BitSet.valueOf(Base64.decode(j.optString("bits",""),Base64.DEFAULT)));
             ChunkState.validate(in.done,count);
+            in.completed=j.optBoolean("completed",false)&&in.done.cardinality()==count;
             in.restored=true;
             incoming.put(in.id,in);
         }catch(Exception ignored){}
@@ -576,6 +592,7 @@ public final class TransferEngine {
                 if(context.getContentResolver().update(inc.uri,cv,null,null)!=1)
                     throw new IOException("MediaStore не подтвердил публикацию файла");
                 inc.completed=true;
+                try{persist(inc);}catch(IOException failure){inc.completed=false;throw failure;}
             }catch(Exception failure){
                 throw new IOException("Не удалось завершить приём "+inc.name+": "+failure.getMessage(),failure);
             }
