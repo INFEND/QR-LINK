@@ -4,7 +4,7 @@
     {
       "note": "[=] Размер больших папок из системного проводника теперь подсчитывается без ограничения очереди",
       "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
-      "changed_line": "direct=BrowserFolderCardStats.scanDocuments(folder.docId,(parentId,visitor)->{"
+      "changed_line": "return BrowserFolderCardStats.scanDocuments(folder.docId,(parentId,visitor)->{"
     }
   ]
 }
