@@ -57,7 +57,7 @@ public final class FileBrowserActivity extends Activity {
     private LinearLayout list,tabs,root;
     private ScrollView scroll;
     private int page=0;
-    private TextView title,subtitle,count,action,empty;
+    private TextView title,subtitle,count,action,empty,selectPage;
     private View sortButton;
     private EditText search;
     private int accent,bg,card,fg,muted,stroke,tab=0,serial=0,sort=0;
@@ -248,7 +248,7 @@ public final class FileBrowserActivity extends Activity {
         selectionTools.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams toolsParams=new LinearLayout.LayoutParams(-1,dp(40));
         toolsParams.topMargin=dp(8);footer.addView(selectionTools,toolsParams);
-        TextView selectPage=label("✓  ВЫБРАТЬ ПАПКУ",11,accent,true);
+        selectPage=label("✓  ВЫБРАТЬ ПАПКУ",11,accent,true);
         selectPage.setGravity(Gravity.CENTER);
         selectPage.setBackground(shape(bg,stroke,11));
         LinearLayout.LayoutParams selectParams=new LinearLayout.LayoutParams(0,-1,1);
@@ -299,6 +299,7 @@ public final class FileBrowserActivity extends Activity {
         arrowState.clear();
         String[] hints={"Поиск по картинкам","Поиск по видео","Поиск по музыке","Поиск по приложениям","Поиск по файлам"};
         search.setHint(hints[index]);
+        selectPage.setText(index==3?"✓  ВЫБРАТЬ ВСЕ":"✓  ВЫБРАТЬ ПАПКУ");
         // Do not expose the previous tab's entries while the new provider query is pending.
         current.clear();safTruncated=false;mediaTruncated=false;
         ui.removeCallbacks(searchRefresh);
@@ -886,6 +887,24 @@ public final class FileBrowserActivity extends Activity {
     }
     private void selectCurrentFolder(){
         if(busy)return;
+        if(tab==3){
+            String filter=search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            ArrayList<Entry> targets=new ArrayList<>();
+            int additions=0;
+            for(Entry app:current){
+                if(app.folder||!app.name.toLowerCase(Locale.ROOT).contains(filter))continue;
+                targets.add(app);
+                if(!selected.containsKey(app.key()))additions++;
+            }
+            if(selected.size()+additions>MAX_QUEUE){
+                Toast.makeText(this,"Слишком много приложений для выбора",Toast.LENGTH_LONG).show();
+                return;
+            }
+            for(Entry app:targets)selected.put(app.key(),app);
+            for(String key:selectionIndicators.keySet())refreshIndicator(key);
+            updateCount();
+            return;
+        }
         Entry folder=focusedFolder();
         if(folder==null){
             if(!hasLocalStorageAccess()){
