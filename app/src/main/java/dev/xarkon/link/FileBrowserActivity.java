@@ -66,6 +66,8 @@ public final class FileBrowserActivity extends Activity {
     private TextView title,subtitle,count,action,empty,selectPage;
     private View sortButton;
     private LinearLayout tileStrip;
+    private PopupWindow activeBanner;
+    private Runnable bannerDismiss;
     private HorizontalScrollView pathScroller;
     private int tileCount=0;
     private EditText search;
@@ -168,7 +170,7 @@ public final class FileBrowserActivity extends Activity {
             try{startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));}
             catch(Exception ignored){
                 storagePermissionRequested=false;
-                Toast.makeText(this,"Не удалось открыть настройки доступа к файлам",Toast.LENGTH_LONG).show();
+                showBanner("Не удалось открыть настройки доступа к файлам",true);
             }
         }
     }
@@ -424,6 +426,37 @@ public final class FileBrowserActivity extends Activity {
         if(req==MEDIA_PERMISSION||req==STORAGE_PERMISSION){
             failedPreviews.clear();load();
         }
+    }
+    /** AMOLED notice with a short animation; does not block file selection. */
+    private void showBanner(String message,boolean failure){
+        if(root==null||isFinishing()||isDestroyed()||!root.isAttachedToWindow())return;
+        if(activeBanner!=null)activeBanner.dismiss();
+        if(bannerDismiss!=null)ui.removeCallbacks(bannerDismiss);
+        LinearLayout panel=new LinearLayout(this);
+        panel.setGravity(Gravity.CENTER_VERTICAL);
+        panel.setPadding(dp(12),dp(10),dp(12),dp(10));
+        panel.setBackground(shape(card,failure?0xffb94c58:accent,14));
+        UiIcon icon=new UiIcon(this,failure?"close":message.startsWith("Выбрана")?"check":"info",failure?0xffe66d76:accent);
+        panel.addView(icon,new LinearLayout.LayoutParams(dp(28),dp(28)));
+        TextView text=label(message,13,fg,false);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);
+        params.leftMargin=dp(10);panel.addView(text,params);
+        PopupWindow popup=new PopupWindow(panel,Math.min(getResources().getDisplayMetrics().widthPixels-dp(28),dp(450)),-2);
+        popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        popup.setFocusable(false);popup.setTouchable(false);popup.setElevation(dp(10));
+        WindowInsets insets=root.getRootWindowInsets();
+        int top=insets==null?dp(24):Build.VERSION.SDK_INT>=30?
+            insets.getInsets(WindowInsets.Type.statusBars()).top:insets.getSystemWindowInsetTop();
+        popup.showAtLocation(root,Gravity.TOP|Gravity.CENTER_HORIZONTAL,0,top+dp(10));
+        activeBanner=popup;
+        panel.setAlpha(0f);panel.setTranslationY(-dp(10));
+        panel.animate().alpha(1f).translationY(0).setDuration(160).start();
+        bannerDismiss=()->{
+            if(activeBanner!=popup)return;
+            panel.animate().alpha(0f).translationY(-dp(10)).setDuration(160)
+                .withEndAction(()->{if(activeBanner==popup){popup.dismiss();activeBanner=null;}}).start();
+        };
+        ui.postDelayed(bannerDismiss,failure?4500:2800);
     }
     private void showMessage(String message,boolean grant){
         list.removeAllViews();
@@ -885,8 +918,8 @@ public final class FileBrowserActivity extends Activity {
             preview.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(preview);
         }catch(Exception error){
-            Toast.makeText(this,"Не удалось открыть предпросмотр: "+
-                ErrorText.human(error),Toast.LENGTH_LONG).show();
+            showBanner("Не удалось открыть предпросмотр: "+
+                ErrorText.human(error),true);
         }
     }
     private static String previewMime(Entry e){
@@ -1078,7 +1111,7 @@ public final class FileBrowserActivity extends Activity {
         if(selected.containsKey(key))selected.remove(key);
         else{
             if(selected.size()>=MAX_QUEUE){
-                Toast.makeText(this,"Не более 30000 объектов в одной операции",Toast.LENGTH_SHORT).show();
+                showBanner("Не более 30000 объектов в одной операции",true);
                 return;
             }
             selected.put(key,e);
@@ -1099,7 +1132,7 @@ public final class FileBrowserActivity extends Activity {
                 if(!selected.containsKey(app.key()))additions++;
             }
             if(selected.size()+additions>MAX_QUEUE){
-                Toast.makeText(this,"Слишком много приложений для выбора",Toast.LENGTH_LONG).show();
+                showBanner("Слишком много приложений для выбора",true);
                 return;
             }
             for(Entry app:targets)selected.put(app.key(),app);
@@ -1110,7 +1143,7 @@ public final class FileBrowserActivity extends Activity {
         Entry folder=focusedFolder();
         if(folder==null){
             if(!hasLocalStorageAccess()){
-                Toast.makeText(this,"Откройте доступную папку или разрешите доступ к внутренней памяти",Toast.LENGTH_LONG).show();
+                showBanner("Откройте доступную папку или разрешите доступ к внутренней памяти",true);
                 return;
             }
             File base=Environment.getExternalStorageDirectory();
@@ -1118,19 +1151,19 @@ public final class FileBrowserActivity extends Activity {
             folder.uri=Uri.fromFile(base);folder.name="Устройство";folder.path="";
         }
         if(folder.mediaFolder&&!hasLocalStorageAccess()){
-            Toast.makeText(this,"Для полного выбора папки разрешите доступ к внутренней памяти",Toast.LENGTH_LONG).show();
+            showBanner("Для полного выбора папки разрешите доступ к внутренней памяти",true);
             return;
         }
         // The folder is expanded into every descendant at commit time, not just visible rows.
         if(!selected.containsKey(folder.key())&&selected.size()>=MAX_QUEUE){
-            Toast.makeText(this,"Слишком много выбранных папок и файлов",Toast.LENGTH_LONG).show();
+            showBanner("Слишком много выбранных папок и файлов",true);
             return;
         }
         // Selecting another folder must not discard the user's earlier choices.
         selected.put(folder.key(),folder);
         for(String key:selectionIndicators.keySet())refreshIndicator(key);
         updateCount();
-        Toast.makeText(this,"Выбрана вся папка. Вложенные файлы проверяются при отправке.",Toast.LENGTH_SHORT).show();
+        showBanner("Выбрана вся папка. Вложенные файлы проверяются при отправке.",false);
     }
     private void clearSelection(){
         if(busy||selected.isEmpty())return;
@@ -1262,8 +1295,7 @@ public final class FileBrowserActivity extends Activity {
                     if(token!=serial||isFinishing())return;
                     if(children instanceof Entries&&((Entries)children).truncated){
                         incompleteFolders.add(key);
-                        Toast.makeText(this,"Каталог слишком большой: показана часть файлов",
-                            Toast.LENGTH_LONG).show();
+                        showBanner("Каталог слишком большой: показана часть файлов",true);
                     }else incompleteFolders.remove(key);
                     expandedChildren.put(key,children);render();
                 });
@@ -1274,7 +1306,7 @@ public final class FileBrowserActivity extends Activity {
                     if(token!=serial||isFinishing())return;
                     expandedFolders.remove(key);
                     if(!(error instanceof OperationCanceledException))
-                        Toast.makeText(this,"Не удалось раскрыть папку",Toast.LENGTH_SHORT).show();
+                        showBanner("Не удалось раскрыть папку",true);
                     render();
                 });
             }
@@ -1294,7 +1326,7 @@ public final class FileBrowserActivity extends Activity {
             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(intent,PICK_TREE);
-        }catch(Exception e){Toast.makeText(this,"Выбор папки недоступен. "+ErrorText.human(e),Toast.LENGTH_LONG).show();}
+        }catch(Exception e){showBanner("Выбор папки недоступен. "+ErrorText.human(e),true);}
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
@@ -1316,7 +1348,7 @@ public final class FileBrowserActivity extends Activity {
             current.clear();safTruncated=false;
             ui.removeCallbacks(searchRefresh);
             search.setText("");updateTabs();load();
-        }catch(Exception e){Toast.makeText(this,"Нет доступа к папке. "+ErrorText.human(e),Toast.LENGTH_LONG).show();}
+        }catch(Exception e){showBanner("Нет доступа к папке. "+ErrorText.human(e),true);}
     }
     private void commitSelection(){
         if(busy||selected.isEmpty())return;
@@ -1351,7 +1383,7 @@ public final class FileBrowserActivity extends Activity {
                 ui.post(()->{setResult(RESULT_OK,new Intent());finish();});
             }catch(Exception e){
                 ui.post(()->{busy=false;action.setText("ПОДТВЕРДИТЬ");
-                    updateCount();Toast.makeText(this,ErrorText.human("Ошибка: "+e.getMessage()),Toast.LENGTH_LONG).show();});
+                    updateCount();showBanner(ErrorText.human("Ошибка: "+e.getMessage()),true);});
             }
         });
     }
@@ -1369,6 +1401,8 @@ public final class FileBrowserActivity extends Activity {
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();
         if(list!=null)list.removeCallbacks(searchRefresh);
+        if(bannerDismiss!=null)ui.removeCallbacks(bannerDismiss);
+        if(activeBanner!=null){activeBanner.dismiss();activeBanner=null;}
         io.shutdownNow();previews.shutdownNow();previewWaiters.clear();
         previewCache.evictAll();super.onDestroy();
     }
