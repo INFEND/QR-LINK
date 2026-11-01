@@ -1517,6 +1517,8 @@ public final class MainActivity extends Activity {
         }
         if(info.hotspot){
             toast("Подтвердите запрос Android на подключение к сети приёмника. Пароль уже содержится в QR.");
+        }else if(WifiState.peerOutsideOnLinkSubnet(this,info.host)){
+            toast("Приёмник, вероятно, в другой Wi-Fi-сети. Проверяем связь; если она недоступна, создайте локальную сеть на приёмнике.");
         }
         // Only TransferService verifies QR and invalidates stale connection attempts.
         Intent request=new Intent(this,TransferService.class).setAction(TransferService.CONNECT);
