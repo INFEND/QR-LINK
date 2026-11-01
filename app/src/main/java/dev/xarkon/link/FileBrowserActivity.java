@@ -60,6 +60,7 @@ public final class FileBrowserActivity extends Activity {
     private TextView title,subtitle,count,action,empty,selectPage;
     private View sortButton;
     private LinearLayout tileStrip;
+    private HorizontalScrollView pathScroller;
     private int tileCount=0;
     private EditText search;
     private int accent,bg,card,fg,muted,stroke,tab=0,serial=0,sort=0;
@@ -276,8 +277,14 @@ public final class FileBrowserActivity extends Activity {
         back.setOnClickListener(v->onBackPressed());
         LinearLayout heads=column();title=label("ПРОВОДНИК",20,fg,true);
         subtitle=label("Выберите файлы для передачи",12,muted,false);
-        subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.START);
-        heads.addView(title);heads.addView(subtitle);
+        subtitle.setSingleLine(true);subtitle.setEllipsize(null);
+        subtitle.setHorizontallyScrolling(true);
+        heads.addView(title);
+        pathScroller=new HorizontalScrollView(this);
+        pathScroller.setHorizontalScrollBarEnabled(false);
+        pathScroller.setFillViewport(false);
+        pathScroller.addView(subtitle,new HorizontalScrollView.LayoutParams(-2,-2));
+        heads.addView(pathScroller,new LinearLayout.LayoutParams(-1,-2));
         top.addView(heads,new LinearLayout.LayoutParams(0,-2,1));
         sortButton=new UiIcon(this,"sort",accent);
         top.addView(sortButton,new LinearLayout.LayoutParams(dp(48),dp(44)));
@@ -698,6 +705,7 @@ public final class FileBrowserActivity extends Activity {
             crumb.setSpan(new StyleSpan(Typeface.BOLD),i,i+1,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         subtitle.setText(crumb);
+        if(pathScroller!=null)pathScroller.post(()->pathScroller.fullScroll(View.FOCUS_RIGHT));
         list.removeAllViews();tileStrip=null;tileCount=0;
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
@@ -790,8 +798,9 @@ public final class FileBrowserActivity extends Activity {
             tab==3?"apps":"file",accent);
         FrameLayout cover=previewFrame(e,icon,tab);
         tile.addView(cover,new FrameLayout.LayoutParams(-1,-1));
-        TextView name=label(e.name,11,Color.WHITE,true);
-        name.setSingleLine(true);name.setEllipsize(TextUtils.TruncateAt.END);
+        LoopingNameView name=new LoopingNameView(this);
+        name.setText(e.name);name.setTextSize(11);name.setTextColor(Color.WHITE);
+        name.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         name.setPadding(dp(5),dp(5),dp(5),dp(5));
         name.setBackgroundColor(0xbb101018);
         tile.addView(name,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
@@ -884,12 +893,9 @@ public final class FileBrowserActivity extends Activity {
         LinearLayout detail=column();detail.setPadding(dp(10),0,dp(4),0);
         String display=e.name;
         if(tab==3&&display.toLowerCase(Locale.ROOT).endsWith(".apk"))display=display.substring(0,display.length()-4);
-        TextView name=label(display,Math.max(11,14*listScale()/100),fg,true);name.setSingleLine(true);
-        if(display.length()>24){
-            name.setEllipsize(TextUtils.TruncateAt.MARQUEE);
-            name.setMarqueeRepeatLimit(-1);
-            name.setHorizontallyScrolling(true);name.setSelected(true);
-        }else name.setEllipsize(TextUtils.TruncateAt.END);
+        LoopingNameView name=new LoopingNameView(this);
+        name.setText(display);name.setTextSize(Math.max(11,14*listScale()/100));
+        name.setTextColor(fg);name.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         detail.addView(name);
         // Counts describe items currently indexed, not the total in a truncated library.
         String sub=e.folder?
