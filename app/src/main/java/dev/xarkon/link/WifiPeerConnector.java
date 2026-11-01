@@ -40,6 +40,10 @@ public final class WifiPeerConnector {
                     new java.util.concurrent.atomic.AtomicBoolean(false);
                 private volatile boolean bound;
                 private volatile LinkProperties latestProperties;
+                private volatile Network propertiesNetwork;
+                private volatile Network boundNetwork;
+                private final java.util.concurrent.atomic.AtomicBoolean ipDeadlineScheduled=
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
                 private boolean active(){return current(attempt,this);}
                 private void fail(String reason){
                     if(!active()||!failed.compareAndSet(false,true))return;
@@ -53,17 +57,26 @@ public final class WifiPeerConnector {
                             fail("Android не разрешил использовать выбранную сеть Wi-Fi");
                             return;
                         }
+                        boundNetwork=n;
                         bound=true;
                     }
-                    LinkProperties properties=latestProperties;
+                    LinkProperties properties=n.equals(propertiesNetwork)?latestProperties:null;
                     deliver(n,properties!=null?properties:manager.getLinkProperties(n));
+                    // onAvailable can precede DHCP; Android's request timeout no longer
+                    // guarantees onUnavailable after a network has been delivered.
+                    if(ipDeadlineScheduled.compareAndSet(false,true)){
+                        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+                            if(!active()||failed.get())return;
+                            synchronized(delivered){if(delivered[0])return;}
+                            fail("Wi-Fi подключён, но не получил IPv4-адрес. Повторите подключение.");
+                        },12000L);
+                    }
                 }
                 @Override public void onLinkPropertiesChanged(Network n,LinkProperties lp){
                     if(!active())return;
-                    latestProperties=lp;
-                    // Android may report link properties before onAvailable.
-                    // Do not announce a peer until this process is bound to its Wi-Fi network.
-                    if(bound)deliver(n,lp);
+                    latestProperties=lp;propertiesNetwork=n;
+                    // Ignore properties from a superseded network while Android switches routes.
+                    if(bound&&n.equals(boundNetwork))deliver(n,lp);
                 }
                 private void deliver(Network n,LinkProperties lp){
                     if(!active()||failed.get()||!bound||lp==null)return;
@@ -96,7 +109,8 @@ public final class WifiPeerConnector {
                     fail("Android не подключился к точке доступа. Подтвердите запрос Wi-Fi и повторите сканирование.");
                 }
                 @Override public void onLost(Network n){
-                    fail("Соединение с точкой доступа потеряно");
+                    if(boundNetwork==null||n.equals(boundNetwork))
+                        fail("Соединение с точкой доступа потеряно");
                 }
             };
             manager.requestNetwork(request,callback,25000);
@@ -140,8 +154,7 @@ public final class WifiPeerConnector {
     }
     /** Never send a session key to a public gateway or a spoofed public discovery IP. */
     private static boolean localAddress(InetAddress address){
-        return address instanceof Inet4Address&&
-            (address.isSiteLocalAddress()||address.isLinkLocalAddress());
+        return PeerAddressPolicy.localIpv4(address);
     }
     private static String resolveApAddress(LinkProperties links){
         if(links==null)return "";

@@ -86,7 +86,8 @@ public final class DirectWifi {
         if(manager==null||channel==null||!WifiState.radioOn(context)){cb.accept(false);return;}
         try{
             manager.requestGroupInfo(channel,group->cb.accept(group!=null&&
-                group.isGroupOwner()&&ssid!=null&&ssid.equals(group.getNetworkName())));
+                group.isGroupOwner()&&ssid!=null&&ssid.equals(group.getNetworkName())&&
+                !localIp(group.getInterface()).isEmpty()));
         }catch(Exception error){cb.accept(false);}
     }
     private String check(){
@@ -135,7 +136,7 @@ public final class DirectWifi {
                 scheduleGroupPoll(id,1);
                 main.postDelayed(()->{if(id==serial&&hosting&&hostListener!=null)
                     hostFail("Wi-Fi Direct не создал группу за 22 секунды. Проверьте Wi-Fi и разрешения.");},22000);
-            }catch(Exception e){hostFail("Ошибка Wi-Fi Direct: "+e.getMessage());}
+            }catch(Exception e){hostFail("Ошибка Wi-Fi Direct: "+ErrorText.human(e));}
         });
     }
     private void createAutoGroup(int id){
@@ -146,7 +147,7 @@ public final class DirectWifi {
                 @Override public void onFailure(int reason){if(id==serial)hostFail(
                     "Не удалось создать Wi-Fi Direct группу: "+actionError(reason));}
             });
-        }catch(Exception e){hostFail("Wi-Fi Direct: "+e.getMessage());}
+        }catch(Exception e){hostFail("Wi-Fi Direct: "+ErrorText.human(e));}
     }
     private void scheduleGroupPoll(int id,int attempt){
         if(attempt>13)return;
@@ -175,7 +176,7 @@ public final class DirectWifi {
                 !QrInputValidation.validP2pMac(mac))return;
             HostListener listener=hostListener;hostListener=null;
             listener.ready(mac==null?"":mac,ssid,password,ip);
-        });}catch(Exception e){hostFail("Не удалось получить параметры Wi-Fi Direct: "+e.getMessage());}
+        });}catch(Exception e){hostFail("Не удалось получить параметры Wi-Fi Direct: "+ErrorText.human(e));}
     }
     private static String localIp(String iface){
         if(iface==null)return "";
@@ -217,7 +218,7 @@ public final class DirectWifi {
                 main.postDelayed(()->{if(id==serial&&joining&&!connectAttempted)connectDirect(id);},900);
                 main.postDelayed(()->{if(id==serial&&joining&&joinListener!=null)
                     joinFail("Wi-Fi Direct не ответил. Переходим к резервному подключению.");},15500);
-            }catch(Exception e){joinFail("Ошибка подключения Wi-Fi Direct: "+e.getMessage());}
+            }catch(Exception e){joinFail("Ошибка подключения Wi-Fi Direct: "+ErrorText.human(e));}
         });
     }
     private void checkPeers(int id){
@@ -243,17 +244,23 @@ public final class DirectWifi {
                 @Override public void onSuccess(){if(id==serial)readConnection(id);}
                 @Override public void onFailure(int reason){if(id==serial)joinFail("Приглашение Wi-Fi Direct отклонено: "+actionError(reason));}
             });
-        }catch(Exception e){joinFail("Подключение Wi-Fi Direct: "+e.getMessage());}
+        }catch(Exception e){joinFail("Подключение Wi-Fi Direct: "+ErrorText.human(e));}
     }
     private void readConnection(int id){
         if(id!=serial||!joining||joinListener==null)return;
         try{manager.requestConnectionInfo(channel,(WifiP2pInfo info)->{
             if(closed||id!=serial||!joining||joinListener==null||info==null||!info.groupFormed||info.groupOwnerAddress==null)return;
+            // A phone that became its own group owner is not connected to the scanned receiver.
+            // Reject public, loopback and unspecified addresses before sending the session key.
+            if(info.isGroupOwner||!PeerAddressPolicy.localIpv4(info.groupOwnerAddress)){
+                joinFail("Wi-Fi Direct не подключился к приёмнику. Используем резервное соединение.");
+                return;
+            }
             if(connectionDelivered.compareAndSet(false,true)){
                 JoinListener l=joinListener;joinListener=null;
                 l.connected(info.groupOwnerAddress.getHostAddress());
             }
-        });}catch(Exception e){joinFail("Ошибка параметров P2P: "+e.getMessage());}
+        });}catch(Exception e){joinFail("Ошибка параметров P2P: "+ErrorText.human(e));}
     }
     private void joinFail(String error){
         JoinListener l=joinListener;joinListener=null;

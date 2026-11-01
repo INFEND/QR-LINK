@@ -283,8 +283,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
             final int sendAttempt=peerAttempts.snapshot();
             try{engine.send(host,port,pin,todo,lanes);}
             catch(Exception failure){
-                // A failed old upload must not invalidate a newer authenticated peer.
-                if(peerAttempts.current(sendAttempt))peerVerified=false;
+                // A local file/SAF failure is not evidence that the authenticated peer
+                // disappeared. Keep the pairing and let idle /hello probes detect
+                // actual network loss without requiring another QR scan.
+                if(peerAttempts.current(sendAttempt)&&!WifiState.localTransferReady(this)){
+                    peerVerified=false;reverseVerified=false;
+                    peerState="Соединение потеряно · ожидаем восстановления Wi-Fi";
+                }
                 throw failure;
             }
         },true);

@@ -276,6 +276,7 @@ public final class TransferEngine {
                         if(!alive||epoch!=receiveEpoch)throw new IOException("Приём остановлен");
                         int n=in.read(buffer,0,(int)Math.min(buffer.length,contentLength-partial));
                         if(n<0)throw new EOFException("Соединение оборвалось");
+                        if(n==0)throw new IOException("Приём данных остановился");
                         checksum.update(buffer,0,n);
                         ByteBuffer bb=ByteBuffer.wrap(buffer,0,n);
                         while(bb.hasRemaining()){
@@ -319,7 +320,9 @@ public final class TransferEngine {
             if(method.equals("PUT")&&path.equals("/bench")){
                 if(contentLength<0||contentLength>16L*1024*1024){reply(out,413,"Too Large",error("Тест ограничен 16 МиБ"));return;}
                 byte[]b=new byte[256*1024];long remaining=contentLength;
-                while(remaining>0){int n=in.read(b,0,(int)Math.min(remaining,b.length));if(n<0)throw new EOFException();remaining-=n;}
+                while(remaining>0){int n=in.read(b,0,(int)Math.min(remaining,b.length));
+                    if(n<0)throw new EOFException();if(n==0)throw new IOException("Тест сети не получает данные");
+                    remaining-=n;}
                 reply(out,200,"OK",new JSONObject().put("received",contentLength));return;
             }
             reply(out,404,"Not Found",error("Неизвестный запрос"));
@@ -348,7 +351,9 @@ public final class TransferEngine {
         ChecksumMismatchException(String reason){super(reason);}
     }
     private static void readFully(InputStream in,byte[] buf)throws IOException{
-        int pos=0;while(pos<buf.length){int n=in.read(buf,pos,buf.length-pos);if(n<0)throw new EOFException();pos+=n;}
+        int pos=0;while(pos<buf.length){int n=in.read(buf,pos,buf.length-pos);
+            if(n<0)throw new EOFException();if(n==0)throw new IOException("Не удалось прочитать запрос");
+            pos+=n;}
     }
     private JSONObject offer(JSONObject j)throws Exception{
         String id=j.getString("id");String name=Util.safeName(j.getString("name"));
