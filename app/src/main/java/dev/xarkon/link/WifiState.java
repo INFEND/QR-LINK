@@ -81,6 +81,34 @@ public final class WifiState {
     public static boolean clientConnected(Context c){
         return !clientAddress(c).isEmpty();
     }
+    /** Detect a likely different router subnet, without preventing routed LANs.
+     * No SSID/password lookup: Android does not expose saved router passwords.
+     */
+    public static boolean peerOutsideOnLinkSubnet(Context c,String peer){
+        if(!QrInputValidation.isLocalIpv4(peer))return false;
+        String station=clientAddress(c);
+        if(station.isEmpty())return false;
+        ConnectivityManager cm=(ConnectivityManager)c.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if(cm==null)return false;
+        try{
+            for(Network network:cm.getAllNetworks()){
+                NetworkCapabilities caps=cm.getNetworkCapabilities(network);
+                if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)||
+                   caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)||
+                   caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_WIFI_P2P))continue;
+                LinkProperties links=cm.getLinkProperties(network);
+                if(links==null)continue;
+                for(android.net.LinkAddress address:links.getLinkAddresses()){
+                    if(!station.equals(address.getAddress().getHostAddress()))continue;
+                    int prefix=address.getPrefixLength();
+                    if(prefix>=8&&prefix<=30)
+                        return !WifiSubnetPolicy.sameSubnet(station,peer,prefix);
+                }
+            }
+        }catch(SecurityException ignored){}
+        // Without a trusted on-link prefix, do not claim networks differ.
+        return false;
+    }
     /** Android hotspot hosting is not a Wi-Fi client connection. */
     public static String hostedApAddress(Context c){
         if(clientConnected(c))return "";
