@@ -36,8 +36,8 @@ def qa_status(content, task_id):
         raise ValueError("Неизвестная приоритетная задача: " + str(task_id))
     matched = []
     for line in content.splitlines():
-        if re.match(r"^\\|\\s*" + re.escape(task_id) + r"\\s*\\|", line):
-            statuses = re.findall(r"\\*\\*(Готово|Не готово)\\*\\*", line)
+        if re.match(r"^\|\s*" + re.escape(task_id) + r"\s*\|", line):
+            statuses = re.findall(r"\*\*(Готово|Не готово)\*\*", line)
             if len(statuses) != 1:
                 raise ValueError("Неверная метка статуса QA: " + task_id)
             matched.append(statuses[0])
