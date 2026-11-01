@@ -1404,7 +1404,7 @@ public final class FileBrowserActivity extends Activity {
                 ui.post(()->{setResult(RESULT_OK,new Intent());finish();});
             }catch(Exception e){
                 ui.post(()->{busy=false;action.setText("ПОДТВЕРДИТЬ");
-                    updateCount();showBanner(ErrorText.human("Ошибка: "+e.getMessage()),true);});
+                    updateCount();showBanner(ErrorText.human(e),true);});
             }
         });
     }

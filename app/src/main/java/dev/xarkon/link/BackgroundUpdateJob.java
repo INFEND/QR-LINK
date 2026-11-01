@@ -37,8 +37,7 @@ public final class BackgroundUpdateJob extends JobService {
                     }
                 }
             }catch(Exception error){
-                String message=error.getMessage();
-                if(message==null||message.trim().isEmpty())message="Ошибка соединения";
+                String message=ErrorText.human(error);
                 prefs.edit().putString("ota_background_result",message).apply();
             }finally{jobFinished(params,false);}
         },"qr-link-background-ota");
