@@ -35,6 +35,15 @@ class WifiLanPriorityTests(unittest.TestCase):
         self.assertIn("(directReady||directStarting||hotspotReady||hotspotStarting)",watcher)
         self.assertIn("establishNetworkRoute();",watcher)
 
+    def test_delayed_direct_and_hotspot_callbacks_do_not_steal_lan(self):
+        hosted=self.service.split("directWifi.host(new DirectWifi.HostListener(){",1)[1].split(
+            "private void startHotspotFallback(",1)[0]
+        self.assertIn("if(WifiState.clientConnected(TransferService.this))",hosted)
+        self.assertIn("establishNetworkRoute();return;",hosted)
+        fallback=self.service.split("private void startHotspotFallback(String reason){",1)[1].split(
+            "private void resolveHotspotAddress(",1)[0]
+        self.assertIn("if(WifiState.clientConnected(this)){establishNetworkRoute();return;}",fallback)
+
     def test_refresh_rotates_key_but_not_route(self):
         self.assertIn('if(ROTATE.equals(action)){engine.stop();isReceiving=false;receiveKey="";}',self.service)
         self.assertIn("establishNetworkRoute();",self.service)
