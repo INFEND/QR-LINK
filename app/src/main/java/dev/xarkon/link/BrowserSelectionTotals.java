@@ -1,0 +1,88 @@
+package dev.xarkon.link;
+
+import java.util.*;
+
+/** Pure selection-size accounting, independent of Android UI and SAF providers.
+ * A selected folder already contains its descendants; independently selected
+ * files inside it must never be added twice.
+ */
+final class BrowserSelectionTotals {
+    static final class Selection {
+        final String key,uri,path;
+        final boolean folder;
+        final long bytes,provisionalBytes;
+        Selection(String key,String uri,String path,boolean folder,long bytes,long provisionalBytes){
+            this.key=key;this.uri=uri;this.path=normalize(path);
+            this.folder=folder;this.bytes=bytes;this.provisionalBytes=provisionalBytes;
+        }
+    }
+    static final class FolderStats {
+        final LinkedHashMap<String,Long> files;
+        final boolean unknown;
+        FolderStats(Map<String,Long> files,boolean unknown){
+            this.files=new LinkedHashMap<>(files);this.unknown=unknown;
+        }
+    }
+    static final class Result {
+        final long bytes;
+        final boolean pending,unknown,provisional;
+        Result(long bytes,boolean pending,boolean unknown,boolean provisional){
+            this.bytes=bytes;this.pending=pending;this.unknown=unknown;this.provisional=provisional;
+        }
+    }
+    private BrowserSelectionTotals(){}
+    private static String normalize(String p){
+        if(p==null)return "";
+        String result=p.replace('\\','/');
+        while(result.endsWith("/"))result=result.substring(0,result.length()-1);
+        return result;
+    }
+    private static boolean inside(String folder,String path){
+        return folder.isEmpty()||path.equals(folder)||path.startsWith(folder+"/");
+    }
+    private static long add(long a,long b){
+        return b<0||Long.MAX_VALUE-a<b?Long.MAX_VALUE:a+b;
+    }
+    static Result sum(Collection<Selection> selected,Map<String,FolderStats> snapshots){
+        HashSet<String> covered=new HashSet<>();
+        ArrayList<Selection> provisionalFolders=new ArrayList<>();
+        boolean pending=false,unknown=false,provisional=false;
+        long total=0;
+        // Count exact folder contents first; deduplicate shared files by URI.
+        for(Selection entry:selected){
+            if(!entry.folder)continue;
+            FolderStats stats=snapshots.get(entry.key);
+            if(stats==null){
+                pending=true;
+                provisionalFolders.add(entry);
+                if(entry.provisionalBytes>=0)provisional=true;
+                continue;
+            }
+            unknown|=stats.unknown;
+            for(Map.Entry<String,Long> file:stats.files.entrySet()){
+                if(!covered.add(file.getKey()))continue;
+                if(file.getValue()==null||file.getValue()<0)unknown=true;
+                else total=add(total,file.getValue());
+            }
+        }
+        // A provisional folder amount is a media-index estimate. Keep the UI
+        // responsive while a full recursive scan computes its exact total.
+        for(Selection entry:provisionalFolders){
+            if(entry.provisionalBytes>=0)total=add(total,entry.provisionalBytes);
+        }
+        for(Selection entry:selected){
+            if(entry.folder)continue;
+            if(covered.contains(entry.uri))continue;
+            // For pending folders only, infer overlap from the displayed
+            // relative path; exact snapshots above use real file URIs.
+            boolean insidePending=false;
+            for(Selection folder:provisionalFolders){
+                if(inside(folder.path,entry.path)){insidePending=true;break;}
+            }
+            if(insidePending)continue;
+            if(entry.bytes<0)unknown=true;
+            else total=add(total,entry.bytes);
+        }
+        return new Result(total,pending,unknown,provisional);
+    }
+}
