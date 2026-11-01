@@ -48,6 +48,10 @@ public final class FileBrowserActivity extends Activity {
         }
     };
     private final LinkedHashMap<String,Entry> selected=new LinkedHashMap<>();
+    // Exact recursive folder snapshots are computed off the UI thread and
+    // shared by the selection summary. Never assume a selected folder is 0 B.
+    private final HashMap<String,BrowserSelectionTotals.FolderStats> folderSizeSnapshots=new HashMap<>();
+    private final HashSet<String> folderSizePending=new HashSet<>();
     // Only the current page is bound to views; selection persists across pages and tabs.
     private final HashMap<String,TextView> selectionIndicators=new HashMap<>();
     private final ArrayList<Entry> visibleEntries=new ArrayList<>();
@@ -1137,6 +1141,7 @@ public final class FileBrowserActivity extends Activity {
             selected.put(key,e);
         }
         refreshIndicator(key);
+        if(e.folder&&selected.containsKey(key))requestFolderSize(e);
         updateCount();
         // Do not rebuild up to 60 rows (and restart their thumbnails) per tap.
     }
@@ -1181,6 +1186,7 @@ public final class FileBrowserActivity extends Activity {
         }
         // Selecting another folder must not discard the user's earlier choices.
         selected.put(folder.key(),folder);
+        requestFolderSize(folder);
         for(String key:selectionIndicators.keySet())refreshIndicator(key);
         updateCount();
         showBanner("Выбрана вся папка. Вложенные файлы проверяются при отправке.",false);
@@ -1198,19 +1204,59 @@ public final class FileBrowserActivity extends Activity {
         if(last>=2&&last<=4)return few;
         return many;
     }
+    /** Resolve exactly the files that will be queued, never blocking the screen. */
+    private void requestFolderSize(Entry folder){
+        if(!folder.folder||folderSizeSnapshots.containsKey(folder.key())||
+           !folderSizePending.add(folder.key()))return;
+        final String key=folder.key();
+        try{io.execute(()->{
+            LinkedHashMap<String,Long> lengths=new LinkedHashMap<>();
+            boolean unknown=false;
+            try{
+                ArrayList<FileCatalog.Item> files;
+                if(folder.mediaFolder){
+                    File root=Environment.getExternalStorageDirectory();
+                    files=FileCatalog.fromLocalFolder(this,new File(root,folder.path),folder.path);
+                }else if(folder.localFile!=null){
+                    files=FileCatalog.fromLocalFolder(this,folder.localFile,folder.path);
+                }else{
+                    files=FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name);
+                }
+                for(FileCatalog.Item file:files){
+                    if(file.uri==null||file.uri.isEmpty()){unknown=true;continue;}
+                    Long prior=lengths.putIfAbsent(file.uri,file.size);
+                    if(prior!=null&&prior.longValue()!=file.size)unknown=true;
+                    if(file.size<0)unknown=true;
+                }
+            }catch(Exception error){unknown=true;}
+            final BrowserSelectionTotals.FolderStats snapshot=
+                new BrowserSelectionTotals.FolderStats(lengths,unknown);
+            ui.post(()->{
+                if(isFinishing()||isDestroyed())return;
+                folderSizeSnapshots.put(key,snapshot);
+                folderSizePending.remove(key);
+                if(selected.containsKey(key))updateCount();
+            });
+        });}catch(RejectedExecutionException error){folderSizePending.remove(key);}
+    }
     private void updateCount(){
         if(count==null)return;
         if(selected.isEmpty())count.setText("Ничего не выбрано");
         else{
-            int folders=0,unknown=0;
-            long bytes=0;
+            int folders=0;
+            ArrayList<BrowserSelectionTotals.Selection> entries=new ArrayList<>(selected.size());
             for(Entry e:selected.values()){
-                if(e.folder){folders++;continue;}
-                if(e.size<0){unknown++;continue;}
-                bytes=Long.MAX_VALUE-bytes<e.size?Long.MAX_VALUE:bytes+e.size;
+                if(e.folder)folders++;
+                entries.add(new BrowserSelectionTotals.Selection(
+                    e.key(),e.uri==null?"":e.uri.toString(),e.path,e.folder,
+                    e.size,e.mediaFolder&&!mediaTruncated?e.mediaBytes:-1));
             }
+            BrowserSelectionTotals.Result total=
+                BrowserSelectionTotals.sum(entries,folderSizeSnapshots);
             int files=selected.size()-folders;
-            String size=folders>0||unknown>0?"неизвестен":Util.readable(bytes);
+            String size=total.unknown?"неизвестен":
+                total.pending&&!total.provisional?"Подсчёт…":
+                (total.pending?"≈ ":"")+Util.readable(total.bytes);
             String summary="Выбрано: "+files+" "+russianCount(files,"файл","файла","файлов")+
                 "; "+folders+" "+russianCount(folders,"папка","папки","папок")+
                 " | Размер: "+size;
