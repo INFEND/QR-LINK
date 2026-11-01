@@ -57,7 +57,8 @@ public final class FileBrowserActivity extends Activity {
     private LinearLayout list,tabs,root;
     private ScrollView scroll;
     private int page=0;
-    private TextView title,subtitle,count,action,sortButton,empty;
+    private TextView title,subtitle,count,action,empty;
+    private View sortButton;
     private EditText search;
     private int accent,bg,card,fg,muted,stroke,tab=0,serial=0,sort=0;
     private String mediaPath="",folderPath="",folderId="";
@@ -212,7 +213,7 @@ public final class FileBrowserActivity extends Activity {
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.START);
         heads.addView(title);heads.addView(subtitle);
         top.addView(heads,new LinearLayout.LayoutParams(0,-2,1));
-        sortButton=label("≡",25,accent,true);sortButton.setGravity(Gravity.CENTER);
+        sortButton=new UiIcon(this,"sort",accent);
         top.addView(sortButton,new LinearLayout.LayoutParams(dp(48),dp(44)));
         sortButton.setContentDescription("Сортировка файлов");
         sortButton.setOnClickListener(v->showSortDialog());
