@@ -178,7 +178,9 @@ public final class FileBrowserActivity extends Activity {
             TextView option=label((active?"✓  ":"     ")+names[i],16,active?accent:fg,active);
             pad(option,15,14);option.setBackground(shape(active?bg:card,active?accent:0,10));
             panel.addView(option,new LinearLayout.LayoutParams(-1,-2));
-            option.setOnClickListener(v->{sort=choice;page=0;popup.dismiss();render();});
+            option.setOnClickListener(v->{sort=choice;
+                getSharedPreferences("settings",0).edit().putInt("browser_sort_"+tab,choice).apply();
+                page=0;popup.dismiss();render();});
         }
         popup.setContentView(panel);popup.setWidth(dp(230));popup.setHeight(-2);
         popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
@@ -195,7 +197,12 @@ public final class FileBrowserActivity extends Activity {
         subtitle=label("Выберите файлы для передачи",12,muted,false);
         subtitle.setSingleLine(true);subtitle.setEllipsize(TextUtils.TruncateAt.START);
         heads.addView(title);heads.addView(subtitle);
-        top.addView(heads,new LinearLayout.LayoutParams(0,-2,1));root.addView(top);
+        top.addView(heads,new LinearLayout.LayoutParams(0,-2,1));
+        sortButton=label("≡",25,accent,true);sortButton.setGravity(Gravity.CENTER);
+        top.addView(sortButton,new LinearLayout.LayoutParams(dp(48),dp(44)));
+        sortButton.setContentDescription("Сортировка файлов");
+        sortButton.setOnClickListener(v->showSortDialog());
+        root.addView(top);
         HorizontalScrollView horizontal=new HorizontalScrollView(this);
         horizontal.setHorizontalScrollBarEnabled(false);horizontal.setFillViewport(true);
         tabs=new LinearLayout(this);tabs.setGravity(Gravity.CENTER);tabs.setPadding(dp(12),dp(5),dp(12),dp(12));
@@ -207,16 +214,12 @@ public final class FileBrowserActivity extends Activity {
         search.setTextColor(fg);search.setBackground(shape(card,stroke,14));
         search.setCompoundDrawablePadding(dp(8));pad(search,12,10);
         tools.addView(search,new LinearLayout.LayoutParams(0,dp(48),1));
-        sortButton=label("↕",22,accent,true);sortButton.setGravity(Gravity.CENTER);
-        tools.addView(sortButton,new LinearLayout.LayoutParams(dp(52),dp(48)));
-        sortButton.setContentDescription("Сортировка файлов");
-        sortButton.setOnClickListener(v->showSortDialog());
         root.addView(tools);
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int c,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){
                 ui.removeCallbacks(searchRefresh);
-                ui.postDelayed(searchRefresh,140);
+                ui.postDelayed(searchRefresh,45);
             }
             public void afterTextChanged(Editable e){}
         });
@@ -274,6 +277,7 @@ public final class FileBrowserActivity extends Activity {
     }
     private void switchTab(int index){
         tab=index;page=0;tree=null;folderId="";folderPath="";mediaPath="";history.clear();
+        sort=getSharedPreferences("settings",0).getInt("browser_sort_"+index,0);
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();incompleteFolders.clear();
         expandedChildren.clear();expandedFolders.clear();openedFolders.clear();loadingFolders.clear();rowDepths.clear();
