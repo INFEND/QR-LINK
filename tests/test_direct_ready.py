@@ -20,7 +20,10 @@ class DirectReadyTests(unittest.TestCase):
         self.assertIn("if(!routeActive(route))return;",src)
         self.assertIn("route==directRouteAttempt&&wantReceive&&isReceiving",src)
         self.assertIn("!QrInputValidation.isLocalIpv4(host)",src)
-        self.assertIn('startHotspotFallback("Wi-Fi Direct не предоставил корректный IP или MAC")',src)
+        self.assertIn('status="Wi-Fi Direct не предоставил корректные параметры"',src)
+        self.assertIn("resetDirect();directWifi.close();",src)
+        # Hotspot was already attempted before Direct; do not restart the same loop.
+        self.assertNotIn('startHotspotFallback("Wi-Fi Direct не предоставил корректный IP или MAC")',src)
 
     def test_ui_hides_qr_without_direct_ip(self):
         src=(ROOT/"MainActivity.java").read_text(encoding="utf-8")
