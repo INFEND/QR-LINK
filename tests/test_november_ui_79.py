@@ -35,7 +35,7 @@ class November79Tests(unittest.TestCase):
     def test_folder_summary_has_real_size_and_accent(self):
         self.assertIn("folder.mediaBytes=unknown?-1:bytes",self.browser)
         self.assertIn('"Файлов: "+(e.mediaFolder&&!mediaTruncated?',self.browser)
-        self.assertIn('" | Размер: "+(e.mediaFolder&&e.mediaBytes>=0?',self.browser)
+        self.assertIn('" | Размер: "+(e.mediaFolder&&!mediaTruncated&&e.mediaBytes>=0?',self.browser)
         self.assertIn("int countStart=",self.browser)
 
     def test_breadcrumb_and_long_names(self):
