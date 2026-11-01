@@ -512,12 +512,17 @@ public final class FileBrowserActivity extends Activity {
                 // Some providers return duplicate or null IDs after a media rescan.
                 // Never count the same file twice or create a synthetic ID=0 URI.
                 if(c.isNull(0))continue;
-                long mediaId=c.getLong(0);
-                if(mediaId<=0||!seenMediaIds.add(mediaId))continue;
+                long mediaId;
+                try{mediaId=c.getLong(0);}
+                catch(RuntimeException malformedId){continue;}
+                if(mediaId<=0)continue;
                 String name=Util.safeName(c.getString(1));
                 String mime=c.getString(4);
                 if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;
                 if(!showHiddenFiles()&&(hiddenPath(name)||hiddenPath(path)))continue;
+                // A corrupt or wrong-category row must not hide a later valid
+                // MediaStore record with the same ID.
+                if(!seenMediaIds.add(mediaId))continue;
                 if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 if(result.size()>=MAX_QUEUE){
                     if(complete)throw new IllegalStateException(
@@ -687,15 +692,16 @@ public final class FileBrowserActivity extends Activity {
                 if(documentId==null||documentId.trim().isEmpty()||
                    documentName==null||documentName.trim().isEmpty())continue;
                 if(!showHiddenFiles()&&hiddenPath(documentName))continue;
-                // Provider duplicates must not appear twice or exhaust the page budget.
-                if(!seenDocumentIds.add(documentId))continue;
-                if(++scanned>MAX_SAF_SCAN){result.truncated=true;break;}
                 Entry e=new Entry();e.docId=documentId;e.name=Util.safeName(documentName);
                 e.mime=c.getString(2);e.folder=DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime);
                 e.size=c.isNull(3)?-1:c.getLong(3);e.date=c.isNull(4)?0:c.getLong(4)/1000;
                 e.tree=rootTree;
                 try{e.uri=DocumentsContract.buildDocumentUriUsingTree(rootTree,e.docId);}
                 catch(IllegalArgumentException invalidDocument){continue;}
+                // Only validated document URIs consume the listing budget or
+                // reserve an ID; malformed rows cannot hide a later valid row.
+                if(!seenDocumentIds.add(documentId))continue;
+                if(++scanned>MAX_SAF_SCAN){result.truncated=true;break;}
                 e.path=displayPath;
                 ArrayList<Entry> target=e.folder?directories:files;
                 if(target.size()<MAX_QUEUE)target.add(e);
