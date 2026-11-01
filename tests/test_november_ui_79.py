@@ -57,7 +57,7 @@ class November79Tests(unittest.TestCase):
         self.assertIn('russianCount(folders,"папка","папки","папок")',self.browser)
         self.assertIn("BrowserSelectionTotals.sum(entries,folderSizeSnapshots)",self.browser)
         self.assertIn("if(e.folder&&selected.containsKey(key))requestFolderSize(e);",self.browser)
-        self.assertIn('total.pending?"≈ ":"',self.browser)
+        self.assertIn('total.provisional?"≈ ":"',self.browser)
         self.assertNotIn('folders>0||unknown>0?"неизвестен"',self.browser)
 
     def test_settings_icon_and_about_screen(self):
