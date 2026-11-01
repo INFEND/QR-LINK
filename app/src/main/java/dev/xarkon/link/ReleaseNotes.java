@@ -18,7 +18,7 @@ public final class ReleaseNotes {
                 lower.contains("аппаратн")||lower.contains("scoped storage")||
                 lower.contains("github")||lower.contains("chatgpt")||
                 lower.contains("лимит 30000")||lower.contains("не проверен"))continue;
-            if(out.length()+line.length()+1>6000)break;
+            // Keep every validated change. Never silently truncate OTA notes.
             if(out.length()>0)out.append('\n');
             out.append(line);
         }
