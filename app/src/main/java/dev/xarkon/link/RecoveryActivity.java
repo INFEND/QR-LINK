@@ -13,7 +13,7 @@ import android.widget.*;
 
 /** Small independent launcher. It stays usable even if MainActivity's rich UI fails. */
 public final class RecoveryActivity extends Activity {
-    private final int bg=0xff000000, panel=0xff15191d, text=0xffedf6f7, muted=0xffa8b8c0,accent=0xff58dfce;
+    private final int bg=0xff080304, panel=0xff1a1013, text=0xfff8ecee, muted=0xffc1a8aa,accent=0xffd65a63;
     private int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
     private GradientDrawable shape(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(17));return d;}
     private TextView label(String s,int size,int color,boolean bold){
@@ -51,7 +51,7 @@ public final class RecoveryActivity extends Activity {
         add(c,label(crash.isEmpty()?"Аварийных отчётов пока нет.":
              "Причина ошибки сохранена на устройстве. Можно скопировать отчёт и запустить QR LINK в безопасном режиме.",14,muted,false),23);
         button(c,"Открыть QR LINK",true,()->open(false));
-        button(c,"Безопасный запуск (тема без анимаций)",false,()->open(true));
+        button(c,"Безопасный запуск",false,()->open(true));
         button(c,"Скопировать отчёт",false,()->{
             if(crash.isEmpty()){Toast.makeText(this,"Отчёта пока нет",Toast.LENGTH_SHORT).show();return;}
             ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);

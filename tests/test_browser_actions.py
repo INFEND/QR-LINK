@@ -10,12 +10,12 @@ HARNESS=r'''package dev.xarkon.link;
 public final class BrowserBreadcrumbsCheck {
   private static void eq(String actual,String expected){if(!actual.equals(expected))throw new AssertionError(actual+" != "+expected);}
   public static void main(String[] args){
-    eq(BrowserBreadcrumbs.format(null),"Внутренняя память");
-    eq(BrowserBreadcrumbs.format("/storage/emulated/0"),"Внутренняя память");
-    eq(BrowserBreadcrumbs.format("/storage/emulated/0/DCIM/Camera/"),"Внутренняя память › DCIM › Camera");
-    eq(BrowserBreadcrumbs.format("Download/Photos/2026"),"Внутренняя память › Download › Photos › 2026");
-    eq(BrowserBreadcrumbs.format("/0/Pictures"),"Внутренняя память › Pictures");
-    eq(BrowserBreadcrumbs.format("Documents/../Pictures"),"Внутренняя память › Documents › Pictures");
+    eq(BrowserBreadcrumbs.format(null),"Устройство");
+    eq(BrowserBreadcrumbs.format("/storage/emulated/0"),"Устройство");
+    eq(BrowserBreadcrumbs.format("/storage/emulated/0/DCIM/Camera/"),"Устройство › DCIM › Camera");
+    eq(BrowserBreadcrumbs.format("Download/Photos/2026"),"Устройство › Download › Photos › 2026");
+    eq(BrowserBreadcrumbs.format("/0/Pictures"),"Устройство › Pictures");
+    eq(BrowserBreadcrumbs.format("Documents/../Pictures"),"Устройство › Documents › Pictures");
   }
 }
 '''

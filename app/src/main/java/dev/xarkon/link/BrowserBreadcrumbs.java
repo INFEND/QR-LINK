@@ -8,7 +8,7 @@ public final class BrowserBreadcrumbs {
         if(value.equals("/storage/emulated/0")||value.equals("/0"))value="";
         else if(value.startsWith("/storage/emulated/0/"))value=value.substring("/storage/emulated/0/".length());
         else if(value.startsWith("/0/"))value=value.substring(3);
-        StringBuilder out=new StringBuilder("Внутренняя память");
+        StringBuilder out=new StringBuilder("Устройство");
         for(String part:value.split("/")){
             if(part.isEmpty()||part.equals(".")||part.equals(".."))continue;
             out.append(" › ").append(part);

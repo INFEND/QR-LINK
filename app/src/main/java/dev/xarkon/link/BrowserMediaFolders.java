@@ -22,7 +22,7 @@ final class BrowserMediaFolders {
 
     static String label(String path) {
         String normalized=normalize(path);
-        if(normalized.isEmpty())return "Внутренняя память";
+        if(normalized.isEmpty())return "Устройство";
         int end=normalized.length()-1;
         int start=normalized.lastIndexOf('/',end-1)+1;
         return normalized.substring(start,end);

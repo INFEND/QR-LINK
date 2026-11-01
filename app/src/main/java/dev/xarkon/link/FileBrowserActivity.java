@@ -236,11 +236,11 @@ public final class FileBrowserActivity extends Activity {
         LinearLayout.LayoutParams selectParams=new LinearLayout.LayoutParams(0,-1,1);
         selectParams.rightMargin=dp(6);selectionTools.addView(selectPage,selectParams);
         selectPage.setOnClickListener(v->selectCurrentFolder());
-        TextView clear=label("×  СНЯТЬ ВЫБОР",11,fg,true);
+        TextView clear=label("×  СНЯТЬ ВЫДЕЛЕННОЕ",11,fg,true);
         clear.setGravity(Gravity.CENTER);clear.setBackground(shape(bg,stroke,11));
         selectionTools.addView(clear,new LinearLayout.LayoutParams(0,-1,1));
         clear.setOnClickListener(v->clearSelection());
-        action=label("ОТПРАВИТЬ",15,Color.BLACK,true);
+        action=label("ПОДТВЕРДИТЬ",15,Color.BLACK,true);
         action.setGravity(Gravity.CENTER);pad(action,12,15);
         LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(-1,dp(52));
         ap.topMargin=dp(9);footer.addView(action,ap);
@@ -319,7 +319,7 @@ public final class FileBrowserActivity extends Activity {
         if(grant){
             addWide("РАЗРЕШИТЬ ДОСТУП",this::requestMedia);
             addWide("ВЫБРАТЬ ПАПКУ",this::pickTree);
-            addWide("ПОКАЗАТЬ КОРЕНЬ /0",this::requestLocalStorageAccess);
+            addWide("ПОКАЗАТЬ УСТРОЙСТВО",this::requestLocalStorageAccess);
         }
     }
     private void addWide(String text,Runnable action){
@@ -357,10 +357,15 @@ public final class FileBrowserActivity extends Activity {
                     else{
                         expandedFolders.clear();expandedChildren.clear();openedFolders.clear();
                         current.addAll(grouped.folders);
+                        Collections.sort(grouped.folders,(a,b)->a.name.compareToIgnoreCase(b.name));
                         for(Entry folder:grouped.folders){
                             String key=folder.key();
-                            expandedFolders.add(key);
                             expandedChildren.put(key,grouped.children.get(key));
+                        }
+                        if(!grouped.folders.isEmpty()){
+                            Entry first=grouped.folders.get(0);
+                            expandedFolders.add(first.key());
+                            openedFolders.put(first.key(),first);
                         }
                     }
                     render();});
@@ -579,7 +584,7 @@ public final class FileBrowserActivity extends Activity {
     }
     private String breadcrumb(){
         Entry focus=focusedFolder();
-        if(focus==null)return "Внутренняя память";
+        if(focus==null)return "Устройство";
         if(focus.localFile!=null||focus.mediaFolder)return BrowserBreadcrumbs.format(focus.path);
         if(focus.tree!=null){
             String id=focus.docId;int colon=id.indexOf(':');
@@ -662,14 +667,14 @@ public final class FileBrowserActivity extends Activity {
         row.setContentDescription(e.folder?
             "Папка "+e.name+(e.mediaFolder?", найдено файлов: "+e.mediaCount:""):
             (tab==3?"Приложение ":"Файл ")+e.name);
-        String glyph=e.folder&&!e.mediaFolder?"folder":
+        String glyph=e.folder?"folder":
             tab==0?"image":tab==1?"video":tab==2?"music":tab==3?"apps":"file";
         int style=browserStyle();
         if(style==1){
             FrameLayout tile=new FrameLayout(this);
             UiIcon centered=new UiIcon(this,glyph,accent);
             // Center real previews too, not only the generic category glyph.
-            View centeredContent=e.uri!=null&&(!e.folder||e.mediaFolder)?
+            View centeredContent=e.uri!=null&&!e.folder?
                 previewFrame(e,centered,tab):centered;
             tile.addView(centeredContent,
                 new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.CENTER));
@@ -696,8 +701,7 @@ public final class FileBrowserActivity extends Activity {
         }
         UiIcon icon=new UiIcon(this,glyph,accent);
         if(style!=0){
-            if((!e.folder&&(tab==0||tab==1||tab==3))||
-                (e.mediaFolder&&e.uri!=null))addPreview(row,e,icon,tab);
+            if(!e.folder&&(tab==0||tab==1||tab==2||tab==3))addPreview(row,e,icon,tab);
             else row.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
         }
         LinearLayout detail=column();detail.setPadding(dp(10),0,dp(4),0);
@@ -707,20 +711,21 @@ public final class FileBrowserActivity extends Activity {
         detail.addView(name);
         // Counts describe items currently indexed, not the total in a truncated library.
         String sub=e.mediaFolder?
-            (tab==0?"Найдено изображений: ":tab==1?"Найдено видео: ":"Найдено аудиофайлов: ")+e.mediaCount:
+            "Файлов: "+e.mediaCount:
             e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
             incompleteFolders.contains(e.key())?"Показана часть содержимого · нажмите, чтобы свернуть":
             expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
-            Util.readable(e.size)+(e.mime==null||e.mime.isEmpty()?"":" · "+e.mime);
+            "Размер: "+(e.size<0?"неизвестен":Util.readable(e.size));
         if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
         if(style!=1||e.folder||tab==3){
             TextView meta=label(sub,11,muted,false);meta.setSingleLine(true);
             meta.setEllipsize(TextUtils.TruncateAt.END);
-            if(tab==3&&!e.folder){
+            if(!e.folder){
                 SpannableStringBuilder rich=new SpannableStringBuilder(sub);
-                int sizeStart="Размер: ".length(),sizeEnd=sub.indexOf(" | Версия:");
-                int versionStart=sizeEnd+" | Версия: ".length();
-                for(int[] range:new int[][]{{sizeStart,sizeEnd},{versionStart,sub.length()}}){
+                int sizeStart="Размер: ".length(),sizeEnd=tab==3?sub.indexOf(" | Версия:"):sub.length();
+                int versionStart=tab==3?sizeEnd+" | Версия: ".length():sub.length();
+                for(int[] range:tab==3?new int[][]{{sizeStart,sizeEnd},{versionStart,sub.length()}}:
+                        new int[][]{{sizeStart,sizeEnd}}){
                     rich.setSpan(new ForegroundColorSpan(accent),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     rich.setSpan(new StyleSpan(Typeface.BOLD),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
@@ -830,7 +835,7 @@ public final class FileBrowserActivity extends Activity {
             }
             File base=Environment.getExternalStorageDirectory();
             folder=new Entry();folder.folder=true;folder.localFile=base;
-            folder.uri=Uri.fromFile(base);folder.name="Внутренняя память";folder.path="";
+            folder.uri=Uri.fromFile(base);folder.name="Устройство";folder.path="";
         }
         if(folder.mediaFolder&&!hasLocalStorageAccess()){
             Toast.makeText(this,"Для полного выбора папки разрешите доступ к внутренней памяти",Toast.LENGTH_LONG).show();
@@ -931,6 +936,16 @@ public final class FileBrowserActivity extends Activity {
                 loadingFolders.remove(childKey);
             }
             render();return;
+        }
+        // Media tabs keep one folder open without discarding selected files.
+        if(e.mediaFolder){
+            for(String previous:new ArrayList<>(expandedFolders)){
+                if(previous.equals(key))continue;
+                expandedFolders.remove(previous);openedFolders.remove(previous);
+                CancellationSignal stale=expansionSignals.remove(previous);
+                if(stale!=null)stale.cancel();
+                loadingFolders.remove(previous);
+            }
         }
         expandedFolders.add(key);openedFolders.remove(key);openedFolders.put(key,e);
         if(expandedChildren.containsKey(key)){render();return;}
@@ -1038,7 +1053,7 @@ public final class FileBrowserActivity extends Activity {
                 FileCatalog.append(this,jobs);
                 ui.post(()->{setResult(RESULT_OK,new Intent());finish();});
             }catch(Exception e){
-                ui.post(()->{busy=false;action.setText("ОТПРАВИТЬ");
+                ui.post(()->{busy=false;action.setText("ПОДТВЕРДИТЬ");
                     updateCount();Toast.makeText(this,ErrorText.human("Ошибка: "+e.getMessage()),Toast.LENGTH_LONG).show();});
             }
         });

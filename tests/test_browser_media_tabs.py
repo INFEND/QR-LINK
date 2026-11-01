@@ -17,7 +17,7 @@ public final class BrowserMediaFoldersCheck {
     public static void main(String[] args) {
         check(BrowserMediaFolders.normalize("DCIM\\\\Camera//").equals("DCIM/Camera/"));
         check(BrowserMediaFolders.label("DCIM/Camera/").equals("Camera"));
-        check(BrowserMediaFolders.label("").equals("Внутренняя память"));
+        check(BrowserMediaFolders.label("").equals("Устройство"));
         List<String> locations=List.of("DCIM/Camera/","Movies/","DCIM/Camera/","Music/");
         var grouped=BrowserMediaFolders.group(locations,s->s);
         check(grouped.size()==3);
@@ -49,12 +49,12 @@ class MediaTabsTests(unittest.TestCase):
     def test_media_root_is_preexpanded_with_only_matching_content(self):
         src=BROWSER.read_text(encoding="utf-8")
         self.assertIn("BrowserMediaFolders.group(media,entry->entry.path)",src)
-        self.assertIn("expandedFolders.add(key)",src)
+        self.assertIn("expandedFolders.add(first.key())",src)
         self.assertIn("expandedChildren.put(key,grouped.children.get(key))",src)
         self.assertIn("folder.uri=item.getValue().get(0).uri",src)
-        self.assertIn("(e.mediaFolder&&e.uri!=null))addPreview(row,e,icon,tab)",src)
+        self.assertIn("if(!e.folder&&(tab==0||tab==1||tab==2||tab==3))addPreview(row,e,icon,tab)",src)
         self.assertIn("BrowserCategoryFilter.accepts(cat,name,mime)",src)
-        self.assertIn("Найдено изображений: ",src)
+        self.assertIn('"Файлов: "+e.mediaCount',src)
         self.assertIn("row.setContentDescription(e.folder?",src)
         self.assertIn("previewFrame(e,centered,tab)",src)
         self.assertIn("return frame;",src)

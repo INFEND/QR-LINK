@@ -449,7 +449,7 @@ public final class MainActivity extends Activity {
         r.setOnClickListener(click(()->control.setChecked(!control.isChecked())));
     }
     private void colorPalette(LinearLayout parent){
-        margin(parent,text("АКЦЕНТНЫЙ ЦВЕТ  ·  "+ACCENTS.length+" ВАРИАНТА",11,muted,true),12);
+        margin(parent,text("АКЦЕНТНЫЙ ЦВЕТ",11,muted,true),12);
         LinearLayout selection=row();selection.setPadding(dp(9),dp(9),dp(10),dp(9));
         selection.setBackground(shape(soft,stroke,13));margin(parent,selection,14);
         View dot=new View(this);dot.setBackground(shape(accent,0,12));
@@ -798,9 +798,11 @@ public final class MainActivity extends Activity {
         button(queue,"close","ОСТАНОВИТЬ ПЕРЕДАЧУ",true,()->start(TransferService.CANCEL_SEND));
         stopSendButton=queue.getChildAt(queue.getChildCount()-1);
         updateSendControls();
-        outlineButton(queue,"trash","Очистить очередь",()->new AlertDialog.Builder(this).setTitle("Очистить очередь?")
-            .setMessage("Исходные файлы не удалятся.").setNegativeButton("Отмена",null)
-            .setPositiveButton("Очистить",(d,w)->{FileCatalog.save(this,new ArrayList<>());updateQueue();}).show());
+        outlineButton(queue,"trash","Очистить очередь",()->{
+            if(TransferService.isSending){toast("Остановите передачу перед очисткой очереди");return;}
+            FileCatalog.save(this,new ArrayList<>());
+            updateQueue();toast("Очередь очищена. Исходные файлы сохранены.");
+        });
         LinearLayout extra=panel("Дополнительно","Совместимость с установленными SHAREit и ShareMe через стандартное Android-меню «Поделиться».","share");
         outlineButton(extra,"share","Передать через SHAREit / ShareMe",this::shareExternal);
     }
@@ -967,8 +969,14 @@ public final class MainActivity extends Activity {
             updatesSubtitle(),"receive",false);
         outlineButton(updater,"check","Проверить обновление",this::checkForUpdates);
         updatePreferences(updater);
-        LinearLayout about=section("about","Информация и безопасность","Версия, протокол, хранение файлов","info",false);
-        about.addView(text("QR LINK "+getAppVersion(),16,fg,true));space(about,9);
+        LinearLayout about=section("about","О приложении","Версия и безопасность передачи","info",false);
+        TextView aboutVersion=text("QR LINK v"+getAppVersion(),16,fg,true);
+        android.text.SpannableStringBuilder versionStyle=new android.text.SpannableStringBuilder(aboutVersion.getText());
+        versionStyle.setSpan(new android.text.style.ForegroundColorSpan(accent),0,2,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        int versionStart=versionStyle.toString().indexOf(" v");
+        if(versionStart>=0)versionStyle.setSpan(new android.text.style.ForegroundColorSpan(accent),versionStart+1,versionStyle.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        aboutVersion.setText(versionStyle);
+        about.addView(aboutVersion);space(about,9);
         about.addView(text("Android 10+  ·  Wi-Fi / Wi-Fi Direct  ·  соединение по QR",13,muted,false));space(about,13);
         about.addView(text("Данные передаются по HTTP без шифрования. Случайный ключ QR защищает от случайного подключения, но не скрывает содержимое передачи. Используйте доверенную локальную сеть.",13,fg,false));
         space(about,11);
