@@ -690,6 +690,7 @@ public final class FileBrowserActivity extends Activity {
             int scanned=0;
             while(c.moveToNext()){
                 if(cancellation.isCanceled())throw new OperationCanceledException();
+                try{
                 String documentId=c.getString(0),documentName=c.getString(1);
                 // A malformed provider row must not abort the whole authorised tree.
                 if(documentId==null||documentId.trim().isEmpty()||
@@ -709,6 +710,7 @@ public final class FileBrowserActivity extends Activity {
                 ArrayList<Entry> target=e.folder?directories:files;
                 if(target.size()<MAX_QUEUE)target.add(e);
                 else result.truncated=true;
+                }catch(RuntimeException invalidRow){continue;}
             }
             result.addAll(directories);
             result.addAll(files);
