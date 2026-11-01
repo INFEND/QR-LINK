@@ -65,6 +65,11 @@ public final class SelectionTotalsCheck {
         cache.put("f1",new BrowserSelectionTotals.FolderStats(Collections.emptyMap(),true));
         r=sum(cache,main,img);
         yes(!r.pending&&r.provisional&&!r.unknown&&r.bytes==22544384L);
+        // A transfer scan stopped by its queue limit may contain partial files.
+        // A verified folder-card total must win over that incomplete snapshot.
+        cache.put("f1",new BrowserSelectionTotals.FolderStats(exact,true));
+        r=sum(cache,main,img,other);
+        yes(r.provisional&&!r.unknown&&r.bytes==22544384L+2048L);
         cache.put("f1",new BrowserSelectionTotals.FolderStats(exact,false));
         BrowserSelectionTotals.Selection saf=folder("saf","content://documents/tree/root","_Archive",6000);
         r=sum(cache,saf,img); // Same path, different provider: must count separate sources.

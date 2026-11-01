@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.89",
+  "entries": [
+    {
+      "note": "[+] Размер и количество файлов в больших папках теперь подсчитываются без ограничения в 30 000 элементов",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "java.nio.file.Files.walkFileTree(selected,"
+    },
+    {
+      "note": "[=] Размер выделенной папки не пропадает, если полный список файлов пока недоступен",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "if(stats.unknown&&entry.provisionalBytes>=0){"
+    }
+  ]
+}

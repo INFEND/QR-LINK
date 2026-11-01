@@ -83,9 +83,9 @@ final class BrowserSelectionTotals {
                 if(entry.provisionalBytes>=0)provisional=true;
                 continue;
             }
-            if(stats.unknown&&stats.files.isEmpty()&&entry.provisionalBytes>=0){
-                // A storage permission/scan failure must not erase the real
-                // MediaStore estimate already shown on the folder card.
+            if(stats.unknown&&entry.provisionalBytes>=0){
+                // An incomplete transfer scan must not erase a verified card
+                // total or an existing MediaStore estimate.
                 // The ≈ symbol makes it clear that this is not an exact scan.
                 provisional=true;
                 total=add(total,entry.provisionalBytes);

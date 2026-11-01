@@ -44,11 +44,61 @@ public final class FolderCardStatsCheck {
             subprocess.run(["java", "-cp", tmp, "dev.xarkon.link.FolderCardStatsCheck"],
                            check=True, capture_output=True)
 
+
+    def test_streaming_local_folder_over_30000_files(self):
+        harness = r"""package dev.xarkon.link;
+import java.nio.file.*;
+import java.util.*;
+import java.util.stream.*;
+public final class FolderCardLargeCheck {
+    public static void main(String[] args) throws Exception {
+        Path root=Files.createTempDirectory("qr-link-card-");
+        try {
+            Path child=Files.createDirectories(root.resolve("nested"));
+            Files.write(child.resolve("one.bin"),new byte[]{1,2,3});
+            for(int i=0;i<30001;i++)Files.createFile(root.resolve("f"+i));
+            BrowserFolderCardStats stats=BrowserFolderCardStats.scanLocal(root,root);
+            if(!stats.complete||!stats.bytesKnown||stats.fileCount!=30002||stats.bytes!=3)
+                throw new AssertionError("Large local folder must be exact");
+            boolean denied=false;
+            try{BrowserFolderCardStats.scanLocal(root,child);}catch(java.io.IOException expected){denied=true;}
+            if(!denied)throw new AssertionError("Shared-storage boundary");
+            Path link=root.resolve("outside-link");
+            try{
+                Files.createSymbolicLink(link,child);
+                denied=false;
+                try{BrowserFolderCardStats.scanLocal(root,root);}
+                catch(java.io.IOException expected){denied=true;}
+                if(!denied)throw new AssertionError("Symbolic link must fail closed");
+            }catch(UnsupportedOperationException|SecurityException ignored){}
+        } finally {
+            try(Stream<Path> paths=Files.walk(root)){
+                paths.sorted(Comparator.reverseOrder()).forEach(p->{
+                    try{Files.deleteIfExists(p);}catch(java.io.IOException e){
+                        throw new RuntimeException(e);
+                    }
+                });
+            }
+        }
+    }
+}
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/"FolderCardLargeCheck.java"
+            source.write_text(harness,encoding="utf-8")
+            subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
+                            str(JAVA/"BrowserFolderCardStats.java"),str(source)],
+                           check=True,capture_output=True,text=True)
+            subprocess.run(["java","-cp",tmp,"dev.xarkon.link.FolderCardLargeCheck"],
+                           check=True,capture_output=True,text=True)
+
     def test_browser_uses_nonblocking_cached_metadata(self):
         source = (JAVA/"FileBrowserActivity.java").read_text(encoding="utf-8")
         self.assertIn("folderStatsIo=Executors.newFixedThreadPool(2)", source)
         self.assertIn("folderMetaViews.put(e.key(),meta);", source)
         self.assertIn("requestFolderSize(e);", source)
+        self.assertIn("BrowserFolderCardStats.scanLocal(", source)
+        self.assertIn("folderPreviewBytes(e)", source)
         self.assertIn("folderCardStats.put(key,stats);", source)
         self.assertIn("if(selected.containsKey(key))", source)
         self.assertIn("folderStatsIo.shutdownNow()", source)

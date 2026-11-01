@@ -1232,40 +1232,66 @@ public final class FileBrowserActivity extends Activity {
     private void requestFolderSize(Entry folder){
         if(!folder.folder)return;
         final String key=folder.key();
-        boolean needsSnapshot=selected.containsKey(key)&&!folderSizeSnapshots.containsKey(key);
+        final boolean snapshotRequested=selected.containsKey(key);
+        boolean needsSnapshot=snapshotRequested&&!folderSizeSnapshots.containsKey(key);
         if(!needsSnapshot&&folderCardStats.containsKey(key))return;
         if(!folderSizePending.add(key))return;
         try{folderStatsIo.execute(()->{
             LinkedHashMap<String,Long> lengths=new LinkedHashMap<>();
             boolean complete=true;
+            BrowserFolderCardStats direct=null;
             try{
-                ArrayList<FileCatalog.Item> files;
-                if(folder.mediaFolder){
-                    File root=Environment.getExternalStorageDirectory();
-                    files=FileCatalog.fromLocalFolder(this,new File(root,folder.path),folder.path);
-                }else if(folder.localFile!=null){
-                    files=FileCatalog.fromLocalFolder(this,folder.localFile,folder.path);
+                // Folder cards do not need thousands of URI/queue objects.
+                // The transfer selection still uses its own verified snapshot.
+                if(folder.localFile!=null&&!snapshotRequested){
+                    if(!hasLocalStorageAccess())
+                        throw new SecurityException("Нет доступа к внутренней памяти");
+                    direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
+                        Environment.getExternalStorageDirectory().getCanonicalFile().toPath());
                 }else{
-                    files=FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name);
-                }
-                for(FileCatalog.Item file:files){
-                    if(file.uri==null||file.uri.isEmpty()){complete=false;continue;}
-                    Long prior=lengths.putIfAbsent(file.uri,file.size);
-                    if(prior!=null&&prior.longValue()!=file.size)complete=false;
+                    ArrayList<FileCatalog.Item> files;
+                    if(folder.mediaFolder){
+                        File root=Environment.getExternalStorageDirectory();
+                        files=FileCatalog.fromLocalFolder(this,new File(root,folder.path),folder.path);
+                    }else if(folder.localFile!=null){
+                        files=FileCatalog.fromLocalFolder(this,folder.localFile,folder.path);
+                    }else{
+                        files=FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name);
+                    }
+                    for(FileCatalog.Item file:files){
+                        if(file.uri==null||file.uri.isEmpty()){complete=false;continue;}
+                        Long prior=lengths.putIfAbsent(file.uri,file.size);
+                        if(prior!=null&&prior.longValue()!=file.size)complete=false;
+                    }
                 }
             }catch(Exception error){complete=false;}
-            final BrowserFolderCardStats stats=BrowserFolderCardStats.summarize(lengths,complete);
+            final BrowserFolderCardStats stats=direct!=null?direct:
+                BrowserFolderCardStats.summarize(lengths,complete);
             ui.post(()->{
                 folderSizePending.remove(key);
                 if(isFinishing()||isDestroyed())return;
-                folderCardStats.put(key,stats);
-                if(selected.containsKey(key))
+                // A later bounded selection scan must not erase a valid card total.
+                if(stats.complete||!folderCardStats.containsKey(key))
+                    folderCardStats.put(key,stats);
+                if(snapshotRequested&&selected.containsKey(key))
                     folderSizeSnapshots.put(key,new BrowserSelectionTotals.FolderStats(lengths,!stats.bytesKnown));
                 TextView meta=folderMetaViews.get(key);
                 if(meta!=null)applyFolderMeta(meta,folder);
-                if(selected.containsKey(key))updateCount();
+                if(selected.containsKey(key)){
+                    updateCount();
+                    // Selection may have started while the card-only scan ran.
+                    if(!snapshotRequested&&!folderSizeSnapshots.containsKey(key))
+                        requestFolderSize(folder);
+                }
             });
         });}catch(RejectedExecutionException error){folderSizePending.remove(key);}
+    }
+    private long folderPreviewBytes(Entry entry){
+        if(!entry.folder)return -1;
+        if(entry.mediaFolder&&!mediaTruncated&&entry.mediaBytes>=0)
+            return entry.mediaBytes;
+        BrowserFolderCardStats card=folderCardStats.get(entry.key());
+        return card!=null&&card.bytesKnown?card.bytes:-1;
     }
     private void updateCount(){
         if(count==null)return;
@@ -1277,7 +1303,7 @@ public final class FileBrowserActivity extends Activity {
                 if(e.folder)folders++;
                 entries.add(new BrowserSelectionTotals.Selection(
                     e.key(),e.uri==null?"":e.uri.toString(),e.path,e.folder,
-                    e.size,e.mediaFolder&&!mediaTruncated?e.mediaBytes:-1));
+                    e.size,folderPreviewBytes(e)));
             }
             BrowserSelectionTotals.Result total=
                 BrowserSelectionTotals.sum(entries,folderSizeSnapshots);
