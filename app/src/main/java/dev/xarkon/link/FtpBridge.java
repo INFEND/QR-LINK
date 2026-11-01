@@ -35,22 +35,20 @@ public final class FtpBridge implements AutoCloseable {
         if(uri.getUserInfo()!=null){String[]parts=uri.getUserInfo().split(":",2);user=parts[0];if(parts.length>1)pass=parts[1];}
         int code=send("USER "+user);
         if(code==331){code=send("PASS "+pass);}
-        if(code!=230&&code!=202)throw new IOException("FTP: доступ не разрешён ("+code+")");
+        if(code!=230&&code!=202)throw serverFailure(code);
         expectResult(send("TYPE I"));
     }
     private String last;
     private int response()throws IOException{
-        String first=reader.readLine();if(first==null||first.length()<3)throw new EOFException("FTP отключился");
-        int code=Integer.parseInt(first.substring(0,3));String line=first;
-        if(first.length()>3&&first.charAt(3)=='-'){
-            while((line=reader.readLine())!=null){if(line.startsWith(first.substring(0,3)+" "))break;}
-            if(line==null)throw new EOFException();
-        }
-        last=line;return code;
+        FtpReplyReader.Reply reply=FtpReplyReader.read(reader);
+        last=reply.lastLine;return reply.code;
+    }
+    private static IOException serverFailure(int code){
+        return new IOException("FTP-сервер отклонил запрос (код "+code+"). Проверьте доступ и повторите попытку.");
     }
     private int send(String cmd)throws IOException{if(cmd.contains("\n")||cmd.contains("\r"))throw new IOException("Неверный FTP-путь");writer.write(cmd+"\r\n");writer.flush();return response();}
-    private void expect(int expect)throws IOException{int n=response();if(n!=expect)throw new IOException("FTP "+n+": "+last);}
-    private void expectResult(int code)throws IOException{if(code<200||code>=300)throw new IOException("FTP "+code+": "+last);}
+    private void expect(int expect)throws IOException{int n=response();if(n!=expect)throw serverFailure(n);}
+    private void expectResult(int code)throws IOException{if(code<200||code>=300)throw serverFailure(code);}
     private Socket passive()throws IOException{
         int code=send("EPSV");String ip=host;int dataport;
         if(code==229){
@@ -83,7 +81,7 @@ public final class FtpBridge implements AutoCloseable {
     public List<Entry> list(String dir)throws Exception{
         navigate(dir);List<Entry> result=new ArrayList<>();
         try(Socket data=passive()){
-            int code=send("LIST");if(code!=125&&code!=150)throw new IOException("FTP LIST: "+code);
+            int code=send("LIST");if(code!=125&&code!=150)throw serverFailure(code);
             try(BufferedReader r=new BufferedReader(new InputStreamReader(data.getInputStream(),StandardCharsets.UTF_8))){
                 String line;
                 while((line=r.readLine())!=null){
@@ -120,7 +118,7 @@ public final class FtpBridge implements AutoCloseable {
         long start=Util.now(),total=0;
         try(Socket data=passive()){
             int code=send("RETR "+file);
-            if(code!=125&&code!=150)throw new IOException("FTP RETR: "+code+" "+last);
+            if(code!=125&&code!=150)throw serverFailure(code);
             try(InputStream in=data.getInputStream();OutputStream out=context.getContentResolver().openOutputStream(dst,"w")){
                 if(out==null)throw new IOException("Нет доступа к загрузкам");
                 byte[]b=new byte[256*1024];int n;long lastUpdate=0;

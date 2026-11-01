@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.92",
+  "entries": [
+    {
+      "note": "[=] Ответы FTP-сервера ограничены по длине и проверяются перед обработкой",
+      "path": "app/src/main/java/dev/xarkon/link/FtpReplyReader.java",
+      "changed_line": "private static final int MAX_REPLY_LINES = 64;"
+    },
+    {
+      "note": "[=] Ошибки FTP показываются по-русски без служебных ответов сервера",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "private static IOException serverFailure(int code){"
+    }
+  ]
+}
