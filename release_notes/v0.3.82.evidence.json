@@ -1,0 +1,55 @@
+{
+  "base_tag": "v0.3.81",
+  "entries": [
+    {
+      "note": "[=] Небезопасные пути папок в медиатеке отклоняются.",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserMediaFolders.java",
+      "changed_line": "static boolean validRelativePath(String path) {"
+    },
+    {
+      "note": "[=] Ошибочные идентификаторы медиафайлов не скрывают действительные записи.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "catch(RuntimeException malformedId){continue;}"
+    },
+    {
+      "note": "[=] Повторные записи системного проводника не скрывают корректные файлы.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(!seenDocumentIds.add(documentId))continue;"
+    },
+    {
+      "note": "[=] Повторяющиеся файлы в выбранной папке добавляются в очередь только один раз.",
+      "path": "app/src/main/java/dev/xarkon/link/FileCatalog.java",
+      "changed_line": "if(!budget.seenFiles.add(childId))continue;"
+    },
+    {
+      "note": "[=] Файлы без имени в системном проводнике не добавляются под вымышленным названием.",
+      "path": "app/src/main/java/dev/xarkon/link/FileCatalog.java",
+      "changed_line": "rawName==null||rawName.trim().isEmpty())"
+    },
+    {
+      "note": "[=] Медиатека не показывает файлы без настоящего имени.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(rawMediaName==null||rawMediaName.trim().isEmpty())continue;"
+    },
+    {
+      "note": "[=] Некорректные сведения об отдельном файле не мешают открыть остальные файлы папки.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "}catch(RuntimeException invalidRow){continue;}"
+    },
+    {
+      "note": "[=] Список результатов поиска обновляется с плавным переходом.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "list.setAlpha(0.88f);"
+    },
+    {
+      "note": "[=] Сообщения проводника оформлены в цветах приложения вместо системных окон.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "private void showBanner(String message,boolean failure){"
+    },
+    {
+      "note": "[=] Ошибочные размер и дата медиафайла не скрывают исправную запись с тем же идентификатором.",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "}catch(RuntimeException invalidMediaMetadata){continue;}"
+    }
+  ]
+}
