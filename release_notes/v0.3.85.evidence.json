@@ -1,0 +1,50 @@
+{
+  "base_tag": "v0.3.84",
+  "entries": [
+    {
+      "note": "[=] Размер выбранной папки теперь рассчитывается в фоне и появляется в нижней панели",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "if(e.folder&&selected.containsKey(key))requestFolderSize(e);"
+    },
+    {
+      "note": "[=] При выборе папки вместе с файлами содержимое не учитывается повторно",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "if(sameSharedStorage(folder.uri,entry.uri)&&inside(folder.path,entry.path)){"
+    },
+    {
+      "note": "[=] До полного расчёта размер медиа-папки отображается с пометкой приблизительности",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "(total.provisional?\"≈ \":\"\")+Util.readable(total.bytes);"
+    },
+    {
+      "note": "[=] Общая Wi-Fi-сеть теперь выбирается для приёма раньше Wi-Fi Direct",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "String lan=WifiState.clientAddress(this);"
+    },
+    {
+      "note": "[=] Обновление QR-кода сохраняет подключение через общую Wi-Fi-сеть",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "status=\"Общая сеть Wi-Fi · готов к приёму\";refresh();return;"
+    },
+    {
+      "note": "[=] Запоздалый запуск Direct не переключает приёмник с уже доступного Wi-Fi",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "if(WifiState.clientConnected(this)){establishNetworkRoute();return;}"
+    },
+    {
+      "note": "[=] QR-код общей Wi-Fi-сети больше не подменяется параметрами Direct",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "boolean direct=!onLan&&TransferService.directReady;"
+    },
+    {
+      "note": "[=] Определение общей Wi-Fi-сети исключает VPN и проверяет локальный маршрут",
+      "path": "app/src/main/java/dev/xarkon/link/WifiState.java",
+      "changed_line": "caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)||"
+    },
+    {
+      "note": "[=] Ошибки сканирования QR и фоновой проверки обновлений стали понятнее",
+      "path": "app/src/main/java/dev/xarkon/link/BackgroundUpdateJob.java",
+      "changed_line": "String message=ErrorText.human(error);"
+    }
+  ]
+}
