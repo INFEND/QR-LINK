@@ -15,6 +15,7 @@ class WifiLanPriorityTests(unittest.TestCase):
     def test_station_ipv4_is_not_merely_enabled_radio(self):
         self.assertIn("public static String clientAddress(Context c)",self.wifi)
         self.assertIn("caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_WIFI_P2P)",self.wifi)
+        self.assertIn("caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)",self.wifi)
         self.assertIn("gw.isSiteLocalAddress()",self.wifi)
         self.assertIn("android.net.wifi.SupplicantState.COMPLETED",self.wifi)
         self.assertIn("return !clientAddress(c).isEmpty();",self.wifi)
