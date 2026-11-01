@@ -83,6 +83,11 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     }else if(!isReceiving){
                         networkHandler.post(()->onStartCommand(
                             new Intent(TransferService.this,TransferService.class).setAction(RECEIVE),0,0));
+                    }else if(WifiState.clientConnected(TransferService.this)&&
+                             (directReady||directStarting||hotspotReady||hotspotStarting)){
+                        // Reconnected to a router while receiving by P2P/AP: switch
+                        // to the shared Wi-Fi without restarting the receiver.
+                        establishNetworkRoute();
                     }else if(directReady&&!groupProbeRunning){
                         groupProbeRunning=true;
                         final int probeRoute=directRouteAttempt;
@@ -310,11 +315,20 @@ public final class TransferService extends Service implements TransferEngine.Eve
         });
         return START_NOT_STICKY;
     }
-    /** Direct is preferred even when both phones are connected to different routers.
-     * An existing system hotspot takes priority. LocalOnlyHotspot is the fallback.
+    /** Use an existing shared Wi-Fi first. Direct and LocalOnlyHotspot are
+     * fallback routes only when no real access-point station is present.
      */
     private void establishNetworkRoute(){
         if(!wantReceive||!isReceiving)return;
+        String lan=WifiState.clientAddress(this);
+        if(!lan.isEmpty()){
+            // ROTATE only changes the invitation key, never forces Direct.
+            // Invalidate pending P2P callbacks and remove obsolete groups.
+            nextDirectRoute();
+            directWifi.close();hotspot.stop();resetDirect();resetHotspot();
+            systemApHost="";detail="";
+            status="Общая сеть Wi-Fi · готов к приёму";refresh();return;
+        }
         String external=WifiState.hostedApAddress(this);
         if(!external.isEmpty()){
             // A system hotspot supersedes any pending Direct hosting callback.
