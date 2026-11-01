@@ -14,7 +14,10 @@ class NetworkHardening72(unittest.TestCase):
         self.assertIn('private void reconnectSavedPeer(){\n        // Switching routes cancels the previous outbound upload, not the queue.\n        engine.cancelSending();',S)
     def test_failed_old_upload_cannot_invalidate_new_peer(self):
         self.assertIn('final int sendAttempt=peerAttempts.snapshot();',S)
-        self.assertIn('if(peerAttempts.current(sendAttempt))peerVerified=false;',S)
+        self.assertIn('if(peerAttempts.current(sendAttempt)&&!WifiState.localTransferReady(this))',S)
+        # A local file error must not invalidate a healthy, newer authenticated peer.
+        body=S.split("final int sendAttempt=peerAttempts.snapshot();",1)[1].split("},true);",1)[0]
+        self.assertNotIn('if(peerAttempts.current(sendAttempt))peerVerified=false;',body)
     def test_shutdown_interrupts_uploads(self):
         self.assertIn('engine.cancelSending();engine.shutdown();',S.split('public void onDestroy()',1)[1])
     def test_executor_rejection_cannot_crash_network_watcher(self):
