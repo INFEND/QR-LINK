@@ -62,6 +62,7 @@ public final class FileBrowserActivity extends Activity {
     private String mediaPath="",folderPath="",folderId="";
     private Uri tree;
     private boolean busy=false,storagePermissionRequested=false;
+    private boolean previousHiddenPreference=false;
     private boolean safTruncated=false,mediaTruncated=false;
     // Cancel obsolete provider queries when navigating quickly between tabs/folders.
     private CancellationSignal activeQuery;
@@ -112,10 +113,13 @@ public final class FileBrowserActivity extends Activity {
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR:0);
     }
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);theme();buildUi();applyInsets();switchTab(0);
+        super.onCreate(state);theme();previousHiddenPreference=showHiddenFiles();buildUi();applyInsets();switchTab(0);
     }
     @Override protected void onResume(){
         super.onResume();
+        if(previousHiddenPreference!=showHiddenFiles()){
+            previousHiddenPreference=showHiddenFiles();load();
+        }
         if(storagePermissionRequested){
             storagePermissionRequested=false;
             if(list!=null){
@@ -163,6 +167,15 @@ public final class FileBrowserActivity extends Activity {
             return insets;
         });
         root.requestApplyInsets();
+    }
+    private boolean showHiddenFiles(){
+        return getSharedPreferences("settings",0).getBoolean("browser_show_hidden",false);
+    }
+    private static boolean hiddenPath(String path){
+        if(path==null)return false;
+        for(String part:path.replace('\\','/').split("/"))
+            if(part.startsWith(".")&&!part.equals(".")&&!part.equals(".."))return true;
+        return false;
     }
     private int browserStyle(){return Math.max(0,Math.min(2,
         getSharedPreferences("settings",0).getInt("browser_style",2)));}
@@ -411,6 +424,7 @@ public final class FileBrowserActivity extends Activity {
                 String name=Util.safeName(c.getString(1));
                 String mime=c.getString(4);
                 if(!BrowserCategoryFilter.accepts(cat,name,mime))continue;
+                if(!showHiddenFiles()&&(hiddenPath(name)||hiddenPath(path)))continue;
                 if(result.size()>=MAX_QUEUE){
                     if(complete)throw new IllegalStateException(
                         "В папке больше 30000 файлов. Выберите меньшую папку или отдельные файлы.");
@@ -505,6 +519,7 @@ public final class FileBrowserActivity extends Activity {
                 if(!file.getCanonicalPath().startsWith(rootPath+File.separator))continue;
                 Entry e=new Entry();e.localFile=file;e.uri=Uri.fromFile(file);
                 e.name=Util.safeName(file.getName());e.folder=isDir;
+                if(!showHiddenFiles()&&hiddenPath(e.name))continue;
                 e.path=isDir?(parent.isEmpty()?e.name:parent+"/"+e.name):parent;
                 e.size=isDir?-1:file.length();e.date=file.lastModified()/1000;
                 e.mime=isDir?DocumentsContract.Document.MIME_TYPE_DIR:
@@ -568,6 +583,7 @@ public final class FileBrowserActivity extends Activity {
                 if(cancellation.isCanceled())throw new OperationCanceledException();
                 if(++scanned>MAX_SAF_SCAN){result.truncated=true;break;}
                 Entry e=new Entry();e.docId=c.getString(0);e.name=Util.safeName(c.getString(1));
+                if(!showHiddenFiles()&&hiddenPath(e.name))continue;
                 e.mime=c.getString(2);e.folder=DocumentsContract.Document.MIME_TYPE_DIR.equals(e.mime);
                 e.size=c.isNull(3)?-1:c.getLong(3);e.date=c.isNull(4)?0:c.getLong(4)/1000;
                 e.tree=rootTree;e.uri=DocumentsContract.buildDocumentUriUsingTree(rootTree,e.docId);
