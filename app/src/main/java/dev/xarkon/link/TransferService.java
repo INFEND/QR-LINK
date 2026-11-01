@@ -86,7 +86,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     }else if(directReady&&!groupProbeRunning){
                         groupProbeRunning=true;
                         final int probeRoute=directRouteAttempt;
-                        directWifi.confirmHosting(directSsid,valid->{
+                        directWifi.confirmHosting(directSsid,directHost,valid->{
                             if(!routeActive(probeRoute))return;
                             groupProbeRunning=false;
                             if(!valid&&directReady){

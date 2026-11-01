@@ -40,6 +40,8 @@ public final class AddressPolicyCheck {
 
     def test_host_confirm_requires_live_interface_address(self):
         self.assertIn("!localIp(group.getInterface()).isEmpty()",DIRECT)
+        self.assertIn("localIp(group.getInterface()).equals(advertisedHost)",DIRECT)
+        self.assertIn("directWifi.confirmHosting(directSsid,directHost,valid->{",SERVICE)
 
     def test_driver_errors_are_localized(self):
         self.assertNotIn("e.getMessage()",DIRECT)

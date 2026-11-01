@@ -82,12 +82,13 @@ public final class DirectWifi {
     }
     public boolean available(){return check().isEmpty();}
     /** Verify group ownership, instead of treating a cached callback as connected. */
-    public void confirmHosting(String ssid,java.util.function.Consumer<Boolean> cb){
+    public void confirmHosting(String ssid,String advertisedHost,java.util.function.Consumer<Boolean> cb){
         if(manager==null||channel==null||!WifiState.radioOn(context)){cb.accept(false);return;}
         try{
             manager.requestGroupInfo(channel,group->cb.accept(group!=null&&
                 group.isGroupOwner()&&ssid!=null&&ssid.equals(group.getNetworkName())&&
-                !localIp(group.getInterface()).isEmpty()));
+                !localIp(group.getInterface()).isEmpty()&&
+                localIp(group.getInterface()).equals(advertisedHost)));
         }catch(Exception error){cb.accept(false);}
     }
     private String check(){
