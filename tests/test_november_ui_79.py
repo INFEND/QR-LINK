@@ -41,8 +41,10 @@ class November79Tests(unittest.TestCase):
     def test_breadcrumb_and_long_names(self):
         self.assertIn('breadcrumb().replace(" › "," > ")',self.browser)
         self.assertIn("crumb.setSpan(new ForegroundColorSpan(accent)",self.browser)
-        self.assertIn("TextUtils.TruncateAt.MARQUEE",self.browser)
-        self.assertIn("setMarqueeRepeatLimit(-1)",self.browser)
+        self.assertIn("new LoopingNameView(this)",self.browser)
+        scrolling=(JAVA/"LoopingNameView.java").read_text(encoding="utf-8")
+        self.assertIn("ValueAnimator.ofFloat(0f,0f,1f,1f,0f)",scrolling)
+        self.assertIn("ValueAnimator.INFINITE",scrolling)
 
     def test_animated_folder_chevrons(self):
         self.assertIn('new UiIcon(this,"chevron",accent)',self.browser)
