@@ -12,15 +12,16 @@ from urllib.parse import quote
 from release_exceptions import declared_completions
 
 MAX_RELEASE_NOTES_CHARS = 100_000
-MIN_NEW_RELEASE_CHANGES = 10
+MIN_NEW_RELEASE_CHANGES = 10  # History only: v0.3.78 through v0.3.84
 MIN_POLICY_VERSION = (0, 3, 78)
 
 def requires_ten_changes(version):
+    """Historical release-size rule; no minimum for v0.3.85 onward."""
     try:
         parts = tuple(int(part) for part in version.split("."))
     except ValueError:
         raise SystemExit("Invalid release notes version: " + version)
-    return parts >= MIN_POLICY_VERSION
+    return MIN_POLICY_VERSION <= parts < (0, 3, 85)
 
 def load_release_notes(version):
     filename = Path("release_notes") / f"v{version}.txt"
