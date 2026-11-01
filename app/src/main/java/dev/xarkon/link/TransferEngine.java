@@ -527,7 +527,7 @@ public final class TransferEngine {
             while(remaining>0){
                 int n=in.read(buffer,0,(int)Math.min(buffer.length,remaining));
                 if(n<0)throw new EOFException("Полученный файл неполный");
-                if(n==0)continue;
+                if(n==0)throw new IOException("Не удалось прочитать содержимое файла");
                 digest.update(buffer,0,n);remaining-=n;
             }
             if(in.read()!=-1)throw new IOException("Размер полученного файла изменился");
@@ -545,7 +545,7 @@ public final class TransferEngine {
                     throw new IOException("Проверка файла остановлена");
                 int n=in.read(buffer,0,(int)Math.min(buffer.length,remaining));
                 if(n<0)throw new EOFException("Размер исходного файла изменился");
-                if(n==0)continue;
+                if(n==0)throw new IOException("Исходный файл не отвечает при чтении");
                 digest.update(buffer,0,n);remaining-=n;
             }
             if(in.read()!=-1)throw new IOException("Размер исходного файла изменился");
@@ -611,6 +611,8 @@ public final class TransferEngine {
     }
     private void sendOne(String host,int port,String userPin,FileCatalog.Item job,int lanes,
                          boolean verifySha,boolean verifyFileSha)throws Exception{
+        if(!TransferFileIdentity.validId(job.id))
+            throw new IOException("Идентификатор файла повреждён. Добавьте файл в очередь заново.");
         Uri sourceUri=Uri.parse(job.uri);
         long actual=Util.size(context,sourceUri);
         if(actual>=0&&actual!=job.size)

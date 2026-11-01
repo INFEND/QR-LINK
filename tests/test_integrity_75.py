@@ -36,6 +36,7 @@ public final class CheckIdentity75 {
         self.assertIn('String fileHash=j.optString("fileSha256","");',ENGINE)
         self.assertIn('if(verifyFileSha)offer.put("fileSha256",sourceHash);',ENGINE)
         self.assertIn('TransferFileIdentity.safeMime(job.mime)',ENGINE)
+        self.assertIn('if(!TransferFileIdentity.validId(job.id))',ENGINE)
 
     def test_sender_fingerprints_before_offer_and_after_send(self):
         body=ENGINE.split("private void sendOne(",1)[1].split("private void sendChunk(",1)[0]
@@ -52,6 +53,8 @@ public final class CheckIdentity75 {
         body=ENGINE.split("private void complete(",1)[1].split("public void send(",1)[0]
         self.assertLess(body.index("hashReceivedFile(inc)"),body.index("IS_PENDING,0"))
         self.assertIn('throw new IOException("Контрольная сумма файла не совпала.',body)
+        self.assertIn('if(n==0)throw new IOException("Не удалось прочитать содержимое файла")',ENGINE)
+        self.assertIn('if(n==0)throw new IOException("Исходный файл не отвечает при чтении")',ENGINE)
 
     def test_queue_rejects_duplicate_ids_across_different_uris(self):
         body=CATALOG.split("public static synchronized void append(",1)[1].split("public static synchronized void setStatus(",1)[0]
