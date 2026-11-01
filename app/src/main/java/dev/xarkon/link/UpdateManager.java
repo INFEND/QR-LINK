@@ -54,7 +54,7 @@ public final class UpdateManager {
             sizeBytes=j.optLong("sizeBytes",-1L);
             if(versionCode<1||!sha256.matches("[0-9a-f]{64}")||
                 !versionName.matches("[A-Za-z0-9._-]{1,40}")||
-                sizeBytes==0||sizeBytes < -1||sizeBytes>MAX_APK||notes.length()>6000)
+                sizeBytes==0||sizeBytes < -1||sizeBytes>MAX_APK||notes.length()>100_000)
                 throw new IOException("Недействительные метаданные OTA");
             if(!OtaUrlPolicy.trustedApk(apkUrl,versionName))
                 throw new IOException("APK размещён вне официального канала");
@@ -126,7 +126,7 @@ public final class UpdateManager {
             try(InputStream in=c.getInputStream()){
                 byte[] b=new byte[8192];int n;
                 while((n=in.read(b))!=-1){
-                    if(memory.size()+n>64*1024)throw new IOException("Ответ сервера слишком большой.");
+                    if(memory.size()+n>512*1024)throw new IOException("Ответ сервера слишком большой.");
                     memory.write(b,0,n);
                 }
             }
