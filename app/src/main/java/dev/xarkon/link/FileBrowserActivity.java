@@ -72,7 +72,7 @@ public final class FileBrowserActivity extends Activity {
     // Cancel obsolete provider queries when navigating quickly between tabs/folders.
     private CancellationSignal activeQuery;
     private final Handler ui=new Handler(Looper.getMainLooper());
-    // Coalesce rapid keystrokes instead of sorting and rebuilding the page each time.
+    // Coalesce all keystrokes within one display frame, without a 45 ms debounce.
     private final Runnable searchRefresh=()->{page=0;render();};
 
     private static final class Entry {
@@ -306,8 +306,10 @@ public final class FileBrowserActivity extends Activity {
         search.addTextChangedListener(new TextWatcher(){
             public void beforeTextChanged(CharSequence s,int start,int c,int after){}
             public void onTextChanged(CharSequence s,int start,int before,int count){
-                ui.removeCallbacks(searchRefresh);
-                ui.postDelayed(searchRefresh,45);
+                // Render on the next display frame. Never schedule a separate
+                // full list rebuild for every character of a fast paste.
+                list.removeCallbacks(searchRefresh);
+                list.postOnAnimation(searchRefresh);
             }
             public void afterTextChanged(Editable e){}
         });
@@ -1306,7 +1308,7 @@ public final class FileBrowserActivity extends Activity {
         ++serial;if(activeQuery!=null)activeQuery.cancel();
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();
-        ui.removeCallbacks(searchRefresh);
+        if(list!=null)list.removeCallbacks(searchRefresh);
         io.shutdownNow();previews.shutdownNow();previewWaiters.clear();
         previewCache.evictAll();super.onDestroy();
     }
