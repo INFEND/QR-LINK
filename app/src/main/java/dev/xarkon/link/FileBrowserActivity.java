@@ -491,6 +491,7 @@ public final class FileBrowserActivity extends Activity {
         String[] args=normalizedPrefix.isEmpty()?null:
             new String[]{BrowserMediaQuery.likeArgument(normalizedPrefix)};
         int scanned=0;
+        HashSet<Long> seenMediaIds=new HashSet<>();
         try(Cursor c=getContentResolver().query(base,cols,selection,args,
                 MediaStore.MediaColumns.DATE_MODIFIED+" DESC",cancellation)){
             if(c==null)throw new IllegalStateException("Медиатека недоступна");
@@ -499,6 +500,11 @@ public final class FileBrowserActivity extends Activity {
                 String path=c.isNull(5)?"":c.getString(5);
                 // Verify provider results even if it ignores the selection.
                 if(!BrowserMediaQuery.matches(path,normalizedPrefix))continue;
+                // Some providers return duplicate or null IDs after a media rescan.
+                // Never count the same file twice or create a synthetic ID=0 URI.
+                if(c.isNull(0))continue;
+                long mediaId=c.getLong(0);
+                if(mediaId<=0||!seenMediaIds.add(mediaId))continue;
                 if(!complete&&++scanned>MAX_MEDIA_SCAN){result.truncated=true;break;}
                 String name=Util.safeName(c.getString(1));
                 String mime=c.getString(4);
@@ -510,7 +516,7 @@ public final class FileBrowserActivity extends Activity {
                     result.truncated=true;break;
                 }
                 Entry e=new Entry();
-                e.uri=ContentUris.withAppendedId(base,c.getLong(0));
+                e.uri=ContentUris.withAppendedId(base,mediaId);
                 e.name=name;e.size=c.isNull(2)?-1:c.getLong(2);
                 e.date=c.isNull(3)?0:c.getLong(3);
                 e.mime=mime;e.path=BrowserMediaFolders.normalize(path);
