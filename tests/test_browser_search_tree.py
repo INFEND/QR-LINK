@@ -31,6 +31,15 @@ public class BrowserSearchTreeCheck {
         equal(BrowserSearchTree.filter(rows,r->r.depth,r->r.name,"track"),
             "Music","track.mp3");
         equal(BrowserSearchTree.filter(rows,r->r.depth,r->r.name,"absent"));
+        // A deep, 30k-item folder tree must keep every descendant and
+        // ancestor without repeatedly walking all 24 levels per hit.
+        ArrayList<Row> large=new ArrayList<>();
+        for(int i=0;i<24;i++)large.add(new Row(i==0?"TARGET":"folder"+i,i));
+        for(int i=0;i<30000;i++)large.add(new Row("image"+i+".jpg",24));
+        List<Row> matched=BrowserSearchTree.filter(large,r->r.depth,r->r.name,"TARGET");
+        if(matched.size()!=large.size())throw new AssertionError("Missing descendants");
+        List<Row> leaf=BrowserSearchTree.filter(large,r->r.depth,r->r.name,"image29999");
+        if(leaf.size()!=25)throw new AssertionError("Missing nested ancestors");
         equal(BrowserSearchTree.filter(rows,r->r.depth,r->r.name,""),"Camera",
             "portrait.jpg","nested","hidden.jpg","Music","track.mp3");
     }

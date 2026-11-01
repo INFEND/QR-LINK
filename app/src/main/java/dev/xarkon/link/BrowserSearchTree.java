@@ -30,7 +30,14 @@ final class BrowserSearchTree {
                 ancestorMatches.get(ancestorMatches.size()-1);
             if(matched||insideMatchingFolder){
                 keep[i]=true;
-                for(int parent:ancestors)keep[parent]=true;
+                // Every ancestor becomes marked at most once across the whole
+                // result. If an ancestor is already marked, its parents are too.
+                // This avoids O(matches * nesting depth) on huge media trees.
+                for(int j=ancestors.size()-1;j>=0;j--){
+                    int parent=ancestors.get(j);
+                    if(keep[parent])break;
+                    keep[parent]=true;
+                }
             }
             // A matching expanded folder should expose its files too, rather
             // than showing an apparently empty folder while search is active.
