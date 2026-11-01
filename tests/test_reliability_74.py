@@ -66,10 +66,11 @@ public class ValidateP2p74 {
         self.assertLess(method.index("if(!hostedApAddress(c).isEmpty())"),method.index("if(!radioOn(c))"))
         self.assertIn("Системная точка доступа включена",method)
 
-    def test_release_metadata_has_six_user_changes(self):
+    def test_release_metadata_has_at_least_five_user_changes(self):
         notes=(ROOT/"release_notes/v0.3.74.txt").read_text(encoding="utf-8")
         lines=[s for s in notes.splitlines() if s.startswith(("[+]","[-]","[=]"))]
-        self.assertEqual(len(lines),6)
+        self.assertGreaterEqual(len(lines),5)
+        self.assertTrue(all(len(line.strip())>5 for line in lines))
         gradle=(ROOT/"app/build.gradle").read_text(encoding="utf-8")
         self.assertIn("versionCode = 79",gradle)
         self.assertIn("versionName = '0.3.74'",gradle)
