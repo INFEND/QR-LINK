@@ -20,6 +20,17 @@ final class BrowserMediaFolders {
         return clean.length()==0?"":clean.append('/').toString();
     }
 
+    /** Reject MediaStore paths that are absolute or escape shared storage. */
+    static boolean validRelativePath(String path) {
+        if(path==null)return false;
+        String value=path.replace('\\','/');
+        if(value.startsWith("/")||value.indexOf('\0')>=0||
+           value.matches("(?i)^[a-z]:/.*"))return false;
+        for(String part:value.split("/",-1))
+            if(part.equals(".")||part.equals(".."))return false;
+        return true;
+    }
+
     static String label(String path) {
         String normalized=normalize(path);
         if(normalized.isEmpty())return "Устройство";
