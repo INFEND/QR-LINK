@@ -50,6 +50,11 @@ public final class SelectionTotalsCheck {
         cache.put("missing",new BrowserSelectionTotals.FolderStats(Collections.emptyMap(),true));
         r=sum(cache,missing);
         yes(!r.pending&&r.unknown);
+        // A readable MediaStore estimate survives provider permission failure.
+        cache.put("f1",new BrowserSelectionTotals.FolderStats(Collections.emptyMap(),true));
+        r=sum(cache,main,img);
+        yes(!r.pending&&r.provisional&&!r.unknown&&r.bytes==22544384L);
+        cache.put("f1",new BrowserSelectionTotals.FolderStats(exact,false));
         BrowserSelectionTotals.Selection saf=folder("saf","content://documents/tree/root","_Archive",6000);
         r=sum(cache,saf,img); // Same path, different provider: must count separate sources.
         yes(r.bytes==6000+215756L);
