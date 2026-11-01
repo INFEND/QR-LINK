@@ -16,16 +16,26 @@ final class BrowserSearchTree {
         String needle=query.trim().toLowerCase(Locale.ROOT);
         boolean[] keep=new boolean[rows.size()];
         ArrayList<Integer> ancestors=new ArrayList<>(20);
+        ArrayList<Boolean> ancestorMatches=new ArrayList<>(20);
         for(int i=0;i<rows.size();i++){
             T row=rows.get(i);
             int level=Math.max(0,Math.min(depth.applyAsInt(row),ancestors.size()));
-            while(ancestors.size()>level)ancestors.remove(ancestors.size()-1);
+            while(ancestors.size()>level){
+                ancestors.remove(ancestors.size()-1);
+                ancestorMatches.remove(ancestorMatches.size()-1);
+            }
             String title=name.apply(row);
-            if(title!=null&&title.toLowerCase(Locale.ROOT).contains(needle)){
+            boolean matched=title!=null&&title.toLowerCase(Locale.ROOT).contains(needle);
+            boolean insideMatchingFolder=!ancestorMatches.isEmpty()&&
+                ancestorMatches.get(ancestorMatches.size()-1);
+            if(matched||insideMatchingFolder){
                 keep[i]=true;
                 for(int parent:ancestors)keep[parent]=true;
             }
+            // A matching expanded folder should expose its files too, rather
+            // than showing an apparently empty folder while search is active.
             ancestors.add(i);
+            ancestorMatches.add(matched||insideMatchingFolder);
         }
         ArrayList<T> result=new ArrayList<>();
         for(int i=0;i<rows.size();i++)if(keep[i])result.add(rows.get(i));
