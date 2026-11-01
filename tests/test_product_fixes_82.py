@@ -18,7 +18,8 @@ class Browser82(unittest.TestCase):
   self.assertIn("if(!seenDocumentIds.add(documentId))continue;",code)
  def test_search_coalesced_with_transition(self):
   self.assertIn("list.postOnAnimation(searchRefresh);",BROWSER)
-  self.assertIn("list.setAlpha(0.88f);",BROWSER)
+  self.assertIn("list.setAlpha(0.92f);",BROWSER)
+  self.assertIn("TransitionManager.beginDelayedTransition(scroll,new ChangeBounds().setDuration(150))",BROWSER)
   self.assertIn("list.animate().alpha(1f).setDuration(140).start();",BROWSER)
  def test_browser_notices_have_theme_and_lifecycle(self):
   self.assertIn("private void showBanner(String message,boolean failure)",BROWSER)
