@@ -66,6 +66,9 @@ public final class CheckSessionKey76 {
         self.assertIn('final int probeRoute=directRouteAttempt;',SERVICE)
         self.assertIn('if(!routeActive(probeRoute))return;',SERVICE)
 
+    def test_receiver_completion_error_is_localized(self):
+        self.assertIn('"Не удалось завершить приём "+inc.name+": "+ErrorText.human(failure)',ENGINE)
+
     def test_receiver_startup_error_is_localized(self):
         self.assertIn('note("Не удалось запустить приём: "+ErrorText.human(e))',SERVICE)
         self.assertNotIn('note("Не удалось запустить приём: "+e.getMessage())',SERVICE)

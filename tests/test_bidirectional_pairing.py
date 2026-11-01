@@ -9,11 +9,11 @@ SERVICE=(J/"TransferService.java").read_text(encoding="utf-8")
 MAIN=(J/"MainActivity.java").read_text(encoding="utf-8")
 class BidirectionalPairingTests(unittest.TestCase):
     def test_pair_endpoint_authenticated_and_bounded(self):
-        self.assertLess(ENGINE.index('sessionKey.equals(heads.get("x-xarkon-key"))'),
+        self.assertLess(ENGINE.index('SessionKeyPolicy.matches(sessionKey,heads.get("x-xarkon-key"))'),
                         ENGINE.index('path.equals("/pair")'))
         section=ENGINE.split('path.equals("/pair")',1)[1].split('path.equals("/offer")',1)[0]
         for needle in ("contentLength>2048","QrInputValidation.isLocalIpv4(from)",
-                       'reverseKey.matches("[0-9a-f]{64}")',
+                       'SessionKeyPolicy.valid(reverseKey)',
                        "events.reversePair(from,reverseKey)"):
             self.assertIn(needle,section)
         self.assertNotIn('request.optString("host"',section)

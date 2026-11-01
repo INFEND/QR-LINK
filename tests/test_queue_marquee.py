@@ -16,7 +16,7 @@ class QueueMarqueeTests(unittest.TestCase):
     def test_system_hotspot_invalidates_direct_attempt(self):
         src=(JAVA/"TransferService.java").read_text(encoding="utf-8")
         fragment=src[src.index("if(!external.isEmpty()){"):src.index("systemApHost=external;")]
-        self.assertIn("++directRouteAttempt;",fragment)
+        self.assertIn("nextDirectRoute();",fragment)
         self.assertIn("directWifi.close();hotspot.stop();resetDirect();resetHotspot();",fragment)
 
 if __name__=="__main__":

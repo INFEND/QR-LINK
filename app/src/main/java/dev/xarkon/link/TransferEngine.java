@@ -594,7 +594,7 @@ public final class TransferEngine {
                 inc.completed=true;
                 try{persist(inc);}catch(IOException failure){inc.completed=false;throw failure;}
             }catch(Exception failure){
-                throw new IOException("Не удалось завершить приём "+inc.name+": "+failure.getMessage(),failure);
+                throw new IOException("Не удалось завершить приём "+inc.name+": "+ErrorText.human(failure),failure);
             }
         }
         events.note("Получено: "+inc.name+" ("+Util.readable(inc.size)+")");

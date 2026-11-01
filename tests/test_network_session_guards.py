@@ -27,7 +27,7 @@ class NetworkSessionGuards(unittest.TestCase):
         self.assertIn('!pairedQr.equals(saved.getString("pair_qr",""))',S)
     def test_restart_isolates_receiver_sockets(self):
         for item in ("private volatile long receiveEpoch;","final ServerSocket listening=socket;",
-                     "while(alive&&epoch==receiveEpoch)","handlers.execute(()->serve(s,epoch));",
+                     "while(alive&&epoch==receiveEpoch)","handlers.execute(()->{try{serve(s,epoch);}finally{activeConnections.remove(s);}});",
                      "private void serve(Socket sock,long epoch)","++receiveEpoch;alive=false;",
                      "if(!alive||epoch!=receiveEpoch)throw new IOException"):
             self.assertIn(item,E)
