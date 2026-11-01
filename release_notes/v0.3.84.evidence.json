@@ -1,0 +1,26 @@
+{
+  "base_tag": "v0.3.83",
+  "completed_tasks": [
+    "U06"
+  ],
+  "entries": [
+    {
+      "note": "[=] Поиск по большим папкам больше не сортирует файлы заново при каждом символе",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "List<Entry> rows=searchIndex.get(sort,searchClosedMedia,()->{",
+      "task_id": "U06"
+    },
+    {
+      "note": "[+] Список результатов поиска плавно меняет высоту",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "TransitionManager.beginDelayedTransition(scroll,new ChangeBounds().setDuration(150));",
+      "task_id": "U06"
+    },
+    {
+      "note": "[=] Ускорен поиск по названиям файлов и приложений",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "String foldedName(){",
+      "task_id": "U06"
+    }
+  ]
+}
