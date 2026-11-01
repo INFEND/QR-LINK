@@ -24,6 +24,8 @@ public final class FileCatalog {
     private static final class ScanBudget {
         int entries;
         final HashSet<String> visited=new HashSet<>();
+        // SAF providers may repeat a document in a folder or across descendants.
+        final HashSet<String> seenFiles=new HashSet<>();
         void step(){
             if(Thread.currentThread().isInterrupted())
                 throw new CancellationException("Выбор папки отменён");
@@ -257,6 +259,7 @@ public final class FileCatalog {
                 if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime))collect(c,tree,childId,path+"/"+name,result,depth+1,budget);
                 else {
                     Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,childId);
+                    if(!budget.seenFiles.add(childId))continue;
                     // The directory cursor already contains all metadata. Avoid
                     // three extra ContentResolver queries per file (name/size/MIME).
                     Item it=new Item();
