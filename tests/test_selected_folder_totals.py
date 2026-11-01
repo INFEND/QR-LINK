@@ -44,6 +44,17 @@ public final class SelectionTotalsCheck {
         cache.put("f2",new BrowserSelectionTotals.FolderStats(exact,false));
         r=sum(cache,main,duplicate,img,other);
         yes(r.bytes==215756L+4048L+2048L);
+        // Parent + nested child is one folder, even while both sizes are pending.
+        BrowserSelectionTotals.Selection nested=folder("nested",
+            "file:///storage/emulated/0/_Archive/Sub","_Archive/Sub",4096);
+        r=sum(Collections.emptyMap(),main,nested);
+        yes(r.pending&&r.provisional&&r.bytes==22544384L);
+        r=sum(cache,main,nested);
+        yes(!r.pending&&!r.provisional&&r.bytes==215756L+4048L);
+        // Same selected file URI from two categories must not inflate the total.
+        BrowserSelectionTotals.Selection repeated=file("repeated",img.uri,img.path,img.bytes);
+        r=sum(Collections.emptyMap(),img,repeated,other);
+        yes(r.bytes==215756L+2048L);
         BrowserSelectionTotals.Selection missing=folder("missing","file:///storage/emulated/0/Unknown","Unknown",-1);
         r=sum(cache,missing);
         yes(r.pending&&!r.provisional);
@@ -84,6 +95,9 @@ class SelectionTotalsTests(unittest.TestCase):
         self.assertIn("FileCatalog.fromLocalFolder(this,new File(root,folder.path),folder.path)",source)
         self.assertIn("FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name)",source)
         self.assertNotIn('folders>0||unknown>0?"неизвестен"',source)
+        totals=(JAVA/"BrowserSelectionTotals.java").read_text(encoding="utf-8")
+        self.assertIn("coveredByAnotherFolder(entry,all,i)",totals)
+        self.assertIn("!countedFiles.add(entry.uri)",totals)
 
 
 if __name__=="__main__":

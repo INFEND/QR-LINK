@@ -50,14 +50,32 @@ final class BrowserSelectionTotals {
     private static long add(long a,long b){
         return b<0||Long.MAX_VALUE-a<b?Long.MAX_VALUE:a+b;
     }
+    /** A selected parent already represents every nested shared-storage folder.
+     * Ignore overlapping child estimates, including while the parent is loading.
+     */
+    private static boolean coveredByAnotherFolder(Selection folder,List<Selection> all,int index){
+        for(int j=0;j<all.size();j++){
+            if(j==index)continue;
+            Selection parent=all.get(j);
+            if(!parent.folder)continue;
+            boolean sameSource=sameSharedStorage(parent.uri,folder.uri)||
+                (!parent.uri.isEmpty()&&parent.uri.equals(folder.uri));
+            if(!sameSource||!inside(parent.path,folder.path))continue;
+            if(!parent.path.equals(folder.path)||j<index)return true;
+        }
+        return false;
+    }
     static Result sum(Collection<Selection> selected,Map<String,FolderStats> snapshots){
+        ArrayList<Selection> all=new ArrayList<>(selected);
         HashSet<String> covered=new HashSet<>();
         ArrayList<Selection> provisionalFolders=new ArrayList<>();
         boolean pending=false,unknown=false,provisional=false;
         long total=0;
         // Count exact folder contents first; deduplicate shared files by URI.
-        for(Selection entry:selected){
+        for(int i=0;i<all.size();i++){
+            Selection entry=all.get(i);
             if(!entry.folder)continue;
+            if(coveredByAnotherFolder(entry,all,i))continue;
             FolderStats stats=snapshots.get(entry.key);
             if(stats==null){
                 pending=true;
@@ -85,9 +103,11 @@ final class BrowserSelectionTotals {
         for(Selection entry:provisionalFolders){
             if(entry.provisionalBytes>=0)total=add(total,entry.provisionalBytes);
         }
-        for(Selection entry:selected){
+        HashSet<String> countedFiles=new HashSet<>();
+        for(Selection entry:all){
             if(entry.folder)continue;
             if(covered.contains(entry.uri))continue;
+            if(!entry.uri.isEmpty()&&!countedFiles.add(entry.uri))continue;
             // A media file has a content://media URI while a recursive local
             // folder scan returns file:// URIs. Both represent the same shared
             // storage file. Relative paths prevent this cross-provider double

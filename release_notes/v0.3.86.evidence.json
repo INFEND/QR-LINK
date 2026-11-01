@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.85",
+  "entries": [
+    {
+      "note": "[=] Выбор родительской и вложенной папок больше не увеличивает общий размер повторно",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "if(coveredByAnotherFolder(entry,all,i))continue;"
+    },
+    {
+      "note": "[=] Повторное выделение одного файла в разных категориях больше не удваивает его размер",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "if(!entry.uri.isEmpty()&&!countedFiles.add(entry.uri))continue;"
+    }
+  ]
+}
