@@ -269,6 +269,7 @@ public final class MainActivity extends Activity {
         super.onPause();
     }
     @Override protected void onDestroy(){
+        if(actionDialog!=null){actionDialog.dismiss();actionDialog=null;}
         notices.dismiss();
         queueReader.shutdownNow();
         if(current.get()==this)current.clear();
@@ -1235,11 +1236,10 @@ public final class MainActivity extends Activity {
         for(FtpBridge.Entry e:new ArrayList<>(ftpEntries)){
             outlineButton(list,e.directory?"folder":"file",e.name+(e.directory?"  /":"  ·  "+Util.readable(e.size)),()->{
                 if(e.directory)browseFtp((ftpDir.equals("/")?"":ftpDir)+"/"+e.name);
-                else new AlertDialog.Builder(this).setTitle("Скачать из ShareMe?").setMessage(e.name)
-                    .setNegativeButton("Отмена",null).setPositiveButton("Скачать",(d,w)->{
-                        Intent i=new Intent(this,TransferService.class);i.setAction(TransferService.FTP);
-                        i.putExtra("ftp_url",prefs().getString("ftp",""));i.putExtra("ftp_dir",ftpDir);i.putExtra("ftp_name",e.name);launchService(i);
-                    }).show();
+                else actionDialog=UiConfirmDialog.show(this,"Скачать из ShareMe?",e.name,"СКАЧАТЬ",()->{
+                    Intent i=new Intent(this,TransferService.class);i.setAction(TransferService.FTP);
+                    i.putExtra("ftp_url",prefs().getString("ftp",""));i.putExtra("ftp_dir",ftpDir);i.putExtra("ftp_name",e.name);launchService(i);
+                });
             });
         }
     }
@@ -1478,10 +1478,9 @@ public final class MainActivity extends Activity {
             else toast("Разрешение на устройства поблизости нужно для Wi-Fi Direct");
         }
         if(req==CAMERA_PERMISSION){if(result.length>0&&result[0]==PackageManager.PERMISSION_GRANTED)startScanner();
-            else new AlertDialog.Builder(this).setTitle("Доступ к камере")
-                .setMessage("Для сканирования QR нужен доступ к камере. Также можно выбрать фотографию QR-кода из галереи.")
-                .setPositiveButton("QR из галереи",(d,w)->startActivityForResult(new Intent(this,QrScannerActivity.class),SCAN))
-                .setNegativeButton("Отмена",null).show();}
+            else actionDialog=UiConfirmDialog.show(this,"Доступ к камере",
+                "Для сканирования QR нужен доступ к камере. Также можно выбрать фотографию QR-кода из галереи.",
+                "QR ИЗ ГАЛЕРЕИ",()->startActivityForResult(new Intent(this,QrScannerActivity.class),SCAN));}
     }
     private void connectQr(String raw){
         final Pairing.Info info;
@@ -1644,6 +1643,7 @@ public final class MainActivity extends Activity {
             TransferService.DISCONNECT_PEER.equals(intent.getAction()))startService(intent);
         else startForegroundService(intent);
     }catch(Exception e){toast("Служба: "+ErrorText.human(e));}}
+    private Dialog actionDialog;
     private final UiNotice notices=new UiNotice();
     private void toast(String text){
         String message=ErrorText.human(text);
