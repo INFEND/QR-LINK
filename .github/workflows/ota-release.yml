@@ -12,6 +12,7 @@ on:
       - 'scripts/sign_release.py'
       - 'scripts/make_manifest.py'
       - 'release_notes/**'
+      - 'tests/**'
       - 'app/**'
       - 'gradle/**'
       - 'gradlew'
