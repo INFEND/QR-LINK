@@ -46,6 +46,12 @@ public final class QrValidationHarness {
                 {"WiFi", "pass"+(char)10+"word"}, {"123456789012345678901234567890123", "password123"}})
             if (QrInputValidation.validWifiCredentials(bad[0],bad[1]))
                 throw new AssertionError("Unsafe Wi-Fi credentials accepted");
+        if (QrInputValidation.validWifiCredentials("WiFi"+(char)0xD800,"password123"))
+            throw new AssertionError("Unpaired high surrogate in SSID");
+        if (QrInputValidation.validWifiCredentials("WiFi","password"+(char)0xDC00))
+            throw new AssertionError("Unpaired low surrogate in password");
+        if (!QrInputValidation.validWifiCredentials("WiFi"+new String(Character.toChars(0x1F680)),"password123"))
+            throw new AssertionError("Valid UTF-8 supplementary character rejected");
         for (int i=0; i<=4; i++)
             if (QrInputValidation.security(Integer.toString(i)) != i) throw new AssertionError("Security");
         for (String bad : new String[]{"", "-1", "5", "00", "abc"}) {

@@ -32,6 +32,12 @@ public final class QrInputValidation {
         if(ssidBytes<1||ssidBytes>32||passBytes<8||passBytes>63)return false;
         for(String part:new String[]{ssid,password}){
             for(int i=0;i<part.length();){
+                // Java UTF-8 encoding replaces unpaired surrogates with '?':
+                // reject them instead of advertising different Wi-Fi credentials.
+                char unit=part.charAt(i);
+                if(Character.isHighSurrogate(unit)){
+                    if(i+1>=part.length()||!Character.isLowSurrogate(part.charAt(i+1)))return false;
+                }else if(Character.isLowSurrogate(unit))return false;
                 int cp=part.codePointAt(i);
                 if(Character.isISOControl(cp)||Character.getType(cp)==Character.FORMAT)return false;
                 i+=Character.charCount(cp);
