@@ -9,7 +9,8 @@ class DirectReadyTests(unittest.TestCase):
         src=(ROOT/"DirectWifi.java").read_text(encoding="utf-8")
         self.assertIn('String ip=localIp(group.getInterface());',src)
         self.assertIn('if(ip.isEmpty()||mac==null||',src)
-        self.assertIn('!mac.matches("(?i)[0-9a-f]{2}(:[0-9a-f]{2}){5}"))return;',src)
+        self.assertIn('!QrInputValidation.validP2pMac(mac))return;',src)
+        self.assertIn('validP2pMac(String raw)',(ROOT/"QrInputValidation.java").read_text(encoding="utf-8"))
         self.assertLess(src.index("if(ip.isEmpty()||mac==null||"),src.index("listener.ready(mac==null"))
 
     def test_service_rejects_stale_and_unroutable_direct(self):
