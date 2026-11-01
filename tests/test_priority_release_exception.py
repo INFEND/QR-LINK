@@ -55,10 +55,10 @@ class PriorityReleaseExceptionTests(unittest.TestCase):
             "Не готово",
         )
 
-    def test_standard_short_release_is_blocked(self):
+    def test_historical_short_release_still_requires_valid_evidence(self):
         evidence = self.evidence(ids=(), entry_task=None)
         del evidence["entries"][0]["task_id"]
-        with self.assertRaisesRegex(ValueError, "минимум 10"):
+        with self.assertRaisesRegex(ValueError, "Недостаточно реальных изменений"):
             self.verify(evidence)
 
     def test_unfinished_priority_is_blocked(self):
