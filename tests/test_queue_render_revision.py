@@ -31,7 +31,9 @@ public final class QueueBrowserCheck {
     ok(BrowserSearchTree.filter(tree,r->r.depth,r->r.name,"clip").size()==2);
     ok(BrowserSearchTree.filter(tree,r->r.depth,r->r.name,"missing").isEmpty());
     ok(BrowserSearchTree.filter(tree,r->r.depth,r->r.name," ").size()==tree.size());
-    ok(BrowserSearchTree.filter(tree,r->r.depth,r->r.name,"trip").size()==2);
+    // A matching expanded folder keeps its descendants visible during search.
+    List<Row> trip=BrowserSearchTree.filter(tree,r->r.depth,r->r.name,"trip");
+    ok(trip.size()==3&&trip.get(0)==tree.get(0)&&trip.get(1)==tree.get(1)&&trip.get(2)==tree.get(2));
   }
 }
 """
