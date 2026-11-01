@@ -16,6 +16,10 @@ public final class TransferFileIdentity {
     public static boolean validMime(String mime){
         return mime!=null&&mime.length()<=127&&MIME.matcher(mime).matches();
     }
+    /** Normalize unusual SAF MIME types without accepting unsafe metadata over HTTP. */
+    public static String safeMime(String mime){
+        return validMime(mime)?mime:"application/octet-stream";
+    }
     public static boolean validSha256(String sha){
         return sha!=null&&SHA.matcher(sha).matches();
     }

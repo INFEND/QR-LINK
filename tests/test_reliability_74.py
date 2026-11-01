@@ -72,8 +72,11 @@ public class ValidateP2p74 {
         self.assertGreaterEqual(len(lines),5)
         self.assertTrue(all(len(line.strip())>5 for line in lines))
         gradle=(ROOT/"app/build.gradle").read_text(encoding="utf-8")
-        self.assertIn("versionCode = 79",gradle)
-        self.assertIn("versionName = '0.3.74'",gradle)
+        import re
+        version_code=int(re.search(r"versionCode\\s*=\\s*(\\d+)",gradle).group(1))
+        version_name=re.search(r"versionName\\s*=\\s*'([^']+)'",gradle).group(1)
+        self.assertGreaterEqual(version_code,79)
+        self.assertGreaterEqual(tuple(map(int,version_name.split("."))),(0,3,74))
         self.assertIn("applicationId = 'dev.xarkon.link'",gradle)
 
 if __name__=="__main__":

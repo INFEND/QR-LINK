@@ -619,7 +619,7 @@ public final class TransferEngine {
         // to an older version of a file with exactly the same byte length.
         String sourceHash=verifyFileSha?hashSource(sourceUri,job.size):"";
         JSONObject offer=new JSONObject().put("id",job.id).put("name",job.name)
-            .put("path",job.path).put("mime",job.mime).put("size",job.size);
+            .put("path",job.path).put("mime",TransferFileIdentity.safeMime(job.mime)).put("size",job.size);
         if(verifyFileSha)offer.put("fileSha256",sourceHash);
         JSONObject result=new JSONObject(Util.http(host,port,userPin,"/offer","POST",offer));
         if(result.getInt("chunk")!=Util.CHUNK)throw new IOException("Несовместимая версия протокола");

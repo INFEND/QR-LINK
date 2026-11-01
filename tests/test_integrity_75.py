@@ -19,6 +19,7 @@ public final class CheckIdentity75 {
   if(TransferFileIdentity.validId("------------------------------------"))throw new AssertionError();
   if(TransferFileIdentity.validId("12345678-abcd-1234-ABCD-123456789abZ"))throw new AssertionError();
   if(!TransferFileIdentity.validMime("image/svg+xml"))throw new AssertionError();
+  if(!"application/octet-stream".equals(TransferFileIdentity.safeMime("*/*")))throw new AssertionError();
   if(TransferFileIdentity.validMime("image/png\\r\\nInjected: true"))throw new AssertionError();
   if(!TransferFileIdentity.validSha256("a".repeat(64)))throw new AssertionError();
   if(TransferFileIdentity.validSha256("a".repeat(63)+"z"))throw new AssertionError();
@@ -34,6 +35,7 @@ public final class CheckIdentity75 {
         self.assertIn('.put("fileSha256",true)',ENGINE)
         self.assertIn('String fileHash=j.optString("fileSha256","");',ENGINE)
         self.assertIn('if(verifyFileSha)offer.put("fileSha256",sourceHash);',ENGINE)
+        self.assertIn('TransferFileIdentity.safeMime(job.mime)',ENGINE)
 
     def test_sender_fingerprints_before_offer_and_after_send(self):
         body=ENGINE.split("private void sendOne(",1)[1].split("private void sendChunk(",1)[0]

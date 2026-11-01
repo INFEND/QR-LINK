@@ -29,7 +29,8 @@ class QueueIntegrityTests(unittest.TestCase):
 
     def test_atomic_deduplicated_queue(self):
         code=(JAVA/"FileCatalog.java").read_text(encoding="utf-8")
-        self.assertIn("if(!seen.add(item.uri))continue;",code)
+        self.assertIn("if(seen.contains(item.uri))continue;",code)
+        self.assertIn("if(!seenIds.add(item.id))",code)
         self.assertIn("if(all.size()>=MAX_FOLDER_FILES)",code)
         self.assertIn("save(c,all);",code)
 
