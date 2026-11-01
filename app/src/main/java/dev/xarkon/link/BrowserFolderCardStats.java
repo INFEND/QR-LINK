@@ -84,4 +84,58 @@ final class BrowserFolderCardStats {
             });
         return new BrowserFolderCardStats(count[0],total[0],true,true);
     }
+
+    /** Stream SAF document metadata without building a transfer queue. A
+     * provider may repeat document IDs; count identical files only once and
+     * reject cycles, inconsistent metadata or inaccessible descendants.
+     * The reader owns and closes each provider cursor before returning.
+     */
+    interface DocumentChildVisitor {
+        void accept(String documentId,boolean directory,long bytes) throws java.io.IOException;
+    }
+    interface DocumentChildReader {
+        void readChildren(String parentId,DocumentChildVisitor visitor) throws java.io.IOException;
+    }
+    static BrowserFolderCardStats scanDocuments(String rootId,DocumentChildReader reader)
+            throws java.io.IOException {
+        if(rootId==null||rootId.trim().isEmpty()||reader==null)
+            throw new java.io.IOException("Недоступная папка");
+        java.util.ArrayDeque<String> pending=new java.util.ArrayDeque<>();
+        java.util.HashSet<String> seenDirs=new java.util.HashSet<>();
+        java.util.HashMap<String,Long> seenFiles=new java.util.HashMap<>();
+        final int[] count={0};
+        final long[] total={0};
+        final boolean[] known={true};
+        pending.add(rootId);
+        seenDirs.add(rootId);
+        while(!pending.isEmpty()){
+            if(Thread.currentThread().isInterrupted())
+                throw new java.io.IOException("Подсчёт отменён");
+            String parent=pending.removeFirst();
+            reader.readChildren(parent,(id,directory,size)->{
+                if(Thread.currentThread().isInterrupted())
+                    throw new java.io.IOException("Подсчёт отменён");
+                if(id==null||id.trim().isEmpty())
+                    throw new java.io.IOException("Элемент без идентификатора");
+                if(directory){
+                    if(!seenDirs.add(id))
+                        throw new java.io.IOException("Повторяющийся или циклический каталог");
+                    pending.addLast(id);
+                    return;
+                }
+                Long previous=seenFiles.putIfAbsent(id,size);
+                if(previous!=null){
+                    if(previous.longValue()!=size)
+                        throw new java.io.IOException("Несогласованный размер документа");
+                    return;
+                }
+                if(count[0]==Integer.MAX_VALUE)
+                    throw new java.io.IOException("Слишком много файлов");
+                count[0]++;
+                if(size<0||Long.MAX_VALUE-total[0]<size)known[0]=false;
+                else total[0]+=size;
+            });
+        }
+        return new BrowserFolderCardStats(count[0],total[0],true,known[0]);
+    }
 }

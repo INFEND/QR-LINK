@@ -98,6 +98,8 @@ public final class FolderCardLargeCheck {
         self.assertIn("folderMetaViews.put(e.key(),meta);", source)
         self.assertIn("requestFolderSize(e);", source)
         self.assertIn("BrowserFolderCardStats.scanLocal(", source)
+        self.assertIn("BrowserFolderCardStats.scanDocuments(", source)
+        self.assertIn("direct=scanSafFolder(folder);", source)
         self.assertIn("folderPreviewBytes(e)", source)
         self.assertIn("if(snapshotRequested&&folder.localFile!=null)try{", source)
         self.assertIn("final boolean snapshotUnknown=direct!=null||!stats.bytesKnown;", source)
@@ -105,6 +107,71 @@ public final class FolderCardLargeCheck {
         self.assertIn("folderCardStats.put(key,stats);", source)
         self.assertIn("if(selected.containsKey(key))", source)
         self.assertIn("folderStatsIo.shutdownNow()", source)
+
+
+    def test_streaming_saf_folder_over_queue_limit_and_fail_closed(self):
+        harness = r"""package dev.xarkon.link;
+import java.io.*;
+import java.util.*;
+public final class SafFolderCardCheck {
+    static final class Node {
+        final String id;
+        final boolean folder;
+        final long size;
+        Node(String id,boolean folder,long size){
+            this.id=id;this.folder=folder;this.size=size;
+        }
+    }
+    public static void main(String[] args)throws Exception{
+        Map<String,List<Node>> tree=new HashMap<>();
+        List<Node> many=new ArrayList<>();
+        for(int i=0;i<30001;i++)many.add(new Node("f"+i,false,1));
+        many.add(new Node("f0",false,1)); // repeated provider row
+        many.add(new Node("child",true,0));
+        tree.put("root",many);
+        tree.put("child",Arrays.asList(new Node("last",false,4)));
+        BrowserFolderCardStats.DocumentChildReader reader=(parent,visit)->{
+            for(Node n:tree.getOrDefault(parent,Collections.emptyList()))
+                visit.accept(n.id,n.folder,n.size);
+        };
+        BrowserFolderCardStats result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(!result.complete||!result.bytesKnown||result.fileCount!=30002||result.bytes!=30005)
+            throw new AssertionError("SAF folder totals over queue limit");
+        tree.put("root",Arrays.asList(new Node("unknown",false,-1)));
+        result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(!result.complete||result.bytesKnown||result.fileCount!=1)
+            throw new AssertionError("Unknown provider size must not become exact");
+        tree.put("root",Arrays.asList(new Node("root",true,0)));
+        boolean failed=false;
+        try{BrowserFolderCardStats.scanDocuments("root",reader);}
+        catch(IOException expected){failed=true;}
+        if(!failed)throw new AssertionError("Cyclic directory accepted");
+        tree.put("root",Arrays.asList(new Node("same",false,1),new Node("same",false,2)));
+        failed=false;
+        try{BrowserFolderCardStats.scanDocuments("root",reader);}
+        catch(IOException expected){failed=true;}
+        if(!failed)throw new AssertionError("Inconsistent duplicate accepted");
+        tree.put("root",Arrays.asList(new Node("a",false,Long.MAX_VALUE),
+            new Node("b",false,1)));
+        result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(result.bytesKnown)throw new AssertionError("Overflow accepted");
+        Thread.currentThread().interrupt();
+        failed=false;
+        try{BrowserFolderCardStats.scanDocuments("root",reader);}
+        catch(IOException expected){failed=true;}
+        Thread.interrupted();
+        if(!failed)throw new AssertionError("Cancellation ignored");
+    }
+}
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/"SafFolderCardCheck.java"
+            source.write_text(harness,encoding="utf-8")
+            subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
+                            str(JAVA/"BrowserFolderCardStats.java"),str(source)],
+                           check=True,capture_output=True,text=True)
+            subprocess.run(["java","-cp",tmp,"dev.xarkon.link.SafFolderCardCheck"],
+                           check=True,capture_output=True,text=True)
 
 
 if __name__ == "__main__":

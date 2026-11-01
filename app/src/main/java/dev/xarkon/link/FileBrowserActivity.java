@@ -1228,6 +1228,32 @@ public final class FileBrowserActivity extends Activity {
         rich.setSpan(new StyleSpan(Typeface.BOLD),sizeStart,value.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         meta.setText(rich);
     }
+    /** Count a user-authorised SAF tree independently of the 30000-file
+     * transfer queue, retaining exact totals only when the provider supplies
+     * complete, consistent metadata for every descendant.
+     */
+    private BrowserFolderCardStats scanSafFolder(Entry folder)throws java.io.IOException{
+        if(folder.tree==null||folder.docId==null||folder.docId.isEmpty())
+            throw new java.io.IOException("Нет разрешения на папку");
+        return BrowserFolderCardStats.scanDocuments(folder.docId,(parentId,visitor)->{
+            Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(folder.tree,parentId);
+            String[] cols={DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE};
+            try(Cursor cursor=getContentResolver().query(children,cols,null,null,null)){
+                if(cursor==null)throw new java.io.IOException("Папка недоступна");
+                while(cursor.moveToNext()){
+                    if(Thread.currentThread().isInterrupted())
+                        throw new java.io.IOException("Подсчёт отменён");
+                    String id=cursor.getString(0),mime=cursor.getString(1);
+                    if(mime==null||mime.trim().isEmpty())
+                        throw new java.io.IOException("Тип документа неизвестен");
+                    visitor.accept(id,DocumentsContract.Document.MIME_TYPE_DIR.equals(mime),
+                        cursor.isNull(2)?-1:cursor.getLong(2));
+                }
+            }
+        });
+    }
     /** Resolve folder metadata off the UI/query thread, including unselected cards. */
     private void requestFolderSize(Entry folder){
         if(!folder.folder)return;
@@ -1248,6 +1274,8 @@ public final class FileBrowserActivity extends Activity {
                         throw new SecurityException("Нет доступа к внутренней памяти");
                     direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
                         Environment.getExternalStorageDirectory().getCanonicalFile().toPath());
+                }else if(folder.tree!=null&&!snapshotRequested){
+                    direct=scanSafFolder(folder);
                 }else{
                     ArrayList<FileCatalog.Item> files;
                     if(folder.mediaFolder){
@@ -1273,6 +1301,9 @@ public final class FileBrowserActivity extends Activity {
                     if(hasLocalStorageAccess())
                         direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
                             Environment.getExternalStorageDirectory().getCanonicalFile().toPath());
+                }catch(Exception ignored){}
+                if(snapshotRequested&&folder.tree!=null&&direct==null)try{
+                    direct=scanSafFolder(folder);
                 }catch(Exception ignored){}
             }
             final BrowserFolderCardStats stats=direct!=null?direct:
