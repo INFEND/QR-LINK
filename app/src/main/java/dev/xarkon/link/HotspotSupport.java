@@ -56,7 +56,7 @@ public final class HotspotSupport {
                         }
                         if(ssid==null||pass==null)throw new IllegalStateException("Система не вернула пароль Wi-Fi");
                         // Do not publish stale credentials if stop() or a new request intervened.
-                        String host=hotspotIp();
+                        String host=hotspotIp(context);
                         synchronized(HotspotSupport.this){
                             if(requestGeneration!=generation||reservation!=r)return;
                             listener.ready(stripQuotes(ssid),stripQuotes(pass),security,host);
@@ -101,22 +101,38 @@ public final class HotspotSupport {
         if(previous!=null)try{previous.close();}catch(Exception ignored){}
     }
     private static String stripQuotes(String s){return s!=null&&s.length()>1&&s.charAt(0)=='\"'&&s.endsWith("\"")?s.substring(1,s.length()-1):s;}
-    /** An unknown IP is deliberately left blank, never guessed as 192.168.43.1. */
-    public static String hotspotIp(){
+    /** Never publish the existing router's STA address as a hotspot address.
+     * On concurrent STA+AP devices these are separate interfaces and using
+     * the STA address creates an apparently valid but unreachable QR.
+     */
+    public static String hotspotIp(){return hotspotIp(null);}
+    public static String hotspotIp(Context context){
+        String station="";
+        if(context!=null)try{station=WifiState.clientAddress(context);}catch(Exception ignored){}
+        String candidate="";
         try{
             Enumeration<NetworkInterface> interfaces=NetworkInterface.getNetworkInterfaces();
             while(interfaces.hasMoreElements()){
                 NetworkInterface ni=interfaces.nextElement();
                 if(!ni.isUp()||ni.isLoopback())continue;
                 String name=ni.getName().toLowerCase(Locale.ROOT);
-                if(!(name.startsWith("ap")||name.startsWith("swlan")||name.startsWith("wlan")||name.startsWith("softap")))continue;
+                boolean accessPoint=name.startsWith("ap")||name.startsWith("swlan")||
+                    name.startsWith("softap");
+                boolean secondaryWifi=name.startsWith("wlan")&&!name.equals("wlan0");
+                if(!accessPoint&&!name.startsWith("wlan"))continue;
                 Enumeration<InetAddress> addresses=ni.getInetAddresses();
                 while(addresses.hasMoreElements()){
                     InetAddress a=addresses.nextElement();
-                    if(a instanceof Inet4Address&&a.isSiteLocalAddress())return a.getHostAddress();
+                    if(!(a instanceof Inet4Address)||!a.isSiteLocalAddress()||
+                       a.getHostAddress().equals(station))continue;
+                    if(accessPoint)return a.getHostAddress();
+                    if(secondaryWifi)candidate=a.getHostAddress();
+                    else if(candidate.isEmpty())candidate=a.getHostAddress();
                 }
             }
         }catch(Exception ignored){}
-        return "";
+        // The fallback is a candidate only; discovery over the bound hotspot
+        // connection can still find the receiver if an OEM hides its AP iface.
+        return candidate;
     }
 }
