@@ -73,7 +73,7 @@ public final class FileBrowserActivity extends Activity {
     private static final class Entry {
         Uri uri,tree;
         String name="",mime="",path="",docId="",group="",version="";
-        long size=-1,date=0;
+        long size=-1,date=0,mediaBytes=-1;
         boolean folder=false,mediaFolder=false;
         int mediaCount=0;
         File localFile;
@@ -456,7 +456,13 @@ public final class FileBrowserActivity extends Activity {
             folder.name=BrowserMediaFolders.label(item.getKey());
             folder.mediaCount=item.getValue().size();
             folder.uri=item.getValue().get(0).uri;
-            for(Entry file:item.getValue())folder.date=Math.max(folder.date,file.date);
+            long bytes=0;boolean unknown=false;
+            for(Entry file:item.getValue()){
+                folder.date=Math.max(folder.date,file.date);
+                if(file.size<0||Long.MAX_VALUE-bytes<file.size)unknown=true;
+                else bytes+=file.size;
+            }
+            folder.mediaBytes=unknown?-1:bytes;
             listing.folders.add(folder);
             listing.children.put(folder.key(),item.getValue());
         }
@@ -615,7 +621,13 @@ public final class FileBrowserActivity extends Activity {
     }
     private void render(){
         if(list==null)return;
-        subtitle.setText(breadcrumb());
+        String trail=breadcrumb().replace(" › "," > ");
+        SpannableStringBuilder crumb=new SpannableStringBuilder(trail);
+        for(int i=0;i<crumb.length();i++)if(crumb.charAt(i)=='>'){
+            crumb.setSpan(new ForegroundColorSpan(accent),i,i+1,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            crumb.setSpan(new StyleSpan(Typeface.BOLD),i,i+1,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        subtitle.setText(crumb);
         list.removeAllViews();
         selectionIndicators.clear();visibleEntries.clear();
         if(tab==4&&tree==null){
@@ -727,14 +739,17 @@ public final class FileBrowserActivity extends Activity {
         LinearLayout detail=column();detail.setPadding(dp(10),0,dp(4),0);
         String display=e.name;
         if(tab==3&&display.toLowerCase(Locale.ROOT).endsWith(".apk"))display=display.substring(0,display.length()-4);
-        TextView name=label(display,14,fg,true);name.setMaxLines(style==1?1:2);name.setEllipsize(TextUtils.TruncateAt.END);
+        TextView name=label(display,14,fg,true);name.setSingleLine(true);
+        if(display.length()>24){
+            name.setEllipsize(TextUtils.TruncateAt.MARQUEE);
+            name.setMarqueeRepeatLimit(-1);
+            name.setHorizontallyScrolling(true);name.setSelected(true);
+        }else name.setEllipsize(TextUtils.TruncateAt.END);
         detail.addView(name);
         // Counts describe items currently indexed, not the total in a truncated library.
-        String sub=e.mediaFolder?
-            "Файлов: "+e.mediaCount:
-            e.folder?(loadingFolders.contains(e.key())?"Загрузка папки…":
-            incompleteFolders.contains(e.key())?"Показана часть содержимого · нажмите, чтобы свернуть":
-            expandedFolders.contains(e.key())?"Папка · нажмите, чтобы свернуть":"Папка · нажмите, чтобы раскрыть"):
+        String sub=e.folder?
+            "Файлов: "+(e.mediaFolder?Integer.toString(e.mediaCount):"неизвестно")+
+            " | Размер: "+(e.mediaFolder&&e.mediaBytes>=0?Util.readable(e.mediaBytes):"неизвестен"):
             "Размер: "+(e.size<0?"неизвестен":Util.readable(e.size));
         if(tab==3&&!e.folder)sub="Размер: "+Util.readable(e.size)+" | Версия: "+e.version;
         if(style!=1||e.folder||tab==3){
@@ -749,6 +764,17 @@ public final class FileBrowserActivity extends Activity {
                     rich.setSpan(new ForegroundColorSpan(accent),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                     rich.setSpan(new StyleSpan(Typeface.BOLD),range[0],range[1],Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 }
+                meta.setText(rich);
+            }else{
+                SpannableStringBuilder rich=new SpannableStringBuilder(sub);
+                int countStart="Файлов: ".length(),countEnd=sub.indexOf(" | Размер: ");
+                int sizeStart=countEnd+" | Размер: ".length();
+                if(countEnd>countStart){
+                    rich.setSpan(new ForegroundColorSpan(accent),countStart,countEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    rich.setSpan(new StyleSpan(Typeface.BOLD),countStart,countEnd,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                rich.setSpan(new ForegroundColorSpan(accent),sizeStart,sub.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                rich.setSpan(new StyleSpan(Typeface.BOLD),sizeStart,sub.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 meta.setText(rich);
             }
             detail.addView(meta);
