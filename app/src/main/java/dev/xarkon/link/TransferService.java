@@ -347,6 +347,10 @@ public final class TransferService extends Service implements TransferEngine.Eve
             directWifi.host(new DirectWifi.HostListener(){
                 @Override public void ready(String mac,String ssid,String pass,String host){
                     if(!routeActive(route))return;
+                    // Wi-Fi can associate while the asynchronous P2P group forms.
+                    if(WifiState.clientConnected(TransferService.this)){
+                        establishNetworkRoute();return;
+                    }
                     if(host==null||!QrInputValidation.isLocalIpv4(host)||mac==null||
                         !QrInputValidation.validP2pMac(mac)){
                         resetDirect();directWifi.close();
@@ -365,6 +369,9 @@ public final class TransferService extends Service implements TransferEngine.Eve
     }
     private void startHotspotFallback(String reason){
         if(!wantReceive||!isReceiving)return;
+        // Never activate fallback hosting if a real shared LAN appeared since
+        // the Direct attempt began.
+        if(WifiState.clientConnected(this)){establishNetworkRoute();return;}
         if(hotspotReady||hotspotStarting)return;
         hotspotStarting=true;
         final int route=nextDirectRoute();
