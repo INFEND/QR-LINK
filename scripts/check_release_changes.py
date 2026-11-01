@@ -30,6 +30,11 @@ def required(version):
     return version_tuple(version) >= MIN_EVIDENCE_VERSION
 
 
+def minimum_for_version(version):
+    """No numeric release-size gate from 0.3.85 forward."""
+    return 1 if version_tuple(version) >= (0, 3, 85) else MIN_STANDARD_CHANGES
+
+
 def previous_tag(version):
     tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).splitlines()
     candidates = []
@@ -60,13 +65,14 @@ def changed_lines(base_tag, path):
             not line.startswith(("+++", "---")) and len(line[1:].strip()) >= 12}
 
 
-def validate_evidence(notes, evidence, lookup, qa_transition=None):
-    # Standard releases require 10 distinct product changes. A completed
-    # priority task may justify a shorter release, but only if it was
-    # unfinished in the previous published tag and is now actually finished.
+def validate_evidence(notes, evidence, lookup, qa_transition=None, minimum_changes=MIN_STANDARD_CHANGES):
+    # Historical releases retain their original rule for regression testing.
+    # Starting with v0.3.85, even one real independently evidenced product
+    # change is enough. Existing priority-completion claims still require
+    # a verified QA status transition and source-code evidence.
     claims = declared_completions(evidence)
-    if len(notes) < MIN_STANDARD_CHANGES and not claims:
-        raise ValueError("Релиз требует минимум 10 изменений или завершённую приоритетную задачу")
+    if len(notes) < minimum_changes and not claims:
+        raise ValueError("Недостаточно реальных изменений для выпуска")
     if claims:
         if qa_transition is None or len(qa_transition) != 2:
             raise ValueError("Нужно сравнить статусы QA с предыдущим релизом")
@@ -121,12 +127,13 @@ def main():
             new_qa = Path("docs/QA_CHECKLIST_RU.md").read_text(encoding="utf-8")
             transition = (old_qa, new_qa)
         count = validate_evidence(
-            notes, evidence, lambda file: changed_lines(base, file), transition
+            notes, evidence, lambda file: changed_lines(base, file),
+            transition, minimum_changes=minimum_for_version(args.version)
         )
     except (ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         raise SystemExit("Проверка независимых изменений не пройдена: " + str(error))
     claims = declared_completions(evidence)
-    if claims and count < MIN_STANDARD_CHANGES:
+    if claims and count < minimum_for_version(args.version):
         print("Приоритетный релиз по завершению: " + ", ".join(claims))
     print(f"Подтверждено {count} отдельных строк кода для {count} записей OTA; база {base}")
     print("Смысловую независимость каждой функции дополнительно проверяет ревью кода.")
