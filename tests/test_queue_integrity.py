@@ -47,4 +47,13 @@ class QueueIntegrityTests(unittest.TestCase):
         self.assertIn("Не удалось прочитать элемент папки",code)
         self.assertIn("Папка содержит элемент без идентификатора",code)
 
+    def test_recursive_saf_folder_deduplicates_file_ids(self):
+        code=(JAVA/"FileCatalog.java").read_text(encoding="utf-8")
+        self.assertIn("final HashSet<String> seenFiles=new HashSet<>();",code)
+        branch=code.split("private static void collect(Context c,Uri tree,",1)[1]
+        self.assertLess(branch.index("Uri u=DocumentsContract.buildDocumentUriUsingTree(tree,childId);"),
+            branch.index("if(!budget.seenFiles.add(childId))continue;"))
+        self.assertLess(branch.index("if(!budget.seenFiles.add(childId))continue;"),
+            branch.index("result.add(it);"))
+
 if __name__=="__main__":unittest.main()
