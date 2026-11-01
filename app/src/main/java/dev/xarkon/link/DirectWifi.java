@@ -136,7 +136,7 @@ public final class DirectWifi {
                 }else createAutoGroup(id);
                 scheduleGroupPoll(id,1);
                 main.postDelayed(()->{if(id==serial&&hosting&&hostListener!=null)
-                    hostFail("Wi-Fi Direct не создал группу за 22 секунды. Проверьте Wi-Fi и разрешения.");},22000);
+                    hostFail("Wi-Fi Direct не создал группу за 12 секунд. Используйте локальную точку доступа.");},12000);
             }catch(Exception e){hostFail("Ошибка Wi-Fi Direct: "+ErrorText.human(e));}
         });
     }
