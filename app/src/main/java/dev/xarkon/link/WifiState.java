@@ -34,6 +34,7 @@ public final class WifiState {
             for(Network network:cm.getAllNetworks()){
                 NetworkCapabilities caps=cm.getNetworkCapabilities(network);
                 if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)||
+                   caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)||
                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_WIFI_P2P))continue;
                 LinkProperties links=cm.getLinkProperties(network);
                 if(links==null)continue;
