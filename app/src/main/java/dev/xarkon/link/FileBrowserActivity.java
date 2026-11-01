@@ -48,6 +48,7 @@ public final class FileBrowserActivity extends Activity {
     private final HashSet<Integer> permissionPrompted=new HashSet<>();
     private final HashMap<String,ArrayList<Entry>> expandedChildren=new HashMap<>();
     private final HashSet<String> expandedFolders=new HashSet<>();
+    private final HashMap<String,Boolean> arrowState=new HashMap<>();
     private final LinkedHashMap<String,Entry> openedFolders=new LinkedHashMap<>();
     private final HashSet<String> loadingFolders=new HashSet<>();
     private final HashMap<String,CancellationSignal> expansionSignals=new HashMap<>();
@@ -294,6 +295,7 @@ public final class FileBrowserActivity extends Activity {
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();incompleteFolders.clear();
         expandedChildren.clear();expandedFolders.clear();openedFolders.clear();loadingFolders.clear();rowDepths.clear();
+        arrowState.clear();
         String[] hints={"Поиск по картинкам","Поиск по видео","Поиск по музыке","Поиск по приложениям","Поиск по файлам"};
         search.setHint(hints[index]);
         // Do not expose the previous tab's entries while the new provider query is pending.
@@ -690,6 +692,18 @@ public final class FileBrowserActivity extends Activity {
         page=Math.max(0,page+delta);render();
         if(scroll!=null)scroll.post(()->scroll.smoothScrollTo(0,0));
     }
+    private UiIcon folderArrow(Entry e){
+        boolean opened=expandedFolders.contains(e.key());
+        Boolean previous=arrowState.put(e.key(),opened);
+        UiIcon arrow=new UiIcon(this,"chevron",accent);
+        float target=opened?0f:-90f;
+        arrow.setRotation(target);
+        if(previous!=null&&previous!=opened){
+            arrow.setRotation(previous?0f:-90f);
+            arrow.animate().rotation(target).setDuration(190).start();
+        }
+        return arrow;
+    }
     private void drawRow(Entry e,int depth){
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(12+Math.min(7,depth)*10),dp(11),dp(9),dp(11));
@@ -711,8 +725,7 @@ public final class FileBrowserActivity extends Activity {
             tile.addView(centeredContent,
                 new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.CENTER));
             if(e.folder){
-                TextView arrow=label(expandedFolders.contains(e.key())?"⌄":"›",20,accent,true);
-                arrow.setGravity(Gravity.CENTER);
+                UiIcon arrow=folderArrow(e);
                 tile.addView(arrow,new FrameLayout.LayoutParams(dp(30),dp(40),Gravity.START|Gravity.CENTER_VERTICAL));
             }
             boolean checked=selected.containsKey(e.key());
@@ -727,8 +740,7 @@ public final class FileBrowserActivity extends Activity {
             return;
         }
         if(e.folder){
-            TextView arrow=label(expandedFolders.contains(e.key())?"⌄":"›",20,accent,true);
-            arrow.setGravity(Gravity.CENTER);
+            UiIcon arrow=folderArrow(e);
             row.addView(arrow,new LinearLayout.LayoutParams(dp(20),dp(36)));
         }
         UiIcon icon=new UiIcon(this,glyph,accent);
