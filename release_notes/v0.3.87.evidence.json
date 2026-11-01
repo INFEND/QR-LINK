@@ -1,0 +1,55 @@
+{
+  "base_tag": "v0.3.86",
+  "entries": [
+    {
+      "note": "[=] Если общая Wi-Fi-сеть недоступна, приёмник сразу создаёт локальную точку доступа",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "startHotspotFallback(\"Нет общей Wi-Fi-сети\");"
+    },
+    {
+      "note": "[=] Повторное создание QR больше не перезапускает работающую локальную точку",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "if(hotspotReady){"
+    },
+    {
+      "note": "[+] Добавлен отдельный режим подключения телефонов из разных Wi-Fi-сетей",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "outlineButton(qrPanel,\"wifi\",\"СОЗДАТЬ СЕТЬ ДЛЯ ДРУГОГО WI-FI\",()->{"
+    },
+    {
+      "note": "[+] Добавлена кнопка возврата к обычному подключению через Wi-Fi",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "outlineButton(qrPanel,\"wifi\",\"ВОЗВРАТ К ОБЫЧНОМУ WI-FI\",()->{"
+    },
+    {
+      "note": "[=] Уточнено определение адреса точки доступа, чтобы не использовать IP другого Wi-Fi",
+      "path": "app/src/main/java/dev/xarkon/link/HotspotSupport.java",
+      "changed_line": "a.getHostAddress().equals(station))continue;"
+    },
+    {
+      "note": "[=] QR локальной точки работает даже тогда, когда Android не сообщает её IP",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "receiveHint.setText(\"Точка доступа готова · сканируйте QR\");"
+    },
+    {
+      "note": "[=] Сканер предупреждает о возможном нахождении устройств в разных подсетях",
+      "path": "app/src/main/java/dev/xarkon/link/WifiState.java",
+      "changed_line": "return !WifiSubnetPolicy.sameSubnet(station,peer,prefix);"
+    },
+    {
+      "note": "[=] Ожидание резервного подключения Wi-Fi Direct сокращено до 12 секунд",
+      "path": "app/src/main/java/dev/xarkon/link/DirectWifi.java",
+      "changed_line": "hostFail(\"Wi-Fi Direct не создал группу за 12 секунд. Используйте локальную точку доступа.\");},12000);"
+    },
+    {
+      "note": "[+] Ответы на поиск приёмника защищены от подмены",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "if(DiscoveryAuth.verifies(answer,nonce,key,Util.PORT)&&"
+    },
+    {
+      "note": "[=] При сканировании QR локальной сети приложение подсказывает подтвердить соединение Android",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "toast(\"Подтвердите запрос Android на подключение к сети приёмника. Пароль уже содержится в QR.\");"
+    }
+  ]
+}
