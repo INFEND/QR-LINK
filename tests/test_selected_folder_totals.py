@@ -1,0 +1,85 @@
+"""JVM regression: selected folder + files must show a real total."""
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+JAVA = Path(__file__).resolve().parents[1] / "app/src/main/java/dev/xarkon/link"
+BROWSER = JAVA / "FileBrowserActivity.java"
+
+HARNESS = r'''
+package dev.xarkon.link;
+import java.util.*;
+public final class SelectionTotalsCheck {
+    static void yes(boolean b){if(!b)throw new AssertionError("Selection accounting regression");}
+    static BrowserSelectionTotals.Selection folder(String k,String uri,String path,long preview){
+        return new BrowserSelectionTotals.Selection(k,uri,path,true,-1,preview);
+    }
+    static BrowserSelectionTotals.Selection file(String k,String uri,String path,long size){
+        return new BrowserSelectionTotals.Selection(k,uri,path,false,size,-1);
+    }
+    static BrowserSelectionTotals.Result sum(
+        java.util.Map<String,BrowserSelectionTotals.FolderStats> snapshots,
+        BrowserSelectionTotals.Selection... entries){
+        return BrowserSelectionTotals.sum(Arrays.asList(entries),snapshots);
+    }
+    public static void main(String[] args){
+        Map<String,BrowserSelectionTotals.FolderStats> cache=new HashMap<>();
+        BrowserSelectionTotals.Selection main=folder("f1","content://media/external/images/33","_Archive",22544384L);
+        BrowserSelectionTotals.Selection img=file("i1","content://media/external/images/34","_Archive",215756L);
+        BrowserSelectionTotals.Selection other=file("i2","content://media/external/images/35","Other",2048L);
+        BrowserSelectionTotals.Result r=sum(cache,main);
+        yes(r.pending&&r.provisional&&r.bytes==22544384L&&!r.unknown);
+        r=sum(cache,main,img);
+        yes(r.bytes==22544384L); // Selected media belongs to folder, not counted again.
+        r=sum(cache,main,img,other);
+        yes(r.bytes==22544384L+2048L); // Outside selected folder counts once.
+        Map<String,Long> exact=new LinkedHashMap<>();
+        exact.put("file:///storage/emulated/0/_Archive/picture.jpg",215756L);
+        exact.put("file:///storage/emulated/0/_Archive/video.mp4",4048L);
+        cache.put("f1",new BrowserSelectionTotals.FolderStats(exact,false));
+        r=sum(cache,main,img,other);
+        yes(!r.pending&&!r.provisional&&!r.unknown&&r.bytes==215756L+4048L+2048L);
+        BrowserSelectionTotals.Selection duplicate=folder("f2","file:///storage/emulated/0/_Archive","_Archive",0);
+        cache.put("f2",new BrowserSelectionTotals.FolderStats(exact,false));
+        r=sum(cache,main,duplicate,img,other);
+        yes(r.bytes==215756L+4048L+2048L);
+        BrowserSelectionTotals.Selection missing=folder("missing","file:///storage/emulated/0/Unknown","Unknown",-1);
+        r=sum(cache,missing);
+        yes(r.pending&&!r.provisional);
+        cache.put("missing",new BrowserSelectionTotals.FolderStats(Collections.emptyMap(),true));
+        r=sum(cache,missing);
+        yes(!r.pending&&r.unknown);
+        BrowserSelectionTotals.Selection saf=folder("saf","content://documents/tree/root","_Archive",6000);
+        r=sum(cache,saf,img); // Same path, different provider: must count separate sources.
+        yes(r.bytes==6000+215756L);
+        r=sum(cache,file("verybig","file:///big","",Long.MAX_VALUE-1),
+                    file("small","file:///small","",100));
+        yes(r.bytes==Long.MAX_VALUE);
+    }
+}
+'''
+
+
+class SelectionTotalsTests(unittest.TestCase):
+    def test_pure_java_size_calculation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            harness=Path(tmp)/"SelectionTotalsCheck.java"
+            harness.write_text(HARNESS,encoding="utf-8")
+            subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
+                           str(JAVA/"BrowserSelectionTotals.java"),str(harness)],
+                           check=True,capture_output=True,text=True)
+            subprocess.run(["java","-cp",tmp,"dev.xarkon.link.SelectionTotalsCheck"],
+                           check=True,capture_output=True,text=True)
+
+    def test_ui_queues_folder_scan_and_never_forces_unknown_size(self):
+        source=BROWSER.read_text(encoding="utf-8")
+        self.assertIn("if(e.folder&&selected.containsKey(key))requestFolderSize(e)",source)
+        self.assertIn("BrowserSelectionTotals.sum(entries,folderSizeSnapshots)",source)
+        self.assertIn("FileCatalog.fromLocalFolder(this,new File(root,folder.path),folder.path)",source)
+        self.assertIn("FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name)",source)
+        self.assertNotIn('folders>0||unknown>0?"неизвестен"',source)
+
+
+if __name__=="__main__":
+    unittest.main()
