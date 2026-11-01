@@ -9,6 +9,8 @@ import re
 import subprocess
 from urllib.parse import quote
 
+from release_exceptions import declared_completions
+
 MAX_RELEASE_NOTES_CHARS = 100_000
 MIN_NEW_RELEASE_CHANGES = 10
 MIN_POLICY_VERSION = (0, 3, 78)
@@ -56,7 +58,18 @@ def load_release_notes(version):
     if not entries:
         raise SystemExit("No user-visible release changes: " + str(filename))
     if requires_ten_changes(version) and len(entries) < MIN_NEW_RELEASE_CHANGES:
-        raise SystemExit("New release requires at least 10 distinct user-facing changes: " + str(filename))
+        # A shorter release is possible ONLY for completion of one of the
+        # eleven historically unfinished priority tasks. Its completion,
+        # source diff and QA transition are strictly checked by the next CI
+        # step (check_release_changes.py), before anything is published.
+        evidence_file = Path("release_notes") / f"v{version}.evidence.json"
+        try:
+            evidence = json.loads(evidence_file.read_text(encoding="utf-8"))
+            completed = declared_completions(evidence)
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            raise SystemExit("Short release requires valid priority-task evidence: " + str(error))
+        if not completed:
+            raise SystemExit("New release requires at least 10 changes, or one completed priority task")
     return "\n".join(([heading, ""] if heading else []) + entries)
 
 def main():
