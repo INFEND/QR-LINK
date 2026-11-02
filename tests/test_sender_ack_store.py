@@ -28,6 +28,11 @@ public class SenderAckStoreCheck {
         yes(reopened.hasAcknowledgement(2,ack));
         yes(!reopened.hasAcknowledgement(2,second));
         yes(!reopened.hasAcknowledgement(1,ack));
+        // Replacing an existing receipt must revoke the old digest.
+        store.acknowledge(2,second);
+        yes(reopened.hasAcknowledgement(2,second));
+        yes(!reopened.hasAcknowledgement(2,ack));
+        store.acknowledge(2,ack);
         yes(!new SenderAckStore(root,id,second).hasAcknowledgement(2,ack));
         ExecutorService pool=Executors.newFixedThreadPool(4);
         try {
@@ -43,6 +48,15 @@ public class SenderAckStoreCheck {
         }finally{pool.shutdownNow();}
         for(int i=0;i<32;i++)yes(reopened.hasAcknowledgement(i,ack));
         File record=new File(new File(root,"sender_chunk_sha256"),id+"-"+hash+".ack2");
+        // Simulate a crash after the old marker was revoked but before commit.
+        try(RandomAccessFile f=new RandomAccessFile(record,"rw")){
+            f.seek(2L*33+32);f.write(0);f.getFD().sync();
+            f.seek(2L*33);f.write(new byte[32]);f.getFD().sync();
+        }
+        yes(!reopened.hasAcknowledgement(2,ack));
+        yes(!reopened.hasAcknowledgement(2,zeroHash));
+        store.acknowledge(2,ack);
+        yes(reopened.hasAcknowledgement(2,ack));
         try(RandomAccessFile f=new RandomAccessFile(record,"rw")){
             f.seek(2L*33+32);f.write(0);
         }
@@ -72,6 +86,19 @@ class SenderAckTests(unittest.TestCase):
                 check=True,capture_output=True,text=True)
             subprocess.run(["java","-cp",work,"dev.xarkon.link.SenderAckStoreCheck"],
                 check=True,capture_output=True,text=True)
+
+    def test_rewrite_invalidates_old_marker_before_replacing_digest(self):
+        source=(JAVA/"SenderAckStore.java").read_text(encoding="utf-8")
+        method=source.split("void acknowledge(",1)[1].split("boolean hasAcknowledgement(",1)[0]
+        revoked=method.index("out.seek(offset+ChunkDigestStore.SHA256_BYTES);")
+        invalidated=method.index("out.write(0);",revoked)
+        durable=method.index("out.getFD().sync();",invalidated)
+        replaced=method.index("out.write(digest);",durable)
+        committed=method.index("out.write(PRESENT);",replaced)
+        self.assertLess(revoked,invalidated)
+        self.assertLess(invalidated,durable)
+        self.assertLess(durable,replaced)
+        self.assertLess(replaced,committed)
 
     def test_sender_records_verified_hash_only(self):
         source=(JAVA/"TransferEngine.java").read_text(encoding="utf-8")

@@ -29,9 +29,16 @@ public final class SenderAckStore {
         if(parent!=null&&!parent.isDirectory()&&!parent.mkdirs())
             throw new IOException("Не удалось сохранить журнал подтверждений");
         try(RandomAccessFile out=new RandomAccessFile(path,"rw")){
-            out.seek((long)index*RECORD_BYTES);
+            long offset=(long)index*RECORD_BYTES;
+            // A previous attempt may have left a valid marker at this slot.
+            // Revoke it durably before changing the digest: a crash during
+            // replacement must never turn torn bytes into a trusted receipt.
+            out.seek(offset+ChunkDigestStore.SHA256_BYTES);
+            out.write(0);
+            out.getFD().sync();
+            out.seek(offset);
             out.write(digest);
-            out.write(PRESENT); // A sparse gap remains zero, not an acknowledgement.
+            out.write(PRESENT);
             out.getFD().sync();
         }
     }

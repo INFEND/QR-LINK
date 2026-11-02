@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.103",
+  "entries": [
+    {
+      "note": "[=] После сбоя записи повреждённое подтверждение блока больше не считается сохранённым",
+      "path": "app/src/main/java/dev/xarkon/link/SenderAckStore.java",
+      "changed_line": "out.seek(offset+ChunkDigestStore.SHA256_BYTES);"
+    }
+  ]
+}
