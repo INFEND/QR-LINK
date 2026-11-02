@@ -1353,7 +1353,7 @@ public final class FileBrowserActivity extends Activity {
             }
             final BrowserFolderCardStats stats=direct!=null?direct:
                 BrowserFolderCardStats.summarize(lengths,complete);
-            final boolean snapshotUnknown=direct!=null||!stats.bytesKnown;
+            final boolean snapshotUnknown=!stats.bytesKnown;
             final String failedAccess=accessError;
             ui.post(()->{
                 if(epoch!=folderStatsEpoch)return;
@@ -1366,7 +1366,8 @@ public final class FileBrowserActivity extends Activity {
                 if(stats.complete||!folderCardStats.containsKey(key))
                     folderCardStats.put(key,stats);
                 if(snapshotRequested&&selected.containsKey(key))
-                    folderSizeSnapshots.put(key,new BrowserSelectionTotals.FolderStats(lengths,snapshotUnknown));
+                    folderSizeSnapshots.put(key,new BrowserSelectionTotals.FolderStats(
+                        lengths,snapshotUnknown,direct!=null&&stats.bytesKnown?stats.bytes:-1));
                 TextView meta=folderMetaViews.get(key);
                 if(meta!=null)applyFolderMeta(meta,folder);
                 if(selected.containsKey(key)){

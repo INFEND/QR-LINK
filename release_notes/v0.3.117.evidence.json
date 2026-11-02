@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.116",
+  "entries": [
+    {
+      "note": "[=] **Размер выбранной большой папки** теперь определяется по полному подсчёту, даже если очередь передачи ограничена",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "lengths,snapshotUnknown,direct!=null&&stats.bytesKnown?stats.bytes:-1));"
+    }
+  ]
+}

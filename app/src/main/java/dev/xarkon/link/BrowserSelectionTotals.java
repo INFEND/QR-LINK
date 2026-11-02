@@ -19,8 +19,15 @@ final class BrowserSelectionTotals {
     static final class FolderStats {
         final LinkedHashMap<String,Long> files;
         final boolean unknown;
+        // A streaming scan can prove a total without retaining every file URI.
+        // Keep that exact aggregate separate from incomplete transfer snapshots.
+        final long exactBytes;
         FolderStats(Map<String,Long> files,boolean unknown){
+            this(files,unknown,-1);
+        }
+        FolderStats(Map<String,Long> files,boolean unknown,long exactBytes){
             this.files=new LinkedHashMap<>(files);this.unknown=unknown;
+            this.exactBytes=!unknown&&exactBytes>=0?exactBytes:-1;
         }
     }
     static final class Result {
@@ -98,6 +105,12 @@ final class BrowserSelectionTotals {
                 continue;
             }
             unknown|=stats.unknown;
+            if(stats.exactBytes>=0){
+                // The complete streaming total includes all descendants, even
+                // when the transfer queue could not enumerate 30000+ entries.
+                total=add(total,stats.exactBytes);
+                continue;
+            }
             for(Map.Entry<String,Long> file:stats.files.entrySet()){
                 if(!covered.add(file.getKey()))continue;
                 if(file.getValue()==null||file.getValue()<0)unknown=true;

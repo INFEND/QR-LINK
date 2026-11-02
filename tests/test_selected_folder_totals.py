@@ -93,6 +93,28 @@ public final class SelectionTotalsCheck {
         BrowserSelectionTotals.Selection saf=folder("saf","content://documents/tree/root","_Archive",6000);
         r=sum(cache,saf,img); // Same path, different provider: must count separate sources.
         yes(r.bytes==6000+215756L);
+        // Regression: a queue-limited 30001-file folder is fully counted by
+        // the streaming card scan, without materializing its file URI list.
+        BrowserSelectionTotals.Selection huge=folder("huge",
+            "file:///storage/emulated/0/Download/Large","Download/Large",-1);
+        BrowserSelectionTotals.Selection inside=file("inside",
+            "file:///storage/emulated/0/Download/Large/one.bin","Download/Large",100);
+        BrowserSelectionTotals.Selection outside=file("outside",
+            "file:///storage/emulated/0/Download/Other.bin","Download",700);
+        cache.put("huge",new BrowserSelectionTotals.FolderStats(
+            Collections.emptyMap(),false,30005000L));
+        r=sum(cache,huge,inside,outside);
+        yes(!r.pending&&!r.unknown&&!r.provisional&&r.bytes==30005700L);
+        BrowserSelectionTotals.Selection hugeChild=folder("hugeChild",
+            "file:///storage/emulated/0/Download/Large/Sub","Download/Large/Sub",500);
+        cache.put("hugeChild",new BrowserSelectionTotals.FolderStats(
+            Collections.emptyMap(),false,500L));
+        r=sum(cache,huge,hugeChild,inside,outside);
+        yes(r.bytes==30005700L); // Nested selection must not inflate the exact total.
+        cache.put("huge",new BrowserSelectionTotals.FolderStats(
+            Collections.emptyMap(),true,30005000L));
+        r=sum(cache,huge);
+        yes(r.unknown&&!r.provisional); // Incomplete scans cannot claim exact size.
         r=sum(cache,file("verybig","file:///big","",Long.MAX_VALUE-1),
                     file("small","file:///small","",100));
         yes(r.bytes==Long.MAX_VALUE);
@@ -122,6 +144,7 @@ class SelectionTotalsTests(unittest.TestCase):
         totals=(JAVA/"BrowserSelectionTotals.java").read_text(encoding="utf-8")
         self.assertIn("coveredByAnotherFolder(entry,all,i,snapshots)",totals)
         self.assertIn("!countedFiles.add(entry.uri)",totals)
+        self.assertIn("if(stats.exactBytes>=0)",totals)
 
 
 if __name__=="__main__":
