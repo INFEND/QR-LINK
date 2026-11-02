@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.128",
+  "entries": [
+    {
+      "note": "[=] **Подсчёт папок** не сбивается, если системный проводник повторяет одну и ту же подпапку",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "if(parent.equals(directoryParents.get(id)))return;"
+    }
+  ]
+}
