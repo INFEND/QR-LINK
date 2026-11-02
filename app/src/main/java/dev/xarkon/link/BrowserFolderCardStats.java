@@ -107,11 +107,21 @@ final class BrowserFolderCardStats {
     interface DocumentChildReader {
         void readChildren(String parentId,DocumentChildVisitor visitor) throws java.io.IOException;
     }
+    /** Optional metadata fallback, evaluated after provider cursors have closed. */
+    interface DocumentSizeResolver {
+        long resolve(String documentId) throws java.io.IOException;
+    }
     static BrowserFolderCardStats scanDocuments(String rootId,DocumentChildReader reader)
             throws java.io.IOException {
         return scanDocuments(rootId,reader,null);
     }
     static BrowserFolderCardStats scanDocuments(String rootId,DocumentChildReader reader,
+                                                 ProgressListener progress)
+            throws java.io.IOException {
+        return scanDocuments(rootId,reader,null,progress);
+    }
+    static BrowserFolderCardStats scanDocuments(String rootId,DocumentChildReader reader,
+                                                 DocumentSizeResolver resolver,
                                                  ProgressListener progress)
             throws java.io.IOException {
         if(rootId==null||rootId.trim().isEmpty()||reader==null)
@@ -122,6 +132,7 @@ final class BrowserFolderCardStats {
         final int[] count={0};
         final long[] total={0};
         final boolean[] known={true};
+        final boolean[] missing={false};
         pending.add(rootId);
         seenDirs.add(rootId);
         while(!pending.isEmpty()){
@@ -151,11 +162,28 @@ final class BrowserFolderCardStats {
                 if(count[0]==Integer.MAX_VALUE)
                     throw new java.io.IOException("Слишком много файлов");
                 count[0]++;
-                if(size<0||Long.MAX_VALUE-total[0]<size)known[0]=false;
+                if(size<0){missing[0]=true;known[0]=false;}
+                else if(Long.MAX_VALUE-total[0]<size)known[0]=false;
                 else total[0]+=size;
                 if(progress!=null&&count[0]%512==0)
                     progress.onProgress(count[0],total[0]);
             });
+        }
+        // Some SAF providers omit COLUMN_SIZE but expose a regular descriptor.
+        // Resolve only missing sizes, after closing every query cursor. Never
+        // read file contents or mistake a pipe/unknown descriptor for zero.
+        if(missing[0]&&resolver!=null){
+            long exact=0;
+            boolean exactKnown=true;
+            for(Map.Entry<String,Long> entry:seenFiles.entrySet()){
+                if(Thread.currentThread().isInterrupted())
+                    throw new java.io.IOException("Подсчёт отменён");
+                long size=entry.getValue();
+                if(size<0)size=resolver.resolve(entry.getKey());
+                if(size<0||Long.MAX_VALUE-exact<size)exactKnown=false;
+                else exact+=size;
+            }
+            return new BrowserFolderCardStats(count[0],exact,true,exactKnown);
         }
         return new BrowserFolderCardStats(count[0],total[0],true,known[0]);
     }

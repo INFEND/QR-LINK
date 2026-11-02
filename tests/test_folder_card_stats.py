@@ -100,6 +100,8 @@ public final class FolderCardLargeCheck {
         self.assertIn("BrowserFolderCardStats.scanLocal(", source)
         self.assertIn("BrowserFolderCardStats.scanDocuments(", source)
         self.assertIn("direct=scanSafFolder(folder);", source)
+        self.assertIn("getContentResolver().openFileDescriptor(document,\"r\")", source)
+        self.assertIn("descriptor.getStatSize()", source)
         self.assertIn("folderPreviewBytes(e)", source)
         self.assertIn("if(snapshotRequested&&folder.localFile!=null)try{", source)
         self.assertIn("final boolean snapshotUnknown=!stats.bytesKnown;", source)
@@ -142,6 +144,25 @@ public final class SafFolderCardCheck {
         result=BrowserFolderCardStats.scanDocuments("root",reader);
         if(!result.complete||result.bytesKnown||result.fileCount!=1)
             throw new AssertionError("Unknown provider size must not become exact");
+        // A SAF provider may omit COLUMN_SIZE while its descriptor exposes
+        // a known length. Resolve after enumeration and only once per file ID.
+        tree.put("root",Arrays.asList(new Node("unknown",false,-1),
+            new Node("unknown",false,-1)));
+        final int[] descriptorReads={0};
+        result=BrowserFolderCardStats.scanDocuments("root",reader,id->{
+            descriptorReads[0]++;
+            return id.equals("unknown")?8192L:-1L;
+        },null);
+        if(!result.complete||!result.bytesKnown||result.fileCount!=1||
+            result.bytes!=8192L||descriptorReads[0]!=1)
+            throw new AssertionError("Descriptor fallback must recover exact SAF size");
+        result=BrowserFolderCardStats.scanDocuments("root",reader,id->-1L,null);
+        if(result.bytesKnown)throw new AssertionError("Unknown descriptor must remain unknown");
+        boolean resolverDenied=false;
+        try{BrowserFolderCardStats.scanDocuments("root",reader,id->{
+            throw new IOException("Нет доступа");
+        },null);}catch(IOException expected){resolverDenied=true;}
+        if(!resolverDenied)throw new AssertionError("Permission failure must not be hidden");
         tree.put("root",Arrays.asList(new Node("root",true,0)));
         boolean failed=false;
         try{BrowserFolderCardStats.scanDocuments("root",reader);}

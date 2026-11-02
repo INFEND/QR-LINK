@@ -1280,6 +1280,18 @@ public final class FileBrowserActivity extends Activity {
                         cursor.isNull(2)?-1:cursor.getLong(2));
                 }
             }
+        },documentId->{
+            if(Thread.currentThread().isInterrupted())
+                throw new java.io.IOException("Подсчёт отменён");
+            Uri document=DocumentsContract.buildDocumentUriUsingTree(folder.tree,documentId);
+            try(android.os.ParcelFileDescriptor descriptor=
+                    getContentResolver().openFileDescriptor(document,"r")){
+                return descriptor==null?-1:descriptor.getStatSize();
+            }catch(java.io.FileNotFoundException missing){
+                return -1; // Metadata is genuinely unavailable; never assume zero.
+            }catch(SecurityException denied){
+                throw new java.io.IOException("Нет доступа к документу",denied);
+            }
         },progress);
     }
     private BrowserFolderCardStats scanLocalFolder(Entry folder,

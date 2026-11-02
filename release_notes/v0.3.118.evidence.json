@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.117",
+  "entries": [
+    {
+      "note": "[=] **Размер папок из системного проводника** уточняется по данным доступных документов, когда хранилище не сообщает размер",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "if(size<0)size=resolver.resolve(entry.getKey());"
+    }
+  ]
+}
