@@ -44,6 +44,20 @@ final class FtpListingReader {
         return true;
     }
 
+    /** Only ordinary files and folders from Unix LIST are downloadable. */
+    static boolean supportedUnixType(String permissions) {
+        if (permissions == null || permissions.length() < 10) return false;
+        char type = permissions.charAt(0);
+        if (type != '-' && type != 'd') return false;
+        for (int i = 1; i <= 9; i++) {
+            char flag = permissions.charAt(i);
+            if (flag != 'r' && flag != 'w' && flag != 'x' && flag != '-' &&
+                flag != 's' && flag != 'S' && flag != 't' && flag != 'T')
+                return false;
+        }
+        return true;
+    }
+
     /** Windows/DOS FTP LIST: date, time, <DIR>/size and file name. */
     private static final java.util.regex.Pattern DOS_LIST = java.util.regex.Pattern.compile(
         "^\\d{2}-\\d{2}-\\d{2,4}\\s+\\d{1,2}:\\d{2}(?:AM|PM)\\s+(<DIR>|\\d+)\\s+(.+)$",

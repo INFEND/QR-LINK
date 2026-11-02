@@ -95,6 +95,7 @@ public final class FtpBridge implements AutoCloseable {
                     // Unix LIST: permissions links owner group size month day time name
                     String[]fields=line.trim().split("\\s+",9);
                     if(fields.length>=9){
+                        if(!FtpListingReader.supportedUnixType(fields[0]))continue;
                         boolean isDir=fields[0].charAt(0)=='d';long size=-1;
                         try{size=Long.parseLong(fields[4]);}catch(Exception ignored){}
                         String name=fields[8];if(!FtpListingReader.safeName(name))continue;

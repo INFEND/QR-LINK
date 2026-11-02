@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.101",
+  "entries": [
+    {
+      "note": "[=] FTP-проводник скрывает ссылки и служебные элементы, которые нельзя скачать как обычные файлы",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "if(!FtpListingReader.supportedUnixType(fields[0]))continue;"
+    }
+  ]
+}
