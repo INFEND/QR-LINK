@@ -30,6 +30,12 @@ public final class ProtectedFolderCheck {
         yes(BrowserFolderAccess.protectedAndroidPath("/storage/emulated/0/Android/data"));
         yes(BrowserFolderAccess.protectedAndroidPath("/0/Android/obb/com.example"));
         yes(BrowserFolderAccess.protectedAndroidPath("/sdcard/Android/data"));
+        yes(BrowserFolderAccess.protectedAndroidPath("primary:Android/data/com.example"));
+        yes(BrowserFolderAccess.protectedAndroidPath("PRIMARY:Android/obb/com.example"));
+        yes(BrowserFolderAccess.protectedAndroidPath("raw:/storage/emulated/0/Android/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("secondary:Android/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("primary:Download/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("primary:Android/data/../../Download/data"));
         yes(!BrowserFolderAccess.protectedAndroidPath("Android/data/../media"));
         yes(!BrowserFolderAccess.protectedAndroidPath("Android/data/../../Download/data"));
         yes(!BrowserFolderAccess.protectedAndroidPath("../Android/data"));
@@ -62,6 +68,12 @@ public final class ProtectedFolderCheck {
         }catch(AccessDeniedException expected){}
         try{BrowserFolderAccess.requireVisibleEvidence("Android/obb",35,0);
             throw new AssertionError("Protected obb listing was trusted");
+        }catch(AccessDeniedException expected){}
+        try{BrowserFolderAccess.requireVisibleEvidence("primary:Android/data/com.example",35,0);
+            throw new AssertionError("Nested filtered SAF folder was trusted");
+        }catch(AccessDeniedException expected){}
+        try{BrowserFolderAccess.requireVisibleEvidence("raw:/storage/emulated/0/Android/obb/pkg",35,0);
+            throw new AssertionError("Nested raw SAF folder was trusted");
         }catch(AccessDeniedException expected){}
         try{BrowserFolderAccess.requireVisibleEvidence("Download/data",35,0);
             BrowserFolderAccess.requireVisibleEvidence("Android/database",35,0);
@@ -101,6 +113,9 @@ public final class ProtectedFolderCheck {
         self.assertIn('return "Файлов: Нет доступа | Размер: Нет доступа";',source)
         self.assertIn("BrowserFolderAccess.requireVisibleEvidence(parent,Build.VERSION.SDK_INT,scanned);",source)
         self.assertIn("BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);",source)
+        self.assertIn("BrowserFolderAccess.requireVisibleEvidence(parentId,Build.VERSION.SDK_INT,observedChildren);",source)
+        self.assertLess(source.index("observedChildren++;",source.index("private BrowserFolderCardStats scanSafFolder(")),
+                        source.index("BrowserFolderAccess.requireVisibleEvidence(parentId,Build.VERSION.SDK_INT,observedChildren);"))
         self.assertGreaterEqual(source.count("BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);"),2)
         self.assertIn("BrowserFolderCardStats stats=BrowserFolderCardStats.scanDocuments(",source)
         self.assertIn('UiConfirmDialog.showInfo(this,"Нет доступа к папке"',source)

@@ -1268,11 +1268,13 @@ public final class FileBrowserActivity extends Activity {
             String[] cols={DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_MIME_TYPE,
                 DocumentsContract.Document.COLUMN_SIZE};
+            int observedChildren=0;
             try(Cursor cursor=getContentResolver().query(children,cols,null,null,null)){
                 if(cursor==null)throw new java.io.IOException("Папка недоступна");
                 while(cursor.moveToNext()){
                     if(Thread.currentThread().isInterrupted())
                         throw new java.io.IOException("Подсчёт отменён");
+                    observedChildren++;
                     String id=cursor.getString(0),mime=cursor.getString(1);
                     if(mime==null||mime.trim().isEmpty())
                         throw new java.io.IOException("Тип документа неизвестен");
@@ -1280,6 +1282,9 @@ public final class FileBrowserActivity extends Activity {
                         cursor.isNull(2)?-1:cursor.getLong(2));
                 }
             }
+            // A SAF provider may silently hide only a nested Android/data
+            // package folder while exposing files elsewhere in the tree.
+            BrowserFolderAccess.requireVisibleEvidence(parentId,Build.VERSION.SDK_INT,observedChildren);
         },documentId->{
             if(Thread.currentThread().isInterrupted())
                 throw new java.io.IOException("Подсчёт отменён");

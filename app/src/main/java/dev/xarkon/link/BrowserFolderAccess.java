@@ -14,7 +14,14 @@ final class BrowserFolderAccess {
         // can provide /storage/emulated/0 or the file-manager /0 alias.
         // Resolve dot segments before classifying; never escape the root.
         String path=relativePath.replace('\\','/').replaceAll("^/+","");
+        // SAF document IDs use primary:Android/data or raw:/storage/... .
+        // Only recognised shared-storage prefixes are trusted; opaque provider
+        // identifiers and other volumes must not be treated as Android/data.
         String lower=path.toLowerCase(Locale.ROOT);
+        if(lower.startsWith("primary:"))path=path.substring("primary:".length());
+        else if(lower.startsWith("raw:"))path=path.substring("raw:".length());
+        path=path.replaceAll("^/+","");
+        lower=path.toLowerCase(Locale.ROOT);
         if(lower.startsWith("storage/emulated/0/"))
             path=path.substring("storage/emulated/0/".length());
         else if(lower.startsWith("0/"))path=path.substring(2);
