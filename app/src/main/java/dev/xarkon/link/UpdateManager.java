@@ -15,6 +15,9 @@ import java.nio.file.StandardCopyOption;
 import android.os.Build;
 import android.provider.Settings;
 import org.json.JSONObject;
+import org.json.JSONArray;
+import java.util.ArrayList;
+import java.util.List;
 import java.io.*;
 import java.net.*;
 import java.security.MessageDigest;
@@ -42,6 +45,10 @@ public final class UpdateManager {
         public final long versionCode;
         public final String versionName,apkUrl,sha256,notes,packageName;
         public final long sizeBytes;
+        private final List<OtaHistory.Entry> history;
+        public String notesFor(long installedVersionCode){
+            return OtaHistory.merge(history,installedVersionCode,versionCode,notes);
+        }
         Release(JSONObject j)throws Exception {
             if(j.has("schema") && j.getInt("schema")!=1)throw new IOException("Неподдерживаемый формат OTA");
             packageName=j.optString("packageName","dev.xarkon.link");
@@ -58,6 +65,17 @@ public final class UpdateManager {
                 throw new IOException("Недействительные метаданные OTA");
             if(!OtaUrlPolicy.trustedApk(apkUrl,versionName))
                 throw new IOException("APK размещён вне официального канала");
+            List<OtaHistory.Entry> entries=new ArrayList<>();
+            JSONArray versions=j.optJSONArray("history");
+            if(versions!=null&&versions.length()<=500){
+                for(int i=0;i<versions.length();i++){
+                    JSONObject item=versions.optJSONObject(i);
+                    if(item==null){entries.clear();break;}
+                    entries.add(new OtaHistory.Entry(item.optLong("versionCode",0),
+                        item.optString("versionName",""),item.optString("notes","")));
+                }
+            }
+            history=entries;
         }
     }
     private static void checkHttps(String url)throws IOException{
