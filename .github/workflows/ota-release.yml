@@ -11,6 +11,7 @@ on:
       - 'scripts/import_source_zip.py'
       - 'scripts/sign_release.py'
       - 'scripts/make_manifest.py'
+      - 'scripts/ota_history.py'
       - 'release_notes/**'
       - 'tests/**'
       - 'app/**'
