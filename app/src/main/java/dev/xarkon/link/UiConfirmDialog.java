@@ -38,6 +38,14 @@ public final class UiConfirmDialog {
         else finish.run();
     }
     public static Dialog show(Activity a,String title,String message,String positiveLabel,Runnable action){
+        return showInternal(a,title,message,positiveLabel,action,false);
+    }
+    /** Single-action AMOLED explanation with a restriction icon and close button. */
+    public static Dialog showInfo(Activity a,String title,String message){
+        return showInternal(a,title,message,"ПОНЯТНО",null,true);
+    }
+    private static Dialog showInternal(Activity a,String title,String message,
+                                       String positiveLabel,Runnable action,boolean infoOnly){
         if(a==null||a.isFinishing()||a.isDestroyed())return null;
         SharedPreferences prefs=a.getSharedPreferences("settings",0);
         String mode=prefs.getString("theme_mode","dark");
@@ -56,7 +64,8 @@ public final class UiConfirmDialog {
         card.setPadding(dp(a,21),dp(a,20),dp(a,21),dp(a,19));
         card.setBackground(shape(a,panel,stroke,23));
         LinearLayout heading=new LinearLayout(a);heading.setGravity(Gravity.CENTER_VERTICAL);
-        heading.addView(new UiIcon(a,"info",accent),new LinearLayout.LayoutParams(dp(a,29),dp(a,29)));
+        heading.addView(infoOnly?new UiIcon(a,"close",accent):new UiIcon(a,"info",accent),
+            new LinearLayout.LayoutParams(dp(a,29),dp(a,29)));
         TextView titleView=label(a,title,19,foreground,true);
         LinearLayout.LayoutParams titleLp=new LinearLayout.LayoutParams(0,-2,1);
         titleLp.leftMargin=dp(a,12);heading.addView(titleView,titleLp);card.addView(heading);
@@ -76,7 +85,7 @@ public final class UiConfirmDialog {
         TextView cancelText=label(a,"ОТМЕНА",12,foreground,true);
         LinearLayout.LayoutParams cancelTextLp=new LinearLayout.LayoutParams(-2,-2);
         cancelTextLp.leftMargin=dp(a,6);cancel.addView(cancelText,cancelTextLp);
-        buttons.addView(cancel,new LinearLayout.LayoutParams(0,-2,1));
+        if(!infoOnly)buttons.addView(cancel,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout accept=new LinearLayout(a);accept.setGravity(Gravity.CENTER);
         accept.setPadding(dp(a,8),dp(a,13),dp(a,8),dp(a,13));
         accept.setBackground(new RippleDrawable(ColorStateList.valueOf(0x44000000),
@@ -86,7 +95,8 @@ public final class UiConfirmDialog {
         LinearLayout.LayoutParams acceptTextLp=new LinearLayout.LayoutParams(-2,-2);
         acceptTextLp.leftMargin=dp(a,6);accept.addView(acceptText,acceptTextLp);
         LinearLayout.LayoutParams acceptLp=new LinearLayout.LayoutParams(0,-2,1.25f);
-        acceptLp.leftMargin=dp(a,9);buttons.addView(accept,acceptLp);
+        if(!infoOnly)acceptLp.leftMargin=dp(a,9);
+        buttons.addView(accept,acceptLp);
         cancel.setContentDescription("Отмена");accept.setContentDescription(positiveLabel);
         cancel.setOnClickListener(v->close(a,dialog,card,animate,null));
         accept.setOnClickListener(v->close(a,dialog,card,animate,action));

@@ -24,7 +24,21 @@ public final class ProtectedFolderCheck {
         yes(!BrowserFolderAccess.protectedAndroidPath("Android/database"));
         yes(!BrowserFolderAccess.protectedAndroidPath("data"));
         String protectedMessage=BrowserFolderAccess.message("Android/data",denied);
-        yes(protectedMessage.contains("Android/data")&&protectedMessage.contains("«Все файлы»"));
+        yes(protectedMessage.equals("Нет доступа к системной папке Android. Android ограничивает просмотр её содержимого."));
+        yes(BrowserFolderAccess.message("Android/obb",denied).equals(protectedMessage));
+        yes(BrowserFolderAccess.denied(new SecurityException("Permission denied")));
+        yes(BrowserFolderAccess.denied(new IOException("Permission denied")));
+        try{BrowserFolderAccess.requireVisibleEvidence("Android/data",30,0);
+            throw new AssertionError("Protected empty listing was trusted");
+        }catch(AccessDeniedException expected){}
+        try{BrowserFolderAccess.requireVisibleEvidence("Android/obb",35,0);
+            throw new AssertionError("Protected obb listing was trusted");
+        }catch(AccessDeniedException expected){}
+        try{BrowserFolderAccess.requireVisibleEvidence("Download/data",35,0);
+            BrowserFolderAccess.requireVisibleEvidence("Android/database",35,0);
+            BrowserFolderAccess.requireVisibleEvidence("Android/data",29,0);
+            BrowserFolderAccess.requireVisibleEvidence("Android/data",35,1);
+        }catch(AccessDeniedException unexpected){throw new AssertionError(unexpected);}
         yes(!BrowserFolderAccess.message("Download/data",denied).contains("Android/obb"));
         yes(!BrowserFolderAccess.denied(new IOException("disk read error")));
         yes(!BrowserFolderAccess.message("Android/data",new IOException("disk read error"))
@@ -45,7 +59,14 @@ public final class ProtectedFolderCheck {
         source=(JAVA/"FileBrowserActivity.java").read_text(encoding="utf-8")
         self.assertIn("if(!Files.isReadable(folder.toPath()))",source)
         self.assertIn("showBanner(BrowserFolderAccess.message(e.path,error),true);",source)
-        self.assertIn('return "Файлов: нет доступа | Размер: нет доступа";',source)
+        self.assertIn('return "Файлов: Нет доступа | Размер: Нет доступа";',source)
+        self.assertIn("BrowserFolderAccess.requireVisibleEvidence(parent,Build.VERSION.SDK_INT,scanned);",source)
+        self.assertIn("BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);",source)
+        self.assertIn('UiConfirmDialog.showInfo(this,"Нет доступа к папке"',source)
+        dialog=(JAVA/"UiConfirmDialog.java").read_text(encoding="utf-8")
+        self.assertIn('return showInternal(a,title,message,"ПОНЯТНО",null,true);',dialog)
+        self.assertIn("if(!infoOnly)buttons.addView(cancel",dialog)
+        self.assertIn('infoOnly?new UiIcon(a,"close",accent)',dialog)
         self.assertIn("invalidateFolderStats();",source)
         self.assertIn("if(epoch!=folderStatsEpoch)return;",source)
         self.assertIn("folderSizeSnapshots.clear();",source)

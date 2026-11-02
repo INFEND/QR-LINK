@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.111",
+  "entries": [
+    {
+      "note": "[=] Для защищённых **Android/data и Android/obb** добавлено понятное окно «Нет доступа»",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "UiConfirmDialog.showInfo(this,\"Нет доступа к папке\",folderAccessErrors.get(key));"
+    },
+    {
+      "note": "[=] Защищённая папка больше не отображается **пустой**, если Android скрывает её содержимое",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "BrowserFolderAccess.requireVisibleEvidence(parent,Build.VERSION.SDK_INT,scanned);"
+    }
+  ]
+}

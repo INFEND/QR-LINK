@@ -741,6 +741,8 @@ public final class FileBrowserActivity extends Activity {
                 else result.truncated=true;
             }
         }
+        // A protected Android folder can look empty when Android filtered its contents.
+        BrowserFolderAccess.requireVisibleEvidence(parent,Build.VERSION.SDK_INT,scanned);
         result.addAll(directories);result.addAll(files);
         return result;
     }
@@ -1234,7 +1236,7 @@ public final class FileBrowserActivity extends Activity {
         Integer scanned=folderProgressCounts.get(folder.key());
         if(scanned!=null)return "Файлов: "+scanned+"+ | Размер: подсчёт…";
         if(folderAccessErrors.containsKey(folder.key())&&(stats==null||!stats.complete))
-            return "Файлов: нет доступа | Размер: нет доступа";
+            return "Файлов: Нет доступа | Размер: Нет доступа";
         if(stats==null)return "Файлов: подсчёт… | Размер: подсчёт…";
         return "Файлов: "+(stats.complete?Integer.toString(stats.fileCount):"неизвестно")+
             " | Размер: "+(stats.bytesKnown?Util.readable(stats.bytes):"неизвестен");
@@ -1280,6 +1282,13 @@ public final class FileBrowserActivity extends Activity {
             }
         },progress);
     }
+    private BrowserFolderCardStats scanLocalFolder(Entry folder,
+            BrowserFolderCardStats.ProgressListener progress)throws java.io.IOException{
+        BrowserFolderCardStats stats=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
+            Environment.getExternalStorageDirectory().getCanonicalFile().toPath(),progress);
+        BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);
+        return stats;
+    }
     /** Resolve folder metadata off the UI/query thread, including unselected cards. */
     private void requestFolderSize(Entry folder){
         if(!folder.folder)return;
@@ -1308,8 +1317,7 @@ public final class FileBrowserActivity extends Activity {
                 if(folder.localFile!=null&&!snapshotRequested){
                     if(!hasLocalStorageAccess())
                         throw new SecurityException("Нет доступа к внутренней памяти");
-                    direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
-                        Environment.getExternalStorageDirectory().getCanonicalFile().toPath(),progress);
+                    direct=scanLocalFolder(folder,progress);
                 }else if(folder.tree!=null&&!snapshotRequested){
                     direct=scanSafFolder(folder,progress);
                 }else{
@@ -1337,8 +1345,7 @@ public final class FileBrowserActivity extends Activity {
                 // stopped at the separate transfer limit.
                 if(snapshotRequested&&folder.localFile!=null)try{
                     if(hasLocalStorageAccess())
-                        direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
-                            Environment.getExternalStorageDirectory().getCanonicalFile().toPath());
+                        direct=scanLocalFolder(folder,null);
                 }catch(Exception ignored){}
                 if(snapshotRequested&&folder.tree!=null&&direct==null)try{
                     direct=scanSafFolder(folder);
@@ -1460,8 +1467,13 @@ public final class FileBrowserActivity extends Activity {
             child.docId.startsWith(parent.docId+"/");
     }
     private void expandFolder(Entry e){
-        searchIndex.invalidate();
         String key=e.key();
+        // Explain a confirmed denial immediately, never expand a false empty folder.
+        if(BrowserFolderAccess.protectedAndroidPath(e.path)&&folderAccessErrors.containsKey(key)){
+            UiConfirmDialog.showInfo(this,"Нет доступа к папке",folderAccessErrors.get(key));
+            return;
+        }
+        searchIndex.invalidate();
         if(expandedFolders.remove(key)){
             for(Entry opened:new ArrayList<>(openedFolders.values())){
                 if(!descendantOf(opened,e))continue;
@@ -1514,7 +1526,11 @@ public final class FileBrowserActivity extends Activity {
                     if(!(error instanceof OperationCanceledException)){
                         if(BrowserFolderAccess.denied(error))
                             folderAccessErrors.put(key,BrowserFolderAccess.message(e.path,error));
-                        showBanner(BrowserFolderAccess.message(e.path,error),true);
+                        if(BrowserFolderAccess.protectedAndroidPath(e.path)&&
+                                BrowserFolderAccess.denied(error))
+                            UiConfirmDialog.showInfo(this,"Нет доступа к папке",
+                                BrowserFolderAccess.message(e.path,error));
+                        else showBanner(BrowserFolderAccess.message(e.path,error),true);
                     }
                     render();
                 });

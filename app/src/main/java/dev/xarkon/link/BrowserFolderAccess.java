@@ -16,6 +16,15 @@ final class BrowserFolderAccess {
             lower.equals("android/obb")||lower.startsWith("android/obb/");
     }
 
+    /** Android 11+ may silently filter a protected directory to an empty listing.
+     * That is not proof that its real contents are empty. Other data folders are unaffected.
+     */
+    static void requireVisibleEvidence(String relativePath,int sdk,int observedEntries)
+            throws AccessDeniedException{
+        if(sdk>=30&&protectedAndroidPath(relativePath)&&observedEntries==0)
+            throw new AccessDeniedException(relativePath);
+    }
+
     static boolean denied(Throwable error){
         for(Throwable cause=error;cause!=null;cause=cause.getCause()){
             if(cause instanceof SecurityException||cause instanceof AccessDeniedException)return true;
@@ -34,7 +43,7 @@ final class BrowserFolderAccess {
 
     static String message(String relativePath,Throwable error){
         if(denied(error)&&protectedAndroidPath(relativePath))
-            return "Android ограничивает доступ к Android/data и Android/obb даже при разрешении «Все файлы». Содержимое этой папки недоступно приложению.";
+            return "Нет доступа к системной папке Android. Android ограничивает просмотр её содержимого.";
         if(denied(error))
             return "Нет доступа к папке. Проверьте разрешения на файлы или выберите доступную папку через системный проводник.";
         return "Не удалось раскрыть папку. Проверьте, что она существует и доступна.";
