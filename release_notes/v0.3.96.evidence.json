@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.95",
+  "entries": [
+    {
+      "note": "[=] FTP-проводник безопасно обрабатывает длинные списки файлов без переполнения памяти",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "while((line=FtpListingReader.readLine(r))!=null){"
+    },
+    {
+      "note": "[=] FTP-проводник отклоняет опасные имена файлов и папок",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "if(!FtpListingReader.safeName(name))continue;"
+    }
+  ]
+}

@@ -70,7 +70,7 @@ public final class FtpBridge implements AutoCloseable {
         if(path==null||path.isEmpty()||path.equals("/"))return;
         for(String segment:path.replace('\\','/').split("/")){
             if(segment.isEmpty())continue;
-            if(segment.equals(".")||segment.equals(".."))throw new IOException("Некорректный путь");
+            if(!FtpListingReader.safeName(segment))throw new IOException("Некорректный путь");
             expectResult(send("CWD "+segment));
         }
     }
@@ -80,18 +80,23 @@ public final class FtpBridge implements AutoCloseable {
             int code=send("LIST");if(code!=125&&code!=150)throw serverFailure(code);
             try(BufferedReader r=new BufferedReader(new InputStreamReader(data.getInputStream(),StandardCharsets.UTF_8))){
                 String line;
-                while((line=r.readLine())!=null){
+                while((line=FtpListingReader.readLine(r))!=null){
                     if(line.startsWith("total "))continue;
                     // Unix LIST: permissions links owner group size month day time name
                     String[]fields=line.trim().split("\\s+",9);
                     if(fields.length>=9){
                         boolean isDir=fields[0].charAt(0)=='d';long size=-1;
                         try{size=Long.parseLong(fields[4]);}catch(Exception ignored){}
-                        String name=fields[8];if(name.equals(".")||name.equals(".."))continue;
+                        String name=fields[8];if(!FtpListingReader.safeName(name))continue;
+                        FtpListingReader.requireCapacity(result.size());
                         result.add(new Entry(name,isDir,size));
                     }else{
                         // Some ShareMe servers support minimal LIST without Unix attributes.
-                        if(!line.trim().isEmpty())result.add(new Entry(line.trim(),false,-1));
+                        String name=line.trim();
+                        if(FtpListingReader.safeName(name)){
+                            FtpListingReader.requireCapacity(result.size());
+                            result.add(new Entry(name,false,-1));
+                        }
                     }
                 }
             }
@@ -102,7 +107,7 @@ public final class FtpBridge implements AutoCloseable {
     }
     public Uri download(String dir,String file,TransferEngine.Events events)throws Exception{
         navigate(dir);
-        if(file.contains("/")||file.contains("\\")||file.contains("\r")||file.contains("\n"))throw new IOException("Неверное имя");
+        if(!FtpListingReader.safeName(file))throw new IOException("Неверное имя файла FTP");
         String name=Util.safeName(file);
         ContentValues cv=new ContentValues();cv.put(MediaStore.Downloads.DISPLAY_NAME,name);
         cv.put(MediaStore.Downloads.MIME_TYPE,"application/octet-stream");
