@@ -198,6 +198,23 @@ public final class SafFolderCardCheck {
         BrowserFolderCardStats result=BrowserFolderCardStats.scanDocuments("root",reader);
         if(!result.complete||!result.bytesKnown||result.fileCount!=30002||result.bytes!=30005)
             throw new AssertionError("SAF folder totals over queue limit");
+        // Duplicate provider rows can report a missing size first, then
+        // an exact one; neither order may corrupt the final count/bytes.
+        tree.put("root",Arrays.asList(new Node("same",false,-1),
+            new Node("same",false,4096),new Node("other",false,7)));
+        result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(!result.complete||!result.bytesKnown||result.fileCount!=2||result.bytes!=4103)
+            throw new AssertionError("Later exact SAF metadata must repair missing size");
+        tree.put("root",Arrays.asList(new Node("same",false,4096),
+            new Node("same",false,-1),new Node("other",false,7)));
+        result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(!result.complete||!result.bytesKnown||result.fileCount!=2||result.bytes!=4103)
+            throw new AssertionError("Later missing metadata must not erase exact size");
+        tree.put("root",Arrays.asList(new Node("zero",false,-1),
+            new Node("zero",false,0)));
+        result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(!result.bytesKnown||result.fileCount!=1||result.bytes!=0)
+            throw new AssertionError("A verified zero-byte document is exact");
         tree.put("root",Arrays.asList(new Node("unknown",false,-1)));
         result=BrowserFolderCardStats.scanDocuments("root",reader);
         if(!result.complete||result.bytesKnown||result.fileCount!=1)
