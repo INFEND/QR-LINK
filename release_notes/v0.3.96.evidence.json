@@ -9,7 +9,7 @@
     {
       "note": "[=] FTP-проводник отклоняет опасные имена файлов и папок",
       "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
-      "changed_line": "if(!FtpListingReader.safeName(name))continue;"
+      "changed_line": "String name=fields[8];if(!FtpListingReader.safeName(name))continue;"
     }
   ]
 }
