@@ -61,7 +61,6 @@ public final class MainActivity extends Activity {
     private boolean screenTransition;
     private int screenDirection=1;
     private boolean updateNotificationLaunch;
-    private TextView backgroundCheckStatus;
     private LinearLayout homeUpdatePanel;
     private TextView homeUpdateVersion;
     private final Runnable startupUpdateTask=()->{
@@ -557,7 +556,6 @@ public final class MainActivity extends Activity {
         qrImage=null;receiveHint=null;receiveCaption=null;networkBadge=null;
         transferCard=null;transferHeading=null;transferFileList=null;transferFileAdapter=null;
         startSendButton=null;stopSendButton=null;
-        backgroundCheckStatus=null;
         homeUpdatePanel=null;homeUpdateVersion=null;
         scroller=new ScrollView(this);scroller.setFillViewport(true);scroller.setClipToPadding(false);
         scroller.setBackgroundColor(bg);scroller.setVerticalScrollBarEnabled(false);
@@ -1025,7 +1023,6 @@ public final class MainActivity extends Activity {
             prefs().getBoolean(OtaUpdateSchedule.PREF_BACKGROUND,false),enabled->{
                 prefs().edit().putBoolean(OtaUpdateSchedule.PREF_BACKGROUND,enabled).apply();
                 OtaUpdateSchedule.configure(this);
-                updateBackgroundCheckStatus();
                 frequency.animate().cancel();
                 frequency.animate().alpha(enabled?1f:.45f)
                     .setDuration(175).setInterpolator(new DecelerateInterpolator()).start();
@@ -1084,10 +1081,6 @@ public final class MainActivity extends Activity {
         boolean enabled=prefs().getBoolean(OtaUpdateSchedule.PREF_BACKGROUND,false);
         frequency.setAlpha(enabled?1f:.45f);
         setEnabledChildren(frequency,enabled);
-        backgroundCheckStatus=text("",12,muted,false);
-        backgroundCheckStatus.setPadding(dp(7),dp(7),dp(7),dp(10));
-        margin(parent,backgroundCheckStatus,5);
-        updateBackgroundCheckStatus();
     }
     private void setEnabledChildren(View v,boolean enabled){
         v.setEnabled(enabled);
@@ -1108,26 +1101,6 @@ public final class MainActivity extends Activity {
         handler.postDelayed(()->{
             if(!isFinishing()&&!isDestroyed())checkForUpdates();
         },380L);
-    }
-    private void updateBackgroundCheckStatus(){
-        if(backgroundCheckStatus==null)return;
-        if(!prefs().getBoolean(OtaUpdateSchedule.PREF_BACKGROUND,false)){
-            backgroundCheckStatus.setText("Фоновая проверка выключена");
-            return;
-        }
-        String result=prefs().getString("ota_background_result","");
-        long last=prefs().getLong("ota_last_background_attempt",0L);
-        String lastText=last>0?android.text.format.DateFormat.format("dd.MM HH:mm",last).toString():"ещё не выполнялась";
-        if(android.os.Build.VERSION.SDK_INT>=33&&
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=
-                PackageManager.PERMISSION_GRANTED){
-            backgroundCheckStatus.setText("Последняя проверка: "+lastText+
-                "\nУведомления запрещены в настройках Android");
-        }else if(!result.isEmpty()){
-            backgroundCheckStatus.setText("Последняя проверка: "+lastText+"\n"+result);
-        }else{
-            backgroundCheckStatus.setText("Ожидается первая проверка по расписанию");
-        }
     }
     private long installedOtaCode(){
         try{return getPackageManager().getPackageInfo(getPackageName(),0).getLongVersionCode();}
