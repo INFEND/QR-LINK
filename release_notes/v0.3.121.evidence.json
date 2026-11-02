@@ -1,0 +1,25 @@
+{
+  "base_tag": "v0.3.120",
+  "entries": [
+    {
+      "note": "[=] **Фоновая проверка** сохраняет изменения всех пропущенных выпусков, а не только последнего",
+      "path": "app/src/main/java/dev/xarkon/link/BackgroundUpdateJob.java",
+      "changed_line": ".putString(\"ota_available_notes\",release.notesFor(installed))"
+    },
+    {
+      "note": "[=] **Сохранённый журнал** перепроверяется, если информация о пропущенных версиях устарела",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "if(prefs().getLong(\"ota_available_notes_base_code\",-1L)!=installed){"
+    },
+    {
+      "note": "[=] **История обновлений** больше не ограничена фиксированными 500 записями",
+      "path": "app/src/main/java/dev/xarkon/link/UpdateManager.java",
+      "changed_line": "if(versions!=null){"
+    },
+    {
+      "note": "[=] **Старые записи** больше не скрывают актуальные изменения из-за ошибок ранних выпусков",
+      "path": "app/src/main/java/dev/xarkon/link/OtaHistory.java",
+      "changed_line": "if(entry.code<=installed)continue;"
+    }
+  ]
+}
