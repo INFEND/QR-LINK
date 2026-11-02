@@ -55,7 +55,7 @@ def build_history(version, version_code, current_notes):
             parsed = version_parts(tag.removeprefix("v"))
         except ValueError:
             continue
-        if parsed >= current:
+        if parsed >= current or parsed < (0, 3, 85):
             continue
         path = Path("release_notes") / (tag + ".txt")
         if not path.is_file():
