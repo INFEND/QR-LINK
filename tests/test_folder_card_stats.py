@@ -198,6 +198,23 @@ public final class SafFolderCardCheck {
         BrowserFolderCardStats result=BrowserFolderCardStats.scanDocuments("root",reader);
         if(!result.complete||!result.bytesKnown||result.fileCount!=30002||result.bytes!=30005)
             throw new AssertionError("SAF folder totals over queue limit");
+        // Duplicate directory rows from one SAF cursor must be traversed
+        // only once, without treating the entire folder as inaccessible.
+        tree.put("root",Arrays.asList(new Node("child",true,0),
+            new Node("child",true,0)));
+        tree.put("child",Arrays.asList(new Node("leaf",false,4)));
+        result=BrowserFolderCardStats.scanDocuments("root",reader);
+        if(!result.complete||!result.bytesKnown||result.fileCount!=1||result.bytes!=4)
+            throw new AssertionError("Repeated same-parent directory must count once");
+        // Reusing the same directory ID beneath *different* parents is not
+        // a safe duplicate: it can hide a cycle or a provider alias.
+        tree.put("root",Arrays.asList(new Node("left",true,0),new Node("right",true,0)));
+        tree.put("left",Arrays.asList(new Node("shared",true,0)));
+        tree.put("right",Arrays.asList(new Node("shared",true,0)));
+        boolean aliasDenied=false;
+        try{BrowserFolderCardStats.scanDocuments("root",reader);}
+        catch(IOException expected){aliasDenied=true;}
+        if(!aliasDenied)throw new AssertionError("Cross-parent directory alias accepted");
         // Duplicate provider rows can report a missing size first, then
         // an exact one; neither order may corrupt the final count/bytes.
         tree.put("root",Arrays.asList(new Node("same",false,-1),

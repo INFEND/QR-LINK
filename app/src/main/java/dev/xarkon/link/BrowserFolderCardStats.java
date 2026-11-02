@@ -147,6 +147,9 @@ final class BrowserFolderCardStats {
             throw new java.io.IOException("Недоступная папка");
         java.util.ArrayDeque<String> pending=new java.util.ArrayDeque<>();
         java.util.HashSet<String> seenDirs=new java.util.HashSet<>();
+        // Some SAF providers repeat a child row in the same parent cursor.
+        // A second parent or a back-edge is an alias/cycle and must fail closed.
+        java.util.HashMap<String,String> directoryParents=new java.util.HashMap<>();
         java.util.HashMap<String,Long> seenFiles=new java.util.HashMap<>();
         final int[] count={0};
         final long[] total={0};
@@ -164,8 +167,16 @@ final class BrowserFolderCardStats {
                 if(id==null||id.trim().isEmpty())
                     throw new java.io.IOException("Элемент без идентификатора");
                 if(directory){
-                    if(seenFiles.containsKey(id)||!seenDirs.add(id))
+                    if(seenFiles.containsKey(id))
+                        throw new java.io.IOException("Несогласованный тип документа");
+                    if(seenDirs.contains(id)){
+                        // A duplicate row from the *same* parent is harmless;
+                        // never traverse it twice or count its children twice.
+                        if(parent.equals(directoryParents.get(id)))return;
                         throw new java.io.IOException("Повторяющийся или циклический каталог");
+                    }
+                    seenDirs.add(id);
+                    directoryParents.put(id,parent);
                     pending.addLast(id);
                     return;
                 }
