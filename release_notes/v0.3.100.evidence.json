@@ -4,7 +4,7 @@
     {
       "note": "[=] FTP-загрузка показывает общий размер файла и точный прогресс, когда размер известен",
       "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
-      "changed_line": "events.progress(\"ShareMe FTP: \"+name,total,expectedBytes,total/Math.max(.001,(Util.now()-start)/1000.0));"
+      "changed_line": "if(Util.now()-lastUpdate>500){lastUpdate=Util.now();events.progress(\"ShareMe FTP: \"+name,total,expectedBytes,total/Math.max(.001,(Util.now()-start)/1000.0));}"
     },
     {
       "note": "[=] Неудачное FTP-подключение к каналу данных больше не оставляет открытый сокет",
