@@ -144,7 +144,29 @@ public final class SelectionTotalsCheck {
         yes(r.unknown&&!r.provisional); // Incomplete scans cannot claim exact size.
         r=sum(cache,file("verybig","file:///big","",Long.MAX_VALUE-1),
                     file("small","file:///small","",100));
-        yes(r.bytes==Long.MAX_VALUE);
+        yes(r.bytes==Long.MAX_VALUE&&r.unknown);
+        // Saturating a selected-size total must never look like a real
+        // 8 EiB file. The UI displays an unknown size instead.
+        r=sum(Collections.emptyMap(),
+            file("exactMax","file:///max","",Long.MAX_VALUE));
+        yes(r.bytes==Long.MAX_VALUE&&!r.unknown);
+        r=sum(Collections.emptyMap(),
+            file("exactMax","file:///max","",Long.MAX_VALUE),
+            file("extra","file:///extra","",1));
+        yes(r.bytes==Long.MAX_VALUE&&r.unknown);
+        Map<String,BrowserSelectionTotals.FolderStats> hugeCache=new HashMap<>();
+        BrowserSelectionTotals.Selection exactFolder=folder("exactFolder",
+            "file:///storage/emulated/0/Big","Big",-1);
+        hugeCache.put("exactFolder",new BrowserSelectionTotals.FolderStats(
+            Collections.emptyMap(),false,Long.MAX_VALUE-2));
+        r=sum(hugeCache,exactFolder,file("outsideBig",
+            "file:///storage/emulated/0/Elsewhere","Elsewhere",100));
+        yes(r.bytes==Long.MAX_VALUE&&r.unknown);
+        BrowserSelectionTotals.Selection previewFolder=folder("previewFolder",
+            "content://media/external/images/501","Preview",Long.MAX_VALUE-1);
+        r=sum(Collections.emptyMap(),previewFolder,
+            file("outsidePreview","content://media/external/images/502","Other",50));
+        yes(r.bytes==Long.MAX_VALUE&&r.unknown&&r.pending&&r.provisional);
     }
 }
 '''
