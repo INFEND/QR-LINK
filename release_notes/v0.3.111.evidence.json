@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.110",
+  "entries": [
+    {
+      "note": "[+] Журнал обновления показывает **все изменения пропущенных версий** одним списком",
+      "path": "app/src/main/java/dev/xarkon/link/UpdateManager.java",
+      "changed_line": "return OtaHistory.merge(history,installedVersionCode,versionCode,notes);"
+    },
+    {
+      "note": "[=] Маркеры изменений получили **цветное и жирное оформление**, важные фразы выделяются",
+      "path": "app/src/main/java/dev/xarkon/link/OtaProgressDialog.java",
+      "changed_line": "display.startsWith(\"[–]\")?0xfff07878:0xffffaa4d;"
+    }
+  ]
+}
