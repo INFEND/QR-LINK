@@ -31,6 +31,7 @@ public final class OtaHistory {
         Set<String> names=new HashSet<>();
         StringBuilder result=new StringBuilder();
         boolean selected=false;
+        long lastSelected=installed;
         for(Entry entry:history) {
             if(entry==null||entry.code<=previous||entry.code>latest||
                 entry.name==null||entry.name.isEmpty()||!names.add(entry.name)||
@@ -39,7 +40,8 @@ public final class OtaHistory {
             String clean=ReleaseNotes.visible(entry.notes);
             if(clean.isEmpty())return latestNotes;
             if(entry.code>installed) {
-                if(!selected && entry.code>installed+1)return latestNotes;
+                if(entry.code>lastSelected+1)return latestNotes;
+                lastSelected=entry.code;
                 if(result.length()>0)result.append('\n');
                 result.append(clean);
                 selected=true;
