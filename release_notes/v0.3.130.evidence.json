@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.129",
+  "entries": [
+    {
+      "note": "[=] **Размер папок** определяется точнее, если системный проводник не сообщает размер обычного файла",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "getContentResolver().openAssetFileDescriptor(document,\"r\")"
+    }
+  ]
+}
