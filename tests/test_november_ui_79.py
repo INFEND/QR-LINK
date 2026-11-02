@@ -75,6 +75,7 @@ class November79Tests(unittest.TestCase):
         self.assertIn("MAX_RELEASE_NOTES_CHARS = 100_000",script)
         manager=(JAVA/"UpdateManager.java").read_text(encoding="utf-8")
         self.assertIn("notes.length()>100_000",manager)
-        self.assertIn("memory.size()+n>512*1024",manager)
+        self.assertIn("MAX_MANIFEST_BYTES=4*1024*1024",manager)
+        self.assertIn("memory.size()+n>MAX_MANIFEST_BYTES",manager)
 
 if __name__=="__main__":unittest.main()
