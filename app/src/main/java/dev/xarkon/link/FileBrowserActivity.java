@@ -56,6 +56,8 @@ public final class FileBrowserActivity extends Activity {
     private final HashSet<String> folderSizePending=new HashSet<>();
     // Permission changes invalidate both successful and failed metadata scans.
     private final HashMap<String,String> folderAccessErrors=new HashMap<>();
+    // UI-only progress for long recursive folder scans, never a fabricated final total.
+    private final HashMap<String,Integer> folderProgressCounts=new HashMap<>();
     private int folderStatsEpoch=0;
     // Compact LRU summaries, never 30000 file URIs per unselected card.
     private final LinkedHashMap<String,BrowserFolderCardStats> folderCardStats=
@@ -190,6 +192,7 @@ public final class FileBrowserActivity extends Activity {
         folderSizeSnapshots.clear();
         folderCardStats.clear();
         folderAccessErrors.clear();
+        folderProgressCounts.clear();
     }
     private boolean hasLocalStorageAccess(){
         if(Build.VERSION.SDK_INT>=30)return Environment.isExternalStorageManager();
@@ -1228,6 +1231,8 @@ public final class FileBrowserActivity extends Activity {
                     "неизвестен":Util.readable(folder.mediaBytes));
         }
         BrowserFolderCardStats stats=folderCardStats.get(folder.key());
+        Integer scanned=folderProgressCounts.get(folder.key());
+        if(scanned!=null)return "Файлов: "+scanned+"+ | Размер: подсчёт…";
         if(folderAccessErrors.containsKey(folder.key())&&(stats==null||!stats.complete))
             return "Файлов: нет доступа | Размер: нет доступа";
         if(stats==null)return "Файлов: подсчёт… | Размер: подсчёт…";
@@ -1250,6 +1255,10 @@ public final class FileBrowserActivity extends Activity {
      * complete, consistent metadata for every descendant.
      */
     private BrowserFolderCardStats scanSafFolder(Entry folder)throws java.io.IOException{
+        return scanSafFolder(folder,null);
+    }
+    private BrowserFolderCardStats scanSafFolder(Entry folder,
+            BrowserFolderCardStats.ProgressListener progress)throws java.io.IOException{
         if(folder.tree==null||folder.docId==null||folder.docId.isEmpty())
             throw new java.io.IOException("Нет разрешения на папку");
         return BrowserFolderCardStats.scanDocuments(folder.docId,(parentId,visitor)->{
@@ -1269,13 +1278,21 @@ public final class FileBrowserActivity extends Activity {
                         cursor.isNull(2)?-1:cursor.getLong(2));
                 }
             }
-        });
+        },progress);
     }
     /** Resolve folder metadata off the UI/query thread, including unselected cards. */
     private void requestFolderSize(Entry folder){
         if(!folder.folder)return;
         final String key=folder.key();
         final int epoch=folderStatsEpoch;
+        final BrowserFolderCardStats.ProgressListener progress=(files,bytes)->
+            ui.post(()->{
+                if(epoch!=folderStatsEpoch||!folderSizePending.contains(key)||
+                    isFinishing()||isDestroyed())return;
+                folderProgressCounts.put(key,files);
+                TextView meta=folderMetaViews.get(key);
+                if(meta!=null)applyFolderMeta(meta,folder);
+            });
         final boolean snapshotRequested=selected.containsKey(key);
         boolean needsSnapshot=snapshotRequested&&!folderSizeSnapshots.containsKey(key);
         if(!needsSnapshot&&folderCardStats.containsKey(key))return;
@@ -1292,9 +1309,9 @@ public final class FileBrowserActivity extends Activity {
                     if(!hasLocalStorageAccess())
                         throw new SecurityException("Нет доступа к внутренней памяти");
                     direct=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
-                        Environment.getExternalStorageDirectory().getCanonicalFile().toPath());
+                        Environment.getExternalStorageDirectory().getCanonicalFile().toPath(),progress);
                 }else if(folder.tree!=null&&!snapshotRequested){
-                    direct=scanSafFolder(folder);
+                    direct=scanSafFolder(folder,progress);
                 }else{
                     ArrayList<FileCatalog.Item> files;
                     if(folder.mediaFolder){
@@ -1334,6 +1351,7 @@ public final class FileBrowserActivity extends Activity {
             ui.post(()->{
                 if(epoch!=folderStatsEpoch)return;
                 folderSizePending.remove(key);
+                folderProgressCounts.remove(key);
                 if(stats.complete)folderAccessErrors.remove(key);
                 else if(failedAccess!=null)folderAccessErrors.put(key,failedAccess);
                 if(isFinishing()||isDestroyed())return;
@@ -1595,7 +1613,7 @@ public final class FileBrowserActivity extends Activity {
         if(bannerDismiss!=null)ui.removeCallbacks(bannerDismiss);
         if(activeBanner!=null){activeBanner.dismiss();activeBanner=null;}
         io.shutdownNow();folderStatsIo.shutdownNow();previews.shutdownNow();
-        folderMetaViews.clear();previewWaiters.clear();
+        folderMetaViews.clear();folderProgressCounts.clear();previewWaiters.clear();
         previewCache.evictAll();super.onDestroy();
     }
 }

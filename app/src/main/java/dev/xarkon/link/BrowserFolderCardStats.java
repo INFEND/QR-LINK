@@ -31,8 +31,17 @@ final class BrowserFolderCardStats {
      * 30000-entry transfer queue. No links are followed; unreadable entries,
      * overflow and cancellation fail closed rather than publishing a partial size.
      */
+    interface ProgressListener {
+        void onProgress(int fileCount,long countedBytes);
+    }
     static BrowserFolderCardStats scanLocal(java.nio.file.Path folder,
                                              java.nio.file.Path sharedRoot)
+            throws java.io.IOException {
+        return scanLocal(folder,sharedRoot,null);
+    }
+    static BrowserFolderCardStats scanLocal(java.nio.file.Path folder,
+                                             java.nio.file.Path sharedRoot,
+                                             ProgressListener progress)
             throws java.io.IOException {
         java.nio.file.Path base=sharedRoot.toRealPath();
         if(java.nio.file.Files.isSymbolicLink(folder))
@@ -68,6 +77,8 @@ final class BrowserFolderCardStats {
                         throw new java.io.IOException("Размер папки слишком велик");
                     count[0]++;
                     total[0]+=size;
+                    if(progress!=null&&count[0]%512==0)
+                        progress.onProgress(count[0],total[0]);
                     return java.nio.file.FileVisitResult.CONTINUE;
                 }
                 @Override public java.nio.file.FileVisitResult visitFileFailed(
@@ -97,6 +108,11 @@ final class BrowserFolderCardStats {
         void readChildren(String parentId,DocumentChildVisitor visitor) throws java.io.IOException;
     }
     static BrowserFolderCardStats scanDocuments(String rootId,DocumentChildReader reader)
+            throws java.io.IOException {
+        return scanDocuments(rootId,reader,null);
+    }
+    static BrowserFolderCardStats scanDocuments(String rootId,DocumentChildReader reader,
+                                                 ProgressListener progress)
             throws java.io.IOException {
         if(rootId==null||rootId.trim().isEmpty()||reader==null)
             throw new java.io.IOException("Недоступная папка");
@@ -137,6 +153,8 @@ final class BrowserFolderCardStats {
                 count[0]++;
                 if(size<0||Long.MAX_VALUE-total[0]<size)known[0]=false;
                 else total[0]+=size;
+                if(progress!=null&&count[0]%512==0)
+                    progress.onProgress(count[0],total[0]);
             });
         }
         return new BrowserFolderCardStats(count[0],total[0],true,known[0]);
