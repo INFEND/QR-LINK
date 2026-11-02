@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.113",
+  "entries": [
+    {
+      "note": "[=] **Ошибки доступа и соединения** теперь объясняются по-русски, даже если Android не передал описание сбоя",
+      "path": "app/src/main/java/dev/xarkon/link/ErrorText.java",
+      "changed_line": "String typed=typeMessage(cause);"
+    }
+  ]
+}
