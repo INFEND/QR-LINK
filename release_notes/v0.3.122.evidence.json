@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.121",
+  "entries": [
+    {
+      "note": "[=] **Системные папки Android** правильно распознаются при разных записях пути",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderAccess.java",
+      "changed_line": "if(part.equals(\"..\")){"
+    },
+    {
+      "note": "[=] **Недоступные вложенные файлы** показывают понятное сообщение об отказе доступа",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderAccess.java",
+      "changed_line": "lower.contains(\"нет доступа\")||lower.contains(\"недоступный элемент\")||"
+    }
+  ]
+}
