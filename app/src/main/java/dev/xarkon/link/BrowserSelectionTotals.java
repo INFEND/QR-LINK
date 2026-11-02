@@ -66,8 +66,16 @@ final class BrowserSelectionTotals {
         return uri!=null&&(uri.startsWith("file:/")||
             uri.startsWith("content://media/"));
     }
-    private static long add(long a,long b){
-        return b<0||Long.MAX_VALUE-a<b?Long.MAX_VALUE:a+b;
+    /** Saturation is a display fallback, never evidence of an exact total. */
+    private static final class ByteSum {
+        long value;
+        boolean overflow;
+        void add(long bytes){
+            if(bytes<0||Long.MAX_VALUE-value<bytes){
+                value=Long.MAX_VALUE;
+                overflow=true;
+            }else value+=bytes;
+        }
     }
     /** A selected parent already represents every nested shared-storage folder.
      * Ignore overlapping child estimates, including while the parent is loading.
@@ -95,7 +103,7 @@ final class BrowserSelectionTotals {
         HashSet<String> covered=new HashSet<>();
         ArrayList<Selection> provisionalFolders=new ArrayList<>();
         boolean pending=false,unknown=false,provisional=false;
-        long total=0;
+        ByteSum total=new ByteSum();
         // Count exact folder contents first; deduplicate shared files by URI.
         for(int i=0;i<all.size();i++){
             Selection entry=all.get(i);
@@ -113,26 +121,26 @@ final class BrowserSelectionTotals {
                 // total or an existing MediaStore estimate.
                 // The ≈ symbol makes it clear that this is not an exact scan.
                 provisional=true;
-                total=add(total,entry.provisionalBytes);
+                total.add(entry.provisionalBytes);
                 continue;
             }
             unknown|=stats.unknown;
             if(stats.exactBytes>=0){
                 // The complete streaming total includes all descendants, even
                 // when the transfer queue could not enumerate 30000+ entries.
-                total=add(total,stats.exactBytes);
+                total.add(stats.exactBytes);
                 continue;
             }
             for(Map.Entry<String,Long> file:stats.files.entrySet()){
                 if(!covered.add(file.getKey()))continue;
                 if(file.getValue()==null||file.getValue()<0)unknown=true;
-                else total=add(total,file.getValue());
+                else total.add(file.getValue());
             }
         }
         // A provisional folder amount is a media-index estimate. Keep the UI
         // responsive while a full recursive scan computes its exact total.
         for(Selection entry:provisionalFolders){
-            if(entry.provisionalBytes>=0)total=add(total,entry.provisionalBytes);
+            if(entry.provisionalBytes>=0)total.add(entry.provisionalBytes);
         }
         HashSet<String> countedFiles=new HashSet<>();
         for(Selection entry:all){
@@ -152,8 +160,8 @@ final class BrowserSelectionTotals {
             }
             if(enclosed)continue;
             if(entry.bytes<0)unknown=true;
-            else total=add(total,entry.bytes);
+            else total.add(entry.bytes);
         }
-        return new Result(total,pending,unknown,provisional);
+        return new Result(total.value,pending,unknown||total.overflow,provisional);
     }
 }
