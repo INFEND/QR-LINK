@@ -1119,7 +1119,8 @@ public final class MainActivity extends Activity {
                 if(!newer){refreshHomeUpdateCard(false);offerStoredBackgroundUpdate();return;}
                 prefs().edit().putLong(OtaUpdateSchedule.PREF_AVAILABLE_CODE,r.versionCode)
                     .putString(OtaUpdateSchedule.PREF_AVAILABLE_NAME,r.versionName)
-                    .putString("ota_available_notes",r.notesFor(installedOtaCode())).apply();
+                    .putString("ota_available_notes",r.notesFor(installedOtaCode()))
+                    .putLong("ota_available_notes_base_code",installedOtaCode()).apply();
                 refreshHomeUpdateCard(true);
                 OtaProgressDialog offer=new OtaProgressDialog(MainActivity.this);
                 offer.show();offer.offer(r.versionName,r.notesFor(installedOtaCode()),()->downloadAndInstallUpdate(r,offer));
@@ -1136,6 +1137,12 @@ public final class MainActivity extends Activity {
         try{installed=getPackageManager().getPackageInfo(getPackageName(),0).getLongVersionCode();}
         catch(Exception ignored){return;}
         if(code<=installed||code<=prompted)return;
+        // Old builds cached only the newest release note. Never show that stale
+        // incomplete cache as if it covered all versions skipped by this device.
+        if(prefs().getLong("ota_available_notes_base_code",-1L)!=installed){
+            checkForUpdates();
+            return;
+        }
         prefs().edit().putLong("ota_last_prompted_code",code).apply();
         String name=prefs().getString(OtaUpdateSchedule.PREF_AVAILABLE_NAME,"новая версия");
         OtaProgressDialog offer=new OtaProgressDialog(this);
