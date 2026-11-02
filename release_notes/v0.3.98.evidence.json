@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.97",
+  "entries": [
+    {
+      "note": "[=] FTP-проводник не показывает устаревшие папки при быстром переходе между каталогами",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "final long request=ftpRequests.begin();"
+    }
+  ]
+}

@@ -93,6 +93,7 @@ public final class MainActivity extends Activity {
     private String ftpDir="/";
     private final ArrayList<FtpBridge.Entry> ftpEntries=new ArrayList<>();
     private TextView ftpListLabel;
+    private final FtpRequestGuard ftpRequests=new FtpRequestGuard();
     private long lastQueueFingerprint=-1;
     private boolean queueReadPending;
     private TextView renderedQueueLabel;
@@ -271,6 +272,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy(){
         if(actionDialog!=null){actionDialog.dismiss();actionDialog=null;}
         notices.dismiss();
+        ftpRequests.invalidate();
         queueReader.shutdownNow();
         if(current.get()==this)current.clear();
         super.onDestroy();
@@ -636,6 +638,7 @@ public final class MainActivity extends Activity {
         if(navigating||page==value)return;
         if(value==SETTINGS)expandedSections.clear();
         final int previous=page;
+        if(previous==FTP)ftpRequests.invalidate();
         screenDirection=(value==HOME||value==SETTINGS&&previous!=HOME)?-1:1;
         screenTransition=motion()&&screenHost!=null;
         navigating=true;
@@ -1255,12 +1258,17 @@ public final class MainActivity extends Activity {
     private void browseFtp(String dir){String address=ftpAddress==null?prefs().getString("ftp",""):ftpAddress.getText().toString().trim();
         if(!address.startsWith("ftp://")){toast("Укажите FTP-адрес из ShareMe");return;}
         prefs().edit().putString("ftp",address).apply();
+        final long request=ftpRequests.begin();
         if(ftpListLabel!=null)ftpListLabel.setText("Загрузка списка файлов...");
         new Thread(()->{try(FtpBridge client=new FtpBridge(this,address)){
             ArrayList<FtpBridge.Entry> entries=new ArrayList<>(client.list(dir));runOnUiThread(()->{
+                if(!ftpRequests.isCurrent(request)||page!=FTP||isFinishing()||isDestroyed())return;
                 ftpDir=dir;ftpEntries.clear();ftpEntries.addAll(entries);show();
             });
-        }catch(Exception e){runOnUiThread(()->{if(ftpListLabel!=null)ftpListLabel.setText("Ошибка: "+ErrorText.human(e));});}},"ftp-list").start();
+        }catch(Exception e){runOnUiThread(()->{
+            if(!ftpRequests.isCurrent(request)||page!=FTP||isFinishing()||isDestroyed())return;
+            if(ftpListLabel!=null)ftpListLabel.setText("Ошибка: "+ErrorText.human(e));
+        });}},"ftp-list").start();
     }
     /** No disk I/O or 12k-row adapter rebuild on the 55 ms animation ticker. */
     private void updateQueue(){
