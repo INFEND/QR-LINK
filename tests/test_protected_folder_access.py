@@ -84,6 +84,16 @@ public final class ProtectedFolderCheck {
             subprocess.run(["java","-cp",temp,"dev.xarkon.link.ProtectedFolderCheck"],
                 check=True,capture_output=True,text=True)
 
+    def test_recursive_transfer_rejects_silent_android_data_filtering(self):
+        source=(JAVA/"FileCatalog.java").read_text(encoding="utf-8")
+        self.assertIn("int observedChildren=0;",source)
+        self.assertIn("observedChildren++;",source)
+        self.assertIn("BrowserFolderAccess.requireVisibleEvidence(relative,Build.VERSION.SDK_INT,observedChildren);",source)
+        # Selection must fail closed even when Android returns an empty listing,
+        # not send an empty/partial queue as a successful transfer.
+        self.assertLess(source.index("observedChildren++;"),
+                        source.index("BrowserFolderAccess.requireVisibleEvidence(relative,Build.VERSION.SDK_INT,observedChildren);"))
+
     def test_async_failure_and_permission_change_refresh(self):
         source=(JAVA/"FileBrowserActivity.java").read_text(encoding="utf-8")
         self.assertIn("if(!Files.isReadable(folder.toPath()))",source)
