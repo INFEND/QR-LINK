@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.98",
+  "entries": [
+    {
+      "note": "[=] FTP-загрузка проверяет размер файла и удаляет неполную копию",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "long expectedBytes=FtpSizeReply.expectedBytes(sizeCode,last);"
+    },
+    {
+      "note": "[=] Ошибка подключения к FTP больше не оставляет открытое соединение",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "try{control.close();}catch(IOException ignored){}"
+    }
+  ]
+}

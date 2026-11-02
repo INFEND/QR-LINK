@@ -27,7 +27,9 @@ public final class FtpBridge implements AutoCloseable {
         URI uri=new URI(ftp.trim());if(!"ftp".equalsIgnoreCase(uri.getScheme()))throw new IOException("Введите ftp://IP:порт/");
         host=uri.getHost();if(host==null)throw new IOException("Нет FTP-адреса");
         port=uri.getPort()>0?uri.getPort():21;
-        control=new Socket();control.connect(new InetSocketAddress(host,port),5000);control.setSoTimeout(20000);
+        control=new Socket();
+        try{
+            control.connect(new InetSocketAddress(host,port),5000);control.setSoTimeout(20000);
         reader=new BufferedReader(new InputStreamReader(control.getInputStream(),StandardCharsets.UTF_8));
         writer=new BufferedWriter(new OutputStreamWriter(control.getOutputStream(),StandardCharsets.UTF_8));
         expect(220);
@@ -37,6 +39,10 @@ public final class FtpBridge implements AutoCloseable {
         if(code==331){code=send("PASS "+pass);}
         if(code!=230&&code!=202)throw serverFailure(code);
         expectResult(send("TYPE I"));
+        }catch(Exception failure){
+            try{control.close();}catch(IOException ignored){}
+            throw failure;
+        }
     }
     private String last;
     private int response()throws IOException{
@@ -115,6 +121,8 @@ public final class FtpBridge implements AutoCloseable {
     public Uri download(String dir,String file,TransferEngine.Events events)throws Exception{
         navigate(dir);
         if(!FtpListingReader.safeName(file))throw new IOException("Неверное имя файла FTP");
+        int sizeCode=send("SIZE "+file);
+        long expectedBytes=FtpSizeReply.expectedBytes(sizeCode,last);
         String name=Util.safeName(file);
         ContentValues cv=new ContentValues();cv.put(MediaStore.Downloads.DISPLAY_NAME,name);
         cv.put(MediaStore.Downloads.MIME_TYPE,"application/octet-stream");
@@ -135,7 +143,10 @@ public final class FtpBridge implements AutoCloseable {
                 }
                 out.flush();
             }
-            expectResult(response());success=true;
+            expectResult(response());
+            if(expectedBytes>=0&&total!=expectedBytes)
+                throw new IOException("FTP-файл получен не полностью: размер не совпадает");
+            success=true;
         }finally{
             if(success){
                 ContentValues publish=new ContentValues();publish.put(MediaStore.Downloads.IS_PENDING,0);
