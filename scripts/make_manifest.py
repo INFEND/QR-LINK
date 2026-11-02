@@ -10,6 +10,7 @@ import subprocess
 from urllib.parse import quote
 
 from release_exceptions import declared_completions
+from ota_history import build_history
 
 MAX_RELEASE_NOTES_CHARS = 100_000
 MIN_NEW_RELEASE_CHANGES = 10  # History only: v0.3.78 through v0.3.84
@@ -111,7 +112,8 @@ def main():
         "sha256": sha,
         "sizeBytes": apk.stat().st_size,
         "publishedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "notes": load_release_notes(version)
+        "notes": load_release_notes(version),
+        "history": build_history(version, int(code), load_release_notes(version))
     }
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
