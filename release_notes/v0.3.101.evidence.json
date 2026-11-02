@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.100",
+  "entries": [
+    {
+      "note": "[=] FTP-загрузка прекращается до записи лишних данных, если сервер прислал больше объявленного размера",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "total=FtpSizeReply.checkedTotal(expectedBytes,total,n);"
+    }
+  ]
+}

@@ -135,7 +135,9 @@ public final class FtpBridge implements AutoCloseable {
             try(InputStream in=data.getInputStream();OutputStream out=context.getContentResolver().openOutputStream(dst,"w")){
                 if(out==null)throw new IOException("Нет доступа к загрузкам");
                 byte[]b=new byte[256*1024];int n;long lastUpdate=0;
-                while((n=in.read(b))!=-1){out.write(b,0,n);total+=n;
+                while((n=in.read(b))!=-1){
+                    total=FtpSizeReply.checkedTotal(expectedBytes,total,n);
+                    out.write(b,0,n);
                     if(Util.now()-lastUpdate>500){lastUpdate=Util.now();events.progress("ShareMe FTP: "+name,total,expectedBytes,total/Math.max(.001,(Util.now()-start)/1000.0));}
                 }
                 out.flush();

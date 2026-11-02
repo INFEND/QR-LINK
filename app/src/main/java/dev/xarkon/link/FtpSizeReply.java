@@ -15,4 +15,14 @@ final class FtpSizeReply {
             throw new IOException("FTP-сервер сообщил слишком большой размер файла",invalid);
         }
     }
+
+    /** Reject an oversized transfer before writing the offending block to disk. */
+    static long checkedTotal(long expectedBytes,long received,int blockSize)throws IOException{
+        if(received<0||blockSize<0||received>Long.MAX_VALUE-blockSize)
+            throw new IOException("FTP-сервер передал некорректный объём данных");
+        long next=received+blockSize;
+        if(expectedBytes>=0&&next>expectedBytes)
+            throw new IOException("FTP-сервер передал больше данных, чем объявил");
+        return next;
+    }
 }
