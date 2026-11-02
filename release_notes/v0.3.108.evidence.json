@@ -19,7 +19,7 @@
     {
       "note": "[=] Во время отправки отображается «Идёт передача файлов…»",
       "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
-      "changed_line": "\"Идёт передача файлов…\""
+      "changed_line": "\"Идёт передача файлов…\"):TransferService.status);"
     },
     {
       "note": "[=] В очереди файлов сведения разделены символом «|»",
