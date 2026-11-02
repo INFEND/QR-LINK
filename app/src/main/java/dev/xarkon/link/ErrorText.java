@@ -45,9 +45,27 @@ public final class ErrorText {
                 String localized=human(cause.getMessage());
                 if(!generic(localized))return localized;
             }
+            // Android and Java frequently omit the message entirely. The
+            // exception type still gives the user an actionable explanation.
+            String typed=typeMessage(cause);
+            if(typed!=null)return typed;
             cause=cause.getCause();
         }
         return fallback;
+    }
+    private static String typeMessage(Throwable cause){
+        if(cause instanceof java.lang.SecurityException ||
+           cause instanceof java.nio.file.AccessDeniedException)
+            return "Не хватает разрешений Android. Проверьте доступ к файлам и устройствам поблизости.";
+        if(cause instanceof java.net.UnknownHostException)
+            return "Не удалось определить адрес устройства или сервера. Проверьте подключение и DNS.";
+        if(cause instanceof java.net.SocketTimeoutException)
+            return "Превышено время ожидания. Убедитесь, что получатель находится рядом и готов к передаче.";
+        if(cause instanceof java.net.ConnectException)
+            return "Не удалось подключиться к получателю. Проверьте Wi-Fi и готовность второго устройства.";
+        if(cause instanceof java.io.FileNotFoundException)
+            return "Исходный файл недоступен или был перемещён.";
+        return null;
     }
     private static boolean generic(String text){
         return text.startsWith("Не удалось выполнить операцию.");
