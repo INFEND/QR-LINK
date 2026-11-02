@@ -15,17 +15,17 @@ public final class FtpListingReaderCheck {
     }
     static void check(boolean condition) { if(!condition) throw new AssertionError(); }
     public static void main(String[] args) throws Exception {
-        StringReader input = new StringReader("drwxr-xr-x owner 4 Jan 01 2026 folder\\r\\nfile without final newline");
+        StringReader input = new StringReader("drwxr-xr-x owner 4 Jan 01 2026 folder\r\nfile without final newline");
         check(FtpListingReader.readLine(input).endsWith("folder"));
         check(FtpListingReader.readLine(input).equals("file without final newline"));
         check(FtpListingReader.readLine(input) == null);
         check(FtpListingReader.readLine(new StringReader("")) == null);
-        check(FtpListingReader.readLine(new StringReader("x".repeat(4096) + "\\n")).length() == 4096);
-        badLine("x".repeat(4097) + "\\n");
-        badLine("file\\0name\\n");
-        badLine("file\\u0001name\\n");
+        check(FtpListingReader.readLine(new StringReader("x".repeat(4096) + "\n")).length() == 4096);
+        badLine("x".repeat(4097) + "\n");
+        badLine("file\0name\n");
+        badLine("file\u0001name\n");
         check(FtpListingReader.safeName("Новый файл 2026.jpg"));
-        for (String name : new String[]{"", ".", "..", "../file", "sub\\\\file", "bad\\rname", "bad\\u202ename", "bad\\u2066name"})
+        for (String name : new String[]{"", ".", "..", "../file", "sub\\file", "bad\rname", "bad\u202ename", "bad\u2066name"})
             check(!FtpListingReader.safeName(name));
         FtpListingReader.requireCapacity(99999);
         try { FtpListingReader.requireCapacity(100000); throw new AssertionError("No limit"); }
