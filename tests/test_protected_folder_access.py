@@ -23,11 +23,40 @@ public final class ProtectedFolderCheck {
         yes(!BrowserFolderAccess.protectedAndroidPath("Download/data"));
         yes(!BrowserFolderAccess.protectedAndroidPath("Android/database"));
         yes(!BrowserFolderAccess.protectedAndroidPath("data"));
+        // Canonicalized relative and absolute paths must agree.
+        yes(BrowserFolderAccess.protectedAndroidPath("Android/./data"));
+        yes(BrowserFolderAccess.protectedAndroidPath("Android/media/../data"));
+        yes(BrowserFolderAccess.protectedAndroidPath("Android/data/../obb"));
+        yes(BrowserFolderAccess.protectedAndroidPath("/storage/emulated/0/Android/data"));
+        yes(BrowserFolderAccess.protectedAndroidPath("/0/Android/obb/com.example"));
+        yes(BrowserFolderAccess.protectedAndroidPath("/sdcard/Android/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("Android/data/../media"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("Android/data/../../Download/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("../Android/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("/storage/emulated/10/Android/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("DCIM/data"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("Documents/data/subfolder"));
+        yes(!BrowserFolderAccess.protectedAndroidPath("Android/databases"));
         String protectedMessage=BrowserFolderAccess.message("Android/data",denied);
         yes(protectedMessage.equals("Нет доступа к системной папке Android. Android ограничивает просмотр её содержимого."));
         yes(BrowserFolderAccess.message("Android/obb",denied).equals(protectedMessage));
         yes(BrowserFolderAccess.denied(new SecurityException("Permission denied")));
         yes(BrowserFolderAccess.denied(new IOException("Permission denied")));
+        yes(BrowserFolderAccess.denied(new IOException("Недоступный элемент папки")));
+        yes(BrowserFolderAccess.denied(new IOException("Нет доступа к дочернему файлу")));
+        yes(BrowserFolderAccess.denied(new IOException("Каталог недоступен")));
+        yes(BrowserFolderAccess.denied(new IOException("provider failure",
+            new SecurityException("access blocked"))));
+        yes(BrowserFolderAccess.message("Android/./data",
+            new IOException("Недоступный элемент папки")).equals(protectedMessage));
+        yes(BrowserFolderAccess.message("Android/data/../media",
+            new SecurityException("permission denied")).startsWith("Нет доступа к папке."));
+        try{BrowserFolderAccess.requireVisibleEvidence("Android/./data",35,0);
+            throw new AssertionError("Dot segment bypassed protected storage");
+        }catch(AccessDeniedException expected){}
+        try{BrowserFolderAccess.requireVisibleEvidence("Android/data/../media",35,0);
+            BrowserFolderAccess.requireVisibleEvidence("Documents/data",35,0);
+        }catch(AccessDeniedException unexpected){throw new AssertionError(unexpected);}
         try{BrowserFolderAccess.requireVisibleEvidence("Android/data",30,0);
             throw new AssertionError("Protected empty listing was trusted");
         }catch(AccessDeniedException expected){}
