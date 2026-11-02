@@ -172,12 +172,21 @@ final class BrowserFolderCardStats {
                 // A SAF document ID cannot be both a file and a directory.
                 if(seenDirs.contains(id))
                     throw new java.io.IOException("Несогласованный тип документа");
-                Long previous=seenFiles.putIfAbsent(id,size);
+                Long previous=seenFiles.get(id);
                 if(previous!=null){
-                    if(previous.longValue()!=size)
+                    // A provider may repeat the same document, first without
+                    // COLUMN_SIZE and later with an exact size (or vice versa).
+                    // Only conflicting *known* sizes are inconsistent.
+                    if(previous>=0&&size>=0&&previous.longValue()!=size)
                         throw new java.io.IOException("Несогласованный размер документа");
+                    if(previous<0&&size>=0){
+                        seenFiles.put(id,size);
+                        if(Long.MAX_VALUE-total[0]<size)known[0]=false;
+                        else total[0]+=size;
+                    }
                     return;
                 }
+                seenFiles.put(id,size);
                 if(count[0]==Integer.MAX_VALUE)
                     throw new java.io.IOException("Слишком много файлов");
                 count[0]++;
@@ -191,14 +200,17 @@ final class BrowserFolderCardStats {
         // Some SAF providers omit COLUMN_SIZE but expose a regular descriptor.
         // Resolve only missing sizes, after closing every query cursor. Never
         // read file contents or mistake a pipe/unknown descriptor for zero.
-        if(missing[0]&&resolver!=null){
+        if(missing[0]){
+            // Recompute after all duplicate rows have been reconciled. A
+            // later exact COLUMN_SIZE may resolve an earlier unknown size
+            // without opening a descriptor at all.
             long exact=0;
             boolean exactKnown=true;
             for(Map.Entry<String,Long> entry:seenFiles.entrySet()){
                 if(Thread.currentThread().isInterrupted())
                     throw new java.io.IOException("Подсчёт отменён");
                 long size=entry.getValue();
-                if(size<0)size=resolver.resolve(entry.getKey());
+                if(size<0&&resolver!=null)size=resolver.resolve(entry.getKey());
                 if(size<0||Long.MAX_VALUE-exact<size)exactKnown=false;
                 else exact+=size;
             }
