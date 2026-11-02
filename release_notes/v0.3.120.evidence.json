@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.119",
+  "entries": [
+    {
+      "note": "[=] **Размер выбранных файлов** правильно учитывает соседние папки при путях с точками и переходами между каталогами",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "if(segment.equals(\"..\")){"
+    }
+  ]
+}

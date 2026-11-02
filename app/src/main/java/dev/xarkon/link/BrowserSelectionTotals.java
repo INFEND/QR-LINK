@@ -40,11 +40,23 @@ final class BrowserSelectionTotals {
     private BrowserSelectionTotals(){}
     private static String normalize(String p){
         if(p==null)return "";
-        String result=p.replace('\\','/');
-        while(result.endsWith("/"))result=result.substring(0,result.length()-1);
-        return result;
+        // Compare actual relative locations, not untrusted lexical prefixes.
+        // A/../B is B, never a descendant of A.
+        ArrayDeque<String> parts=new ArrayDeque<>();
+        for(String segment:p.replace('\\','/').split("/")){
+            if(segment.isEmpty()||segment.equals("."))continue;
+            if(segment.equals("..")){
+                if(!parts.isEmpty()&&!parts.peekLast().equals(".."))parts.removeLast();
+                else parts.addLast("..");
+            }else parts.addLast(segment);
+        }
+        return String.join("/",parts);
     }
     private static boolean inside(String folder,String path){
+        // Relative paths escaping the shared root must not be swallowed by
+        // a selected root folder's size estimate.
+        if(path.equals("..")||path.startsWith("../")||
+           folder.equals("..")||folder.startsWith("../"))return false;
         return folder.isEmpty()||path.equals(folder)||path.startsWith(folder+"/");
     }
     private static boolean sameSharedStorage(String folderUri,String fileUri){

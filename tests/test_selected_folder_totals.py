@@ -66,6 +66,26 @@ public final class SelectionTotalsCheck {
         cache.put("pictures",new BrowserSelectionTotals.FolderStats(recursive,false));
         r=sum(cache,pictures,ayy);
         yes(r.bytes==26400000L&&!r.unknown);
+        // A lexical prefix is not ancestry: Pictures/../Other is outside.
+        BrowserSelectionTotals.Selection escaped=file("escaped",
+            "content://media/external/images/900","Pictures/../Other",700L);
+        r=sum(cache,pictures,escaped);
+        yes(r.bytes==26400700L&&!r.unknown);
+        // Dot segments inside the selected folder must still deduplicate.
+        BrowserSelectionTotals.Selection dotted=file("dotted",
+            "content://media/external/images/901","Pictures/./AyyGram",700L);
+        r=sum(cache,pictures,dotted);
+        yes(r.bytes==26400000L);
+        // A selected shared-storage root cannot hide an escaped path.
+        BrowserSelectionTotals.Selection root=folder("root",
+            "file:///storage/emulated/0","",0L);
+        Map<String,BrowserSelectionTotals.FolderStats> rootCache=new HashMap<>();
+        rootCache.put("root",new BrowserSelectionTotals.FolderStats(
+            Collections.emptyMap(),false,1000L));
+        BrowserSelectionTotals.Selection escapedRoot=file("escapedRoot",
+            "file:///storage/emulated/0/../outside.bin","../outside.bin",700L);
+        r=sum(rootCache,root,escapedRoot);
+        yes(r.bytes==1700L&&!r.unknown);
         BrowserSelectionTotals.Selection duplicatePending=folder("dp",
             pictures.uri,pictures.path,14300000L);
         r=sum(Collections.emptyMap(),pictures,duplicatePending);
