@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.125",
+  "entries": [
+    {
+      "note": "[=] **Размеры папок** точнее учитываются, когда файловый провайдер повторно сообщает размер документа",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "if(previous<0&&size>=0){"
+    }
+  ]
+}
