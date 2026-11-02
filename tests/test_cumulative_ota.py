@@ -41,6 +41,8 @@ public final class CumulativeNotesCheck {
         entries.remove(2); // Missing versionCode 107 -> no misleading partial history
         eq("[=] Исправлена версия 108",
             OtaHistory.merge(entries,106,113,"[=] Исправлена версия 108"));
+        eq("[=] Исправлена версия 108",
+            OtaHistory.merge(entries,104,113,"[=] Исправлена версия 108"));
         yes(ReleaseNotes.visible("[–] Удалена кнопка").contains("[–]"));
         yes(ReleaseNotes.visible("[=] **Важная** правка").contains("**Важная**"));
     }
