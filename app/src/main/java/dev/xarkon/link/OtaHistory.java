@@ -27,27 +27,28 @@ public final class OtaHistory {
     public static String merge(List<Entry> history,long installed,long latest,String fallback) {
         String latestNotes=ReleaseNotes.visible(fallback);
         if(history==null||history.isEmpty()||installed>=latest)return latestNotes;
-        long previous=0;
         Set<String> names=new HashSet<>();
         StringBuilder result=new StringBuilder();
-        boolean selected=false;
         long lastSelected=installed;
         for(Entry entry:history) {
-            if(entry==null||entry.code<=previous||entry.code>latest||
+            if(entry==null)return latestNotes;
+            // The historical archive predates the installed app. Malformed or
+            // obsolete entries from BEFORE that version must never suppress
+            // valid changelog entries for the versions the user actually missed.
+            if(entry.code<=installed)continue;
+            if(entry.code<=lastSelected||entry.code>latest||
                 entry.name==null||entry.name.isEmpty()||!names.add(entry.name)||
                 entry.notes==null||entry.notes.length()>100_000) return latestNotes;
-            previous=entry.code;
+            // A missing intermediate release must not be silently presented as
+            // a complete changelog. History is indexed by published versionCode.
+            if(entry.code>lastSelected+1)return latestNotes;
             String clean=ReleaseNotes.visible(entry.notes);
             if(clean.isEmpty())return latestNotes;
-            if(entry.code>installed) {
-                if(entry.code>lastSelected+1)return latestNotes;
-                lastSelected=entry.code;
-                if(result.length()>0)result.append('\n');
-                result.append(clean);
-                selected=true;
-            }
+            lastSelected=entry.code;
+            if(result.length()>0)result.append('\n');
+            result.append(clean);
         }
-        if(previous!=latest||!selected)return latestNotes;
+        if(lastSelected!=latest)return latestNotes;
         return result.toString();
     }
 }
