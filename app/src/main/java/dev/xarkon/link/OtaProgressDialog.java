@@ -278,12 +278,8 @@ public final class OtaProgressDialog {
                 begin,begin+3,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
                 begin,begin+3,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            // Highlight the leading action word, plus explicitly marked key phrases.
-            int actionStart=4,actionEnd=actionStart;
-            while(actionEnd<display.length()&&!Character.isWhitespace(display.charAt(actionEnd))
-                  &&actionEnd-actionStart<40)actionEnd++;
-            if(actionEnd>actionStart)styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
-                begin+actionStart,begin+actionEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // Only explicitly marked **key phrases** are bold; never accent a random
+            // opening preposition such as «Для», «При» or «В».
             for(int[] span:strong)if(span[1]<=display.length())
                 styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
                     begin+span[0],begin+span[1],android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
