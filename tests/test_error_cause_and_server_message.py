@@ -34,6 +34,24 @@ public final class ErrorCauseCheck {
         expect(ErrorText.human(first).startsWith("Не удалось"),
             "cyclic cause must terminate");
 
+        // Some Android providers and network stacks supply no error text.
+        // The exception class must still yield a useful Russian message.
+        expect(ErrorText.human(new SecurityException()).contains("разрешений"),
+            "empty SecurityException");
+        expect(ErrorText.human(new java.nio.file.AccessDeniedException("/sdcard/file"))
+            .contains("разрешений"), "AccessDeniedException");
+        expect(ErrorText.human(new java.net.UnknownHostException()).contains("DNS"),
+            "empty UnknownHostException");
+        expect(ErrorText.human(new java.net.SocketTimeoutException()).contains("ожидания"),
+            "empty SocketTimeoutException");
+        expect(ErrorText.human(new java.net.ConnectException()).contains("подключиться"),
+            "empty ConnectException");
+        expect(ErrorText.human(new java.io.FileNotFoundException()).contains("файл"),
+            "empty FileNotFoundException");
+        expect(ErrorText.human(new Exception("OEM 0x91",
+            new java.net.SocketTimeoutException())).contains("ожидания"),
+            "nested exception with no message");
+
         String safe = ErrorText.human("HTTP 409 {\"error\":\"Передача уже завершена\"}");
         expect(safe.equals("Передача уже завершена"), "safe Russian server error");
         String newline = ErrorText.human("HTTP 500 {\"error\":\"Ошибка\nподменённый заголовок\"}");
