@@ -47,7 +47,7 @@ public final class ErrorTextCheck72 {
     String a=ErrorText.human("HTTP 409: {\\"error\\":\\"Неверный ключ сеанса\\"}");
     if(!a.equals("Неверный ключ сеанса"))throw new AssertionError(a);
     String b=ErrorText.human("HTTP 503: internal error");
-    if(!b.equals("Сервер ответил ошибкой 503. Повторите попытку."))throw new AssertionError(b);
+    if(!b.equals("Сервер временно недоступен. Повторите попытку позже."))throw new AssertionError(b);
   }
 }'''
         with tempfile.TemporaryDirectory() as d:
