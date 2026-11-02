@@ -1289,11 +1289,26 @@ public final class FileBrowserActivity extends Activity {
             if(Thread.currentThread().isInterrupted())
                 throw new java.io.IOException("Подсчёт отменён");
             Uri document=DocumentsContract.buildDocumentUriUsingTree(folder.tree,documentId);
+            long statSize=-1;
             try(android.os.ParcelFileDescriptor descriptor=
                     getContentResolver().openFileDescriptor(document,"r")){
-                return descriptor==null?-1:descriptor.getStatSize();
+                if(descriptor!=null)statSize=descriptor.getStatSize();
             }catch(java.io.FileNotFoundException missing){
-                return -1; // Metadata is genuinely unavailable; never assume zero.
+                // A provider may support asset descriptors even when it does
+                // not expose a regular file descriptor.
+            }catch(SecurityException denied){
+                throw new java.io.IOException("Нет доступа к документу",denied);
+            }
+            if(statSize>=0)return statSize;
+            // Some providers return a length for an asset-backed document but
+            // no stat size. The asset's declared length is usable without
+            // reading contents; UNKNOWN_LENGTH must remain unknown.
+            try(android.content.res.AssetFileDescriptor asset=
+                    getContentResolver().openAssetFileDescriptor(document,"r")){
+                return BrowserFolderCardStats.knownDescriptorLength(statSize,
+                    asset==null?-1:asset.getLength());
+            }catch(java.io.FileNotFoundException|UnsupportedOperationException missing){
+                return -1;
             }catch(SecurityException denied){
                 throw new java.io.IOException("Нет доступа к документу",denied);
             }

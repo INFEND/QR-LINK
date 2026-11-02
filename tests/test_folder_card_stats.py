@@ -13,6 +13,11 @@ class FolderCardStatsTests(unittest.TestCase):
 import java.util.*;
 public final class FolderCardStatsCheck {
     public static void main(String[] args) {
+        if(BrowserFolderCardStats.knownDescriptorLength(-1,4096)!=4096||
+            BrowserFolderCardStats.knownDescriptorLength(-1,-1)!=-1||
+            BrowserFolderCardStats.knownDescriptorLength(0,4096)!=0||
+            BrowserFolderCardStats.knownDescriptorLength(512,4096)!=512)
+            throw new AssertionError("SAF descriptor length fallback");
         Map<String,Long> files = new LinkedHashMap<>();
         files.put("file:/a", 2048L);
         files.put("file:/b", 1024L);
@@ -160,6 +165,9 @@ public final class NestedProtectedCardCheck {
         self.assertIn("direct=scanSafFolder(folder);", source)
         self.assertIn("getContentResolver().openFileDescriptor(document,\"r\")", source)
         self.assertIn("descriptor.getStatSize()", source)
+        self.assertIn("getContentResolver().openAssetFileDescriptor(document,\"r\")", source)
+        self.assertIn("asset.getLength()", source)
+        self.assertIn("BrowserFolderCardStats.knownDescriptorLength(statSize,", source)
         self.assertIn("folderPreviewBytes(e)", source)
         self.assertIn("if(snapshotRequested&&folder.localFile!=null)try{", source)
         self.assertIn("final boolean snapshotUnknown=!stats.bytesKnown;", source)

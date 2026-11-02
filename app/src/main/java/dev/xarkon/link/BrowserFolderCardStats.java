@@ -115,6 +115,13 @@ final class BrowserFolderCardStats {
         return new BrowserFolderCardStats(count[0],total[0],true,true);
     }
 
+    /** Prefer a regular file's stat size; otherwise accept only a provider's
+     * explicitly known asset length. Never convert UNKNOWN_LENGTH into zero.
+     */
+    static long knownDescriptorLength(long statSize,long assetLength){
+        return statSize>=0?statSize:assetLength>=0?assetLength:-1;
+    }
+
     /** Stream SAF document metadata without building a transfer queue. A
      * provider may repeat document IDs; count identical files only once and
      * reject cycles, inconsistent metadata or inaccessible descendants.
