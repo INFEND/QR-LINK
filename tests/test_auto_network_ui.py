@@ -20,6 +20,8 @@ class AutoNetworkUiTests(unittest.TestCase):
         self.assertIn('if(!lan.isEmpty()){',source)
         self.assertIn('String external=WifiState.hostedApAddress(this);',source)
         self.assertIn('startHotspotFallback("Нет общей Wi-Fi-сети")',source)
+        self.assertNotIn('на приёмнике выберите «СОЗДАТЬ СЕТЬ ДЛЯ ДРУГОГО WI-FI»',source)
+        self.assertIn('откройте получение на приёмнике, дождитесь нового QR',source)
 
     def test_transfer_status_and_separator(self):
         source=(JAVA/"MainActivity.java").read_text(encoding="utf-8")

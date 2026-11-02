@@ -51,14 +51,15 @@ class CrossNetworkHotspotTests(unittest.TestCase):
         self.assertIn("if(ROTATE.equals(action)||modeChange){",self.service)
         self.assertIn("start(TransferService.ROTATE)",self.main)
 
-    def test_manual_hotspot_mode_keeps_hotspot_on_router_wifi(self):
+    def test_automatic_lan_priority_replaces_obsolete_manual_hotspot(self):
         self.assertIn('USE_HOTSPOT="dev.xarkon.link.USE_HOTSPOT"',self.service)
-        self.assertIn('forceHotspot=USE_HOTSPOT.equals(action);',self.service)
-        self.assertIn('if(!forceHotspot&&!lan.isEmpty()){',self.service)
-        self.assertIn('boolean onLan=!TransferService.forceHotspot&&!lanAddress.isEmpty();',self.main)
-        self.assertIn('start(TransferService.USE_HOTSPOT);',self.main)
-        self.assertIn('start(TransferService.USE_AUTO);',self.main)
-        self.assertIn('if(!forceHotspot&&WifiState.clientConnected(this))',self.service)
+        self.assertIn('saved.edit().remove("force_hotspot").apply();',self.service)
+        self.assertIn('forceHotspot=false; // Legacy network-mode intents now use automatic routing.',self.service)
+        self.assertIn('if(!lan.isEmpty()){',self.service)
+        self.assertIn('boolean onLan=!lanAddress.isEmpty();',self.main)
+        self.assertNotIn('start(TransferService.USE_HOTSPOT);',self.main)
+        self.assertNotIn('start(TransferService.USE_AUTO);',self.main)
+        self.assertIn('startHotspotFallback("Нет общей Wi-Fi-сети")',self.service)
 
     def test_password_is_transmitted_in_qr_and_android_approves(self):
         self.assertIn('.appendQueryParameter("pwd",password)',self.pairing)

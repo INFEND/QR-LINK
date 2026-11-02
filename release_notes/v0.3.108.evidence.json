@@ -25,6 +25,11 @@
       "note": "[=] В очереди файлов сведения разделены символом «|»",
       "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
       "changed_line": "\"Файлов: \"+jobs.size()+\"  |  \"+Util.readable(size)+"
+    },
+    {
+      "note": "[=] При ошибке подключения больше не предлагается удалённая кнопка создания сети",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "peerState+=\". Если телефоны в разных Wi-Fi-сетях, откройте получение на приёмнике, дождитесь нового QR и отсканируйте его.\";"
     }
   ]
 }

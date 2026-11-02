@@ -617,9 +617,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
                 }else{
                     peerState="Ошибка проверки приёмника: "+ErrorText.human(e);
                     if(!info.hotspot)
-                        peerState+=". Если телефоны подключены к разным Wi-Fi-сетям, "+
-                            "на приёмнике выберите «СОЗДАТЬ СЕТЬ ДЛЯ ДРУГОГО WI-FI» "+
-                            "и отсканируйте новый QR.";
+                        peerState+=". Если телефоны в разных Wi-Fi-сетях, откройте получение на приёмнике, дождитесь нового QR и отсканируйте его.";
                     note(peerState);unlockIfIdle();
                 }
             }
