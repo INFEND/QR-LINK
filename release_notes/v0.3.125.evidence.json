@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.124",
+  "entries": [
+    {
+      "note": "[=] **Защищённые папки Android** больше не показывают ложный нулевой размер при скрытом содержимом",
+      "path": "app/src/main/java/dev/xarkon/link/FileBrowserActivity.java",
+      "changed_line": "BrowserFolderAccess.requireVisibleEvidence(parentId,Build.VERSION.SDK_INT,observedChildren);"
+    }
+  ]
+}
