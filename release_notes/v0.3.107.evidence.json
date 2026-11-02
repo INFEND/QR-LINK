@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.106",
+  "entries": [
+    {
+      "note": "[=] Проводник не показывает ошибочный размер папки при противоречивых данных о файлах",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "if(seenDirs.contains(id))"
+    }
+  ]
+}

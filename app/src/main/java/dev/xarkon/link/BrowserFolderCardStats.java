@@ -118,11 +118,14 @@ final class BrowserFolderCardStats {
                 if(id==null||id.trim().isEmpty())
                     throw new java.io.IOException("Элемент без идентификатора");
                 if(directory){
-                    if(!seenDirs.add(id))
+                    if(seenFiles.containsKey(id)||!seenDirs.add(id))
                         throw new java.io.IOException("Повторяющийся или циклический каталог");
                     pending.addLast(id);
                     return;
                 }
+                // A SAF document ID cannot be both a file and a directory.
+                if(seenDirs.contains(id))
+                    throw new java.io.IOException("Несогласованный тип документа");
                 Long previous=seenFiles.putIfAbsent(id,size);
                 if(previous!=null){
                     if(previous.longValue()!=size)
