@@ -67,6 +67,34 @@ public class SenderAckStoreCheck {
             f.seek(2L*33+32);f.write(0);
         }
         yes(!reopened.hasAcknowledgement(2,ack)); // Missing marker must fail closed.
+        // Different SenderAckStore objects share the same journal. Parallel
+        // uploads and a reader must never observe a half-written receipt.
+        SenderAckStore other=new SenderAckStore(root,id,hash);
+        ExecutorService parallel=Executors.newFixedThreadPool(6);
+        try{
+            java.util.List<Future<?>> tasks=new java.util.ArrayList<>();
+            for(int i=0;i<24;i++){
+                final int index=64+i;
+                final SenderAckStore writer=(i%2==0)?store:other;
+                tasks.add(parallel.submit(()->{
+                    try{writer.acknowledge(index,ack);}
+                    catch(IOException e){throw new RuntimeException(e);}
+                }));
+            }
+            for(int i=0;i<12;i++){
+                final String digest=(i%2==0)?ack:second;
+                final SenderAckStore writer=(i%2==0)?store:other;
+                tasks.add(parallel.submit(()->{
+                    try{writer.acknowledge(63,digest);}
+                    catch(IOException e){throw new RuntimeException(e);}
+                }));
+            }
+            for(Future<?> f:tasks)f.get();
+        }finally{parallel.shutdownNow();}
+        for(int i=64;i<88;i++)yes(other.hasAcknowledgement(i,ack));
+        boolean first=store.hasAcknowledgement(63,ack);
+        boolean last=other.hasAcknowledgement(63,second);
+        yes(first!=last); // Final slot is a complete receipt, never a torn one.
         File legacy=new File(new File(root,"sender_chunk_sha256"),id+"-"+hash+".sha");
         ChunkDigestStore.put(legacy,2,new byte[32]);
         yes(!reopened.hasAcknowledgement(2,zeroHash)); // Old unmarked files are not trusted.
@@ -110,6 +138,11 @@ class SenderAckTests(unittest.TestCase):
         self.assertLess(digest_durable,committed)
         self.assertLess(committed,marker_durable)
         self.assertEqual(method.count("out.getFD().sync();"),3)
+
+    def test_cross_instance_reads_and_writes_share_a_path_lock(self):
+        source=(JAVA/"SenderAckStore.java").read_text(encoding="utf-8")
+        self.assertIn("private static final Object[] PATH_LOCKS",source)
+        self.assertEqual(source.count("synchronized(lockForPath(path))"),2)
 
     def test_sender_records_verified_hash_only(self):
         source=(JAVA/"TransferEngine.java").read_text(encoding="utf-8")

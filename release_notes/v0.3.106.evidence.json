@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.105",
+  "entries": [
+    {
+      "note": "[=] При одновременных передачах подтверждения блоков одного файла сохраняются без конфликтов",
+      "path": "app/src/main/java/dev/xarkon/link/SenderAckStore.java",
+      "changed_line": "synchronized(lockForPath(path)){"
+    }
+  ]
+}

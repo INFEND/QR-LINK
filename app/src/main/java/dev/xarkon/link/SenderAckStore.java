@@ -9,6 +9,15 @@ import java.util.Locale;
 public final class SenderAckStore {
     private static final int RECORD_BYTES=ChunkDigestStore.SHA256_BYTES+1;
     private static final int PRESENT=0xA5;
+    // All instances that write the same receipt file must share a lock.
+    // Stripes avoid unbounded per-transfer lock objects in a long-lived service.
+    private static final Object[] PATH_LOCKS=new Object[64];
+    static {
+        for(int i=0;i<PATH_LOCKS.length;i++)PATH_LOCKS[i]=new Object();
+    }
+    private static Object lockForPath(File file){
+        return PATH_LOCKS[(file.getAbsolutePath().hashCode()&Integer.MAX_VALUE)%PATH_LOCKS.length];
+    }
     private final File path;
     public SenderAckStore(File appFiles,String id,String sourceSha256) {
         if(appFiles==null||!TransferFileIdentity.validId(id)||
@@ -28,6 +37,7 @@ public final class SenderAckStore {
         File parent=path.getParentFile();
         if(parent!=null&&!parent.isDirectory()&&!parent.mkdirs())
             throw new IOException("Не удалось сохранить журнал подтверждений");
+        synchronized(lockForPath(path)){
         try(RandomAccessFile out=new RandomAccessFile(path,"rw")){
             long offset=(long)index*RECORD_BYTES;
             // A previous attempt may have left a valid marker at this slot.
@@ -43,11 +53,13 @@ public final class SenderAckStore {
             out.write(PRESENT);
             out.getFD().sync();
         }
+        }
     }
     /** Reopenable evidence for recovery diagnostics, not a substitute for /offer. */
     public synchronized boolean hasAcknowledgement(int index,String sha256)throws IOException {
         if(index<0||!TransferFileIdentity.validSha256(sha256))
             throw new IllegalArgumentException("Неверный запрос подтверждения");
+        synchronized(lockForPath(path)){
         if(!path.isFile())return false;
         try(RandomAccessFile in=new RandomAccessFile(path,"r")){
             long offset=(long)index*RECORD_BYTES;
@@ -59,6 +71,7 @@ public final class SenderAckStore {
             for(int i=0;i<digest.length;i++)
                 if((digest[i]&255)!=Integer.parseInt(sha256.substring(2*i,2*i+2),16))return false;
             return true;
+        }
         }
     }
 }
