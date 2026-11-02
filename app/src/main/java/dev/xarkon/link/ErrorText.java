@@ -18,10 +18,39 @@ public final class ErrorText {
         int end=raw.indexOf('"',begin+1);
         if(end<=begin||end-begin>241)return "";
         String value=raw.substring(begin+1,end);
+        // Remote error bodies are untrusted. Never render controls, bidi
+        // overrides, escaped JSON or internal exception traces in a UI banner.
+        if(value.length()>160||value.indexOf('\\')>=0)return "";
+        for(int i=0;i<value.length();i++){
+            char ch=value.charAt(i);
+            if(Character.isISOControl(ch)||ch=='\\u202a'||ch=='\\u202b'||
+               ch=='\\u202d'||ch=='\\u202e'||ch=='\\u2066'||
+               ch=='\\u2067'||ch=='\\u2068'||ch=='\\u2069')return "";
+        }
+        String lower=value.toLowerCase(Locale.ROOT);
+        if(lower.contains("exception")||lower.contains("stacktrace")||
+           lower.contains("java.")||lower.contains("android.")||
+           lower.contains("libcore."))return "";
         return value.matches(".*[А-Яа-яЁё].*")?value:"";
     }
+    /** Preserve the actionable root cause when a wrapper contains only an OEM error. */
     public static String human(Throwable error){
-        return human(error==null?null:error.getMessage());
+        if(error==null)return human((String)null);
+        String fallback=human(error.getMessage());
+        if(!generic(fallback))return fallback;
+        java.util.IdentityHashMap<Throwable,Boolean> visited=new java.util.IdentityHashMap<>();
+        Throwable cause=error;
+        for(int depth=0;cause!=null&&depth<8&&visited.put(cause,Boolean.TRUE)==null;depth++){
+            if(cause!=error){
+                String localized=human(cause.getMessage());
+                if(!generic(localized))return localized;
+            }
+            cause=cause.getCause();
+        }
+        return fallback;
+    }
+    private static boolean generic(String text){
+        return text.startsWith("Не удалось выполнить операцию.");
     }
     public static String human(String message){
         if(message==null||message.trim().isEmpty())
@@ -60,7 +89,16 @@ public final class ErrorText {
         if(http.find()){
             String remote=remoteMessage(message);
             if(!remote.isEmpty())return remote;
-            return "Сервер ответил ошибкой "+http.group(1)+". Повторите попытку.";
+            String code=http.group(1);
+            if("401".equals(code)||"403".equals(code))
+                return "Сервер отклонил доступ. Проверьте разрешения и авторизацию.";
+            if("404".equals(code))
+                return "Запрошенный файл или адрес не найден на сервере.";
+            if("429".equals(code))
+                return "Слишком много запросов. Повторите попытку позже.";
+            if(code.charAt(0)=='5')
+                return "Сервер временно недоступен. Повторите попытку позже.";
+            return "Сервер ответил ошибкой "+code+". Повторите попытку.";
         }
         // Preserve existing informative Russian messages, but never expose
         // unlocalized low-level exception dumps to end users.
