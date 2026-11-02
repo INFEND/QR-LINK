@@ -31,6 +31,15 @@ class AutoNetworkUiTests(unittest.TestCase):
         self.assertIn('" | "+(status.isEmpty()?',source)
 
 
+    def test_background_notification_has_requested_transfer_copy(self):
+        service=(JAVA/"TransferService.java").read_text(encoding="utf-8")
+        self.assertIn('transferring?"Идёт передача файлов…":"QR LINK"',service)
+        self.assertIn('boolean transferring=isBusy||("Приём".equals(transferDirection)&&total>0&&progress<total);',service)
+        self.assertIn('activeFile+" | "+Util.readable(progress)',service)
+        self.assertNotIn('QR LINK · фоновая передача',service)
+        self.assertNotIn('activeFile+" · "+Util.readable(progress)',service)
+
+
     def test_ota_settings_have_no_last_check_or_available_version_footer(self):
         source=(JAVA/"MainActivity.java").read_text(encoding="utf-8")
         # Remove the entire footer, not just the status text. No empty space.
