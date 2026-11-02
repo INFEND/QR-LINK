@@ -66,10 +66,7 @@ public final class FtpBridge implements AutoCloseable {
         }
         // Always connect to the authenticated control-connection host,
         // never to the IP advertised by an untrusted FTP server.
-        Socket s=new Socket();
-        s.connect(new InetSocketAddress(host,dataport),5000);
-        s.setSoTimeout(30000);
-        return s;
+        return FtpDataSocket.connect(host,dataport);
     }
     private void navigate(String path)throws IOException{
         int res=send("CWD /");expectResult(res);
@@ -139,7 +136,7 @@ public final class FtpBridge implements AutoCloseable {
                 if(out==null)throw new IOException("Нет доступа к загрузкам");
                 byte[]b=new byte[256*1024];int n;long lastUpdate=0;
                 while((n=in.read(b))!=-1){out.write(b,0,n);total+=n;
-                    if(Util.now()-lastUpdate>500){lastUpdate=Util.now();events.progress("ShareMe FTP: "+name,total,-1,total/Math.max(.001,(Util.now()-start)/1000.0));}
+                    if(Util.now()-lastUpdate>500){lastUpdate=Util.now();events.progress("ShareMe FTP: "+name,total,expectedBytes,total/Math.max(.001,(Util.now()-start)/1000.0));}
                 }
                 out.flush();
             }
