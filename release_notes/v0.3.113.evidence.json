@@ -1,0 +1,20 @@
+{
+  "base_tag": "v0.3.112",
+  "entries": [
+    {
+      "note": "[=] **Ошибки соединения** теперь показывают понятную причину даже при сбое внутри Android",
+      "path": "app/src/main/java/dev/xarkon/link/ErrorText.java",
+      "changed_line": "java.util.IdentityHashMap<Throwable,Boolean> visited=new java.util.IdentityHashMap<>();"
+    },
+    {
+      "note": "[=] **Сообщения сервера** очищены от скрытых символов и служебных ошибок",
+      "path": "app/src/main/java/dev/xarkon/link/ErrorText.java",
+      "changed_line": "if(value.length()>160||value.indexOf('\\\\')>=0)return \"\";"
+    },
+    {
+      "note": "[+] Для ошибок **доступа и перегрузки сервера** добавлены понятные русские подсказки",
+      "path": "app/src/main/java/dev/xarkon/link/ErrorText.java",
+      "changed_line": "if(\"401\".equals(code)||\"403\".equals(code))"
+    }
+  ]
+}
