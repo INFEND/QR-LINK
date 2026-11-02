@@ -11,6 +11,7 @@ class ProtectedFolderAccessTests(unittest.TestCase):
     def test_android_data_error_is_localized_and_not_a_false_bypass(self):
         harness=r"""package dev.xarkon.link;
 import java.nio.file.AccessDeniedException;
+import java.io.IOException;
 public final class ProtectedFolderCheck {
     static void yes(boolean value){if(!value)throw new AssertionError("Folder access policy");}
     public static void main(String[] args){
