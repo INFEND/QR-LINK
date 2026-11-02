@@ -1467,13 +1467,13 @@ public final class FileBrowserActivity extends Activity {
             child.docId.startsWith(parent.docId+"/");
     }
     private void expandFolder(Entry e){
+        searchIndex.invalidate();
         String key=e.key();
         // Explain a confirmed denial immediately, never expand a false empty folder.
         if(BrowserFolderAccess.protectedAndroidPath(e.path)&&folderAccessErrors.containsKey(key)){
             UiConfirmDialog.showInfo(this,"Нет доступа к папке",folderAccessErrors.get(key));
             return;
         }
-        searchIndex.invalidate();
         if(expandedFolders.remove(key)){
             for(Entry opened:new ArrayList<>(openedFolders.values())){
                 if(!descendantOf(opened,e))continue;
