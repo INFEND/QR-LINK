@@ -83,13 +83,13 @@ class MissedOtaReleasesTests(unittest.TestCase):
                 tags=[f"v0.3.{v}" for v in range(85,120)]
                 for v in range(85,120):
                     Path(f"release_notes/v0.3.{v}.txt").write_text(
-                        f"QR LINK 0.3.{v}\\n[=] Выпуск {v}\\n",encoding="utf-8")
+                        f"QR LINK 0.3.{v}\n[=] Выпуск {v}\n",encoding="utf-8")
                 def fake_run(command,**kwargs):
                     if command[:3] == ["git","tag","--list"]:
-                        return SimpleNamespace(returncode=0,stdout="\\n".join(tags))
+                        return SimpleNamespace(returncode=0,stdout="\n".join(tags))
                     if command[:2] == ["git","show"]:
                         v=int(command[2].split(":")[0].split(".")[-1])
-                        return SimpleNamespace(returncode=0,stdout=f"versionCode = {v+5}\\n")
+                        return SimpleNamespace(returncode=0,stdout=f"versionCode = {v+5}\n")
                     raise AssertionError(command)
                 with patch("ota_history.subprocess.run",side_effect=fake_run):
                     history=build_history("0.3.120",125,"[=] Выпуск 120")
