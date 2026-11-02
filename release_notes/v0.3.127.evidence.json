@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.126",
+  "entries": [
+    {
+      "note": "[=] **Размер выбранных файлов** больше не отображается как точный при переполнении суммы",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "return new Result(total.value,pending,unknown||total.overflow,provisional);"
+    }
+  ]
+}
