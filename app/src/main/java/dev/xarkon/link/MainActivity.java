@@ -245,7 +245,6 @@ public final class MainActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();current=new WeakReference<>(this);
         handler.removeCallbacks(ticker);if(!emergency)handler.post(ticker);
-        updateBackgroundCheckStatus();
         refreshHomeUpdateCard(false);
         handler.removeCallbacks(startupUpdateTask);
         if(updateNotificationLaunch){
