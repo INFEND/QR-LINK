@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.104",
+  "entries": [
+    {
+      "note": "[=] При сбое питания недописанное подтверждение блока больше не принимается за готовое",
+      "path": "app/src/main/java/dev/xarkon/link/SenderAckStore.java",
+      "changed_line": "out.getFD().sync(); // Persist digest before marking receipt present."
+    }
+  ]
+}

@@ -55,6 +55,12 @@ public class SenderAckStoreCheck {
         }
         yes(!reopened.hasAcknowledgement(2,ack));
         yes(!reopened.hasAcknowledgement(2,zeroHash));
+        // A fully persisted replacement digest without a committed marker
+        // is still unacknowledged, even when it matches the requested hash.
+        try(RandomAccessFile f=new RandomAccessFile(record,"rw")){
+            f.seek(2L*33);f.write(new byte[32]);f.getFD().sync();
+        }
+        yes(!reopened.hasAcknowledgement(2,zeroHash));
         store.acknowledge(2,ack);
         yes(reopened.hasAcknowledgement(2,ack));
         try(RandomAccessFile f=new RandomAccessFile(record,"rw")){
@@ -94,11 +100,16 @@ class SenderAckTests(unittest.TestCase):
         invalidated=method.index("out.write(0);",revoked)
         durable=method.index("out.getFD().sync();",invalidated)
         replaced=method.index("out.write(digest);",durable)
-        committed=method.index("out.write(PRESENT);",replaced)
+        digest_durable=method.index("out.getFD().sync();",replaced)
+        committed=method.index("out.write(PRESENT);",digest_durable)
+        marker_durable=method.index("out.getFD().sync();",committed)
         self.assertLess(revoked,invalidated)
         self.assertLess(invalidated,durable)
         self.assertLess(durable,replaced)
-        self.assertLess(replaced,committed)
+        self.assertLess(replaced,digest_durable)
+        self.assertLess(digest_durable,committed)
+        self.assertLess(committed,marker_durable)
+        self.assertEqual(method.count("out.getFD().sync();"),3)
 
     def test_sender_records_verified_hash_only(self):
         source=(JAVA/"TransferEngine.java").read_text(encoding="utf-8")

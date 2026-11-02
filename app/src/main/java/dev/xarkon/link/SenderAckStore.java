@@ -38,6 +38,8 @@ public final class SenderAckStore {
             out.getFD().sync();
             out.seek(offset);
             out.write(digest);
+            // A marker must never become durable before the digest it validates.
+            out.getFD().sync(); // Persist digest before marking receipt present.
             out.write(PRESENT);
             out.getFD().sync();
         }
