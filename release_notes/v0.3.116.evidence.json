@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.115",
+  "entries": [
+    {
+      "note": "[–] Из **настроек обновлений** полностью удалены строки последней проверки и доступной версии",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "backgroundCheckStatus=text(\"\",12,muted,false);"
+    }
+  ]
+}
