@@ -1129,6 +1129,10 @@ public final class MainActivity extends Activity {
             backgroundCheckStatus.setText("Ожидается первая проверка по расписанию");
         }
     }
+    private long installedOtaCode(){
+        try{return getPackageManager().getPackageInfo(getPackageName(),0).getLongVersionCode();}
+        catch(Exception ignored){return 0L;}
+    }
     private void checkOtaQuietly(){
         if(isFinishing()||isDestroyed()||
             !prefs().getBoolean(OtaUpdateSchedule.PREF_ON_LAUNCH,true))return;
@@ -1143,10 +1147,10 @@ public final class MainActivity extends Activity {
                 if(!newer){refreshHomeUpdateCard(false);offerStoredBackgroundUpdate();return;}
                 prefs().edit().putLong(OtaUpdateSchedule.PREF_AVAILABLE_CODE,r.versionCode)
                     .putString(OtaUpdateSchedule.PREF_AVAILABLE_NAME,r.versionName)
-                    .putString("ota_available_notes",r.notes).apply();
+                    .putString("ota_available_notes",r.notesFor(installedOtaCode())).apply();
                 refreshHomeUpdateCard(true);
                 OtaProgressDialog offer=new OtaProgressDialog(MainActivity.this);
-                offer.show();offer.offer(r.versionName,r.notes,()->downloadAndInstallUpdate(r,offer));
+                offer.show();offer.offer(r.versionName,r.notesFor(installedOtaCode()),()->downloadAndInstallUpdate(r,offer));
             }
             @Override public void downloaded(java.io.File file){}
             @Override public void error(String message){}
@@ -1182,7 +1186,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void release(UpdateManager.Release r,boolean newer){
                 if(isFinishing()||isDestroyed())return;
-                if(newer)ui.offer(r.versionName,r.notes,()->downloadAndInstallUpdate(r,ui));
+                if(newer)ui.offer(r.versionName,r.notesFor(installedOtaCode()),()->downloadAndInstallUpdate(r,ui));
                 else ui.current("Версия "+getAppVersion());
             }
             @Override public void downloaded(java.io.File file){}
