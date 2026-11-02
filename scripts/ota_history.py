@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 import subprocess
 
-PREFIXES = ("[+] ", "[=] ", "[-] ")
+PREFIXES = ("[+] ", "[=] ", "[-] ", "[–] ")
 BANNED = ("scoped storage", "jvm", "github", "chatgpt", "openai",
           "регрессион", "тестирован", "тесты", "аппаратн",
           "не проверен", "не готов", "требуют испытан",
