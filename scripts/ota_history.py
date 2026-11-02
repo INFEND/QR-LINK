@@ -8,7 +8,7 @@ BANNED = ("scoped storage", "jvm", "github", "chatgpt", "openai",
           "регрессион", "тестирован", "тесты", "аппаратн",
           "не проверен", "не готов", "требуют испытан",
           "лимит 30000", "ci success", "versioncode")
-MAX_HISTORY_CHARS = 350_000
+MAX_HISTORY_CHARS = 1_000_000  # Bounded payload, no fixed limit on skipped release count
 
 
 def clean_notes(source):
