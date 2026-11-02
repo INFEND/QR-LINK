@@ -1,0 +1,30 @@
+{
+  "base_tag": "v0.3.107",
+  "entries": [
+    {
+      "note": "[=] QR-код автоматически выбирает общую Wi-Fi-сеть или защищённое локальное подключение",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "LinearLayout qrPanel=panel(\"Мой QR-код\",\"Приложение само выбирает доступную общую сеть или защищённое прямое соединение.\",\"scan\");"
+    },
+    {
+      "note": "[=] Старый ручной режим сети больше не мешает подключению через общий Wi-Fi",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "saved.edit().remove(\"force_hotspot\").apply();"
+    },
+    {
+      "note": "[=] Выбранные вложенные папки правильно прибавляются к размеру до завершения подсчёта",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserSelectionTotals.java",
+      "changed_line": "(parentSnapshot==null||parentSnapshot.unknown))continue;"
+    },
+    {
+      "note": "[=] Во время отправки отображается «Идёт передача файлов…»",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "\"Идёт передача файлов…\""
+    },
+    {
+      "note": "[=] В очереди файлов сведения разделены символом «|»",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "\"Файлов: \"+jobs.size()+\"  |  \"+Util.readable(size)+"
+    }
+  ]
+}

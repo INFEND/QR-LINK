@@ -53,7 +53,8 @@ final class BrowserSelectionTotals {
     /** A selected parent already represents every nested shared-storage folder.
      * Ignore overlapping child estimates, including while the parent is loading.
      */
-    private static boolean coveredByAnotherFolder(Selection folder,List<Selection> all,int index){
+    private static boolean coveredByAnotherFolder(Selection folder,List<Selection> all,int index,
+                                                  Map<String,FolderStats> snapshots){
         for(int j=0;j<all.size();j++){
             if(j==index)continue;
             Selection parent=all.get(j);
@@ -61,6 +62,11 @@ final class BrowserSelectionTotals {
             boolean sameSource=sameSharedStorage(parent.uri,folder.uri)||
                 (!parent.uri.isEmpty()&&parent.uri.equals(folder.uri));
             if(!sameSource||!inside(parent.path,folder.path))continue;
+            // A media preview covers direct files, not all nested folders.
+            // An exact recursive parent snapshot is needed to absorb a child.
+            FolderStats parentSnapshot=snapshots.get(parent.key);
+            if(!parent.path.equals(folder.path)&&
+                (parentSnapshot==null||parentSnapshot.unknown))continue;
             if(!parent.path.equals(folder.path)||j<index)return true;
         }
         return false;
@@ -75,7 +81,7 @@ final class BrowserSelectionTotals {
         for(int i=0;i<all.size();i++){
             Selection entry=all.get(i);
             if(!entry.folder)continue;
-            if(coveredByAnotherFolder(entry,all,i))continue;
+            if(coveredByAnotherFolder(entry,all,i,snapshots))continue;
             FolderStats stats=snapshots.get(entry.key);
             if(stats==null){
                 pending=true;

@@ -48,9 +48,28 @@ public final class SelectionTotalsCheck {
         BrowserSelectionTotals.Selection nested=folder("nested",
             "file:///storage/emulated/0/_Archive/Sub","_Archive/Sub",4096);
         r=sum(Collections.emptyMap(),main,nested);
-        yes(r.pending&&r.provisional&&r.bytes==22544384L);
+        yes(r.pending&&r.provisional&&r.bytes==22544384L+4096L);
         r=sum(cache,main,nested);
         yes(!r.pending&&!r.provisional&&r.bytes==215756L+4048L);
+        // Parent media previews contain direct files only. The nested AyyGram
+        // folder adds its own 12.1 MB to the existing 14.3 MB until an
+        // exact recursive parent snapshot is available.
+        BrowserSelectionTotals.Selection pictures=folder("pictures",
+            "content://media/external/images/81","Pictures",14300000L);
+        BrowserSelectionTotals.Selection ayy=folder("ayy",
+            "content://media/external/images/82","Pictures/AyyGram",12100000L);
+        r=sum(Collections.emptyMap(),pictures,ayy);
+        yes(r.pending&&r.provisional&&r.bytes==26400000L);
+        Map<String,Long> recursive=new LinkedHashMap<>();
+        recursive.put("file:///storage/emulated/0/Pictures/pic.jpg",14300000L);
+        recursive.put("file:///storage/emulated/0/Pictures/AyyGram/pic.jpg",12100000L);
+        cache.put("pictures",new BrowserSelectionTotals.FolderStats(recursive,false));
+        r=sum(cache,pictures,ayy);
+        yes(r.bytes==26400000L&&!r.unknown);
+        BrowserSelectionTotals.Selection duplicatePending=folder("dp",
+            pictures.uri,pictures.path,14300000L);
+        r=sum(Collections.emptyMap(),pictures,duplicatePending);
+        yes(r.bytes==14300000L);
         // Same selected file URI from two categories must not inflate the total.
         BrowserSelectionTotals.Selection repeated=file("repeated",img.uri,img.path,img.bytes);
         r=sum(Collections.emptyMap(),img,repeated,other);
@@ -101,7 +120,7 @@ class SelectionTotalsTests(unittest.TestCase):
         self.assertIn("FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name)",source)
         self.assertNotIn('folders>0||unknown>0?"неизвестен"',source)
         totals=(JAVA/"BrowserSelectionTotals.java").read_text(encoding="utf-8")
-        self.assertIn("coveredByAnotherFolder(entry,all,i)",totals)
+        self.assertIn("coveredByAnotherFolder(entry,all,i,snapshots)",totals)
         self.assertIn("!countedFiles.add(entry.uri)",totals)
 
 

@@ -134,7 +134,9 @@ public final class TransferService extends Service implements TransferEngine.Eve
         directWifi=new DirectWifi(this);
         android.content.SharedPreferences saved=getSharedPreferences("settings",0);
         wantReceive=saved.getBoolean("receive_desired",false);
-        forceHotspot=saved.getBoolean("force_hotspot",false);
+        forceHotspot=false;
+        // Migrate obsolete manual-network mode: LAN must always win on upgrade.
+        saved.edit().remove("force_hotspot").apply();
         try{
             Pairing.Info previous=Pairing.parse(saved.getString("pair_qr",""));
             autoReconnectLan=!previous.hotspot&&
@@ -215,13 +217,13 @@ public final class TransferService extends Service implements TransferEngine.Eve
             try{
                 boolean modeChange=USE_HOTSPOT.equals(action)||USE_AUTO.equals(action);
                 if(modeChange){
-                    forceHotspot=USE_HOTSPOT.equals(action);
+                    forceHotspot=false; // Legacy network-mode intents now use automatic routing.
                     nextDirectRoute();directWifi.close();hotspot.stop();
                     resetDirect();resetHotspot();systemApHost="";
                 }
                 wantReceive=true;
                 getSharedPreferences("settings",0).edit().putBoolean("receive_desired",true)
-                    .putBoolean("force_hotspot",forceHotspot).apply();
+                    .remove("force_hotspot").apply();
                 if(!WifiState.localTransferReady(this)){
                     nextDirectRoute();
                     engine.stop();directWifi.close();hotspot.stop();resetDirect();resetHotspot();
@@ -335,7 +337,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
     private void establishNetworkRoute(){
         if(!wantReceive||!isReceiving)return;
         String lan=WifiState.clientAddress(this);
-        if(!forceHotspot&&!lan.isEmpty()){
+        if(!lan.isEmpty()){
             // ROTATE only changes the invitation key, never forces Direct.
             // Invalidate pending P2P callbacks and remove obsolete groups.
             nextDirectRoute();
@@ -343,7 +345,7 @@ public final class TransferService extends Service implements TransferEngine.Eve
             systemApHost="";detail="";
             status="Общая сеть Wi-Fi · готов к приёму";refresh();return;
         }
-        String external=forceHotspot?"":WifiState.hostedApAddress(this);
+        String external=WifiState.hostedApAddress(this);
         if(!external.isEmpty()){
             // A system hotspot supersedes any pending Direct hosting callback.
             nextDirectRoute();

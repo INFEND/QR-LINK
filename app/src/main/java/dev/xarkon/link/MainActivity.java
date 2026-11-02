@@ -812,7 +812,7 @@ public final class MainActivity extends Activity {
         outlineButton(extra,"share","Передать через SHAREit / ShareMe",this::shareExternal);
     }
     private void receivePage(){
-        LinearLayout connection=panel("Соединение","Одна сеть Wi-Fi: прямое подключение. Разные сети: создайте защищённую локальную точку доступа.","wifi");
+        LinearLayout connection=panel("Соединение","Общая сеть Wi-Fi используется автоматически. Если её нет, приложение подготовит защищённое локальное соединение.","wifi");
         LinearLayout state=row();state.setGravity(Gravity.CENTER_VERTICAL);
         state.setPadding(dp(14),dp(13),dp(14),dp(13));state.setBackground(shape(soft,stroke,16));
         UiIcon wifiGlyph=new UiIcon(this,"wifi",accent);
@@ -821,7 +821,7 @@ public final class MainActivity extends Activity {
         networkBadge.setPadding(dp(13),0,0,0);
         state.addView(networkBadge,new LinearLayout.LayoutParams(0,-2,1));
         margin(connection,state,3);
-        LinearLayout qrPanel=panel("Мой QR-код","Без роутера сначала запускается локальная точка доступа. Для разных Wi-Fi-сетей выберите специальный режим ниже.","scan");
+        LinearLayout qrPanel=panel("Мой QR-код","Приложение само выбирает доступную общую сеть или защищённое прямое соединение.","scan");
         receiveHint=text("Создаём защищённый ключ подключения...",15,muted,true);margin(qrPanel,receiveHint,12);
         FrameLayout wrapper=new FrameLayout(this);wrapper.setBackground(shape(0xffffffff,0,16));
         qrImage=new ImageView(this);qrImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -830,15 +830,6 @@ public final class MainActivity extends Activity {
         qrPanel.addView(wrapper,wrap);
         receiveCaption=text("Ожидание подключения...",13,muted,false);margin(qrPanel,receiveCaption,15);
         outlineButton(qrPanel,"scan","ОБНОВИТЬ QR-КОД",()->{lastQr="";start(TransferService.ROTATE);});
-        outlineButton(qrPanel,"wifi","СОЗДАТЬ СЕТЬ ДЛЯ ДРУГОГО WI-FI",()->{
-            if(!ensureWifiEnabled())return;
-            lastQr="";
-            start(TransferService.USE_HOTSPOT);
-            toast("Создаём защищённую сеть. Отправитель подключится после сканирования QR и подтверждения Android.");
-        });
-        outlineButton(qrPanel,"wifi","ВОЗВРАТ К ОБЫЧНОМУ WI-FI",()->{
-            lastQr="";start(TransferService.USE_AUTO);
-        });
         outlineButton(qrPanel,"trash","ОСТАНОВИТЬ ПРИЁМ",()->{start(TransferService.STOP);navigate(HOME);});
         liveStatus();
         LinearLayout folder=panel("Фоновая передача","Загрузки / QR LINK · Приём продолжится при блокировке экрана благодаря постоянному уведомлению и защите Wi-Fi от сна. В энергосбережении производитель может ограничивать работу.","folder");
@@ -1309,15 +1300,15 @@ public final class MainActivity extends Activity {
             if(file.status!=null&&file.status.startsWith("Ошибка"))failed++;
         }
         queueLabel.setText(jobs.isEmpty()?"Очередь пуста":
-            "Файлов: "+jobs.size()+"  ·  "+Util.readable(size)+
+            "Файлов: "+jobs.size()+"  |  "+Util.readable(size)+
             "\nГотово: "+finished+"   Ошибки: "+failed);
         if(transferFileAdapter==null)return;
         ArrayList<String> next=new ArrayList<>(jobs.size());
         for(FileCatalog.Item file:jobs){
             String status=file.status==null?"":file.status;
             String sign="Передан".equals(status)?"✓ ":status.startsWith("Ошибка")?"! ":"○ ";
-            next.add(sign+file.name+" · "+Util.readable(Math.max(0,file.size))+
-                " · "+(status.isEmpty()?"В очереди":ErrorText.human(status)));
+            next.add(sign+file.name+" | "+Util.readable(Math.max(0,file.size))+
+                " | "+(status.isEmpty()?"В очереди":ErrorText.human(status)));
         }
         if(transferQueueRows.size()!=next.size()){
             transferQueueRows.clear();
@@ -1361,7 +1352,7 @@ public final class MainActivity extends Activity {
             status.setText(size>0&&done>=size?
                 ("Приём".equals(phase)?"Файл получен":"Файл отправлен"):
                 size>0?("Приём".equals(phase)?"Получение в фоне · экран можно заблокировать":
-                    "Отправка в фоне · экран можно заблокировать"):TransferService.status);
+                    "Идёт передача файлов…"):TransferService.status);
             int permille=size>0?(int)Math.min(1000,shown*1000d/size):0;
             if(progress!=null)progress.setProgress(permille);
             if(transferName!=null&&!active.equals(transferName.getText().toString())){
@@ -1394,7 +1385,7 @@ public final class MainActivity extends Activity {
     }
     private void renderQr(){if(qrImage==null||receiveHint==null)return;
         String lanAddress=WifiState.clientAddress(this);
-        boolean onLan=!TransferService.forceHotspot&&!lanAddress.isEmpty();
+        boolean onLan=!lanAddress.isEmpty();
         if(networkBadge!=null){
             networkBadge.setText(!WifiState.localTransferReady(this)?"WI-FI ВЫКЛЮЧЕН":
                 onLan?"ОБЩАЯ СЕТЬ WI-FI":
@@ -1520,7 +1511,7 @@ public final class MainActivity extends Activity {
                 return;
             }
         }else if(!WifiState.clientConnected(this)&&WifiState.hostedApAddress(this).isEmpty()){
-            toast("Для этого QR нужна общая сеть. На приёмнике можно создать сеть для другого Wi-Fi.");
+            toast("Для этого QR нужна доступная локальная сеть. На приёмнике откройте получение файлов для автоматической подготовки подключения.");
             return;
         }
         if(info.hotspot){
