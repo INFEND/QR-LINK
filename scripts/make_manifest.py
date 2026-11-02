@@ -50,7 +50,7 @@ def load_release_notes(version):
                 raise SystemExit("Wrong release notes heading: " + line)
             heading = line
             continue
-        if not re.match(r"^\[(?:\+|-|=)\]\s+\S", line):
+        if not re.match(r"^\[(?:\+|-|–|=)\]\s+\S", line):
             raise SystemExit("Non-changelog text in release notes: " + line[:100])
         if len(line) > 260 or any(word in line.casefold() for word in banned):
             raise SystemExit("Internal or excessively long release note: " + line[:100])
