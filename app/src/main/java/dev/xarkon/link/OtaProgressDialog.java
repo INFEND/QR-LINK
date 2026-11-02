@@ -254,14 +254,39 @@ public final class OtaProgressDialog {
         android.text.SpannableStringBuilder styled=new android.text.SpannableStringBuilder();
         for(String line:notes.split("\\n")){
             if(styled.length()>0)styled.append("\n");
+            // **Important phrases** are bold in the UI, not literal Markdown.
+            StringBuilder visible=new StringBuilder();
+            java.util.ArrayList<int[]> strong=new java.util.ArrayList<>();
+            int startStrong=-1;
+            for(int i=0;i<line.length();){
+                if(i+1<line.length()&&line.charAt(i)=='*'&&line.charAt(i+1)=='*'){
+                    if(startStrong<0)startStrong=visible.length();
+                    else{
+                        if(visible.length()>startStrong)
+                            strong.add(new int[]{startStrong,visible.length()});
+                        startStrong=-1;
+                    }
+                    i+=2;
+                }else{visible.append(line.charAt(i));i++;}
+            }
+            String display=visible.toString().replace("[-]","[–]");
             int begin=styled.length();
-            styled.append(line);
-            int tint=line.startsWith("[+]")?0xff4dd69c:
-                line.startsWith("[-]")?0xfff07878:accent;
+            styled.append(display);
+            int tint=display.startsWith("[+]")?0xff4dd69c:
+                display.startsWith("[–]")?0xfff07878:0xffffaa4d;
             styled.setSpan(new android.text.style.ForegroundColorSpan(tint),
                 begin,begin+3,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
                 begin,begin+3,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // Highlight the leading action word, plus explicitly marked key phrases.
+            int actionStart=4,actionEnd=actionStart;
+            while(actionEnd<display.length()&&!Character.isWhitespace(display.charAt(actionEnd))
+                  &&actionEnd-actionStart<40)actionEnd++;
+            if(actionEnd>actionStart)styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
+                begin+actionStart,begin+actionEnd,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            for(int[] span:strong)if(span[1]<=display.length())
+                styled.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),
+                    begin+span[0],begin+span[1],android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         notesText.setText(styled);
         notesScroll.scrollTo(0,0);
