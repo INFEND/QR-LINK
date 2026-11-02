@@ -104,6 +104,10 @@ class CumulativeOtaTests(unittest.TestCase):
         self.assertIn("0xff4dd69c",ui)
         self.assertIn("0xfff07878",ui)
         self.assertIn("startStrong",ui)
+        # The old unconditional first-word bold made prepositions like «Для» bold.
+        self.assertNotIn("actionStart",ui)
+        self.assertNotIn("actionEnd",ui)
+        self.assertIn("for(int[] span:strong)",ui)
         self.assertIn("notesFor(installedOtaCode())",main)
         self.assertIn('"history": build_history',manifest)
 
