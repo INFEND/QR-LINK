@@ -202,8 +202,10 @@ public final class FileCatalog {
             throw new IllegalStateException("Папка слишком велика: максимум 30000 файлов / 24 уровня");
         if(Files.isSymbolicLink(directory)||!Files.isDirectory(directory,LinkOption.NOFOLLOW_LINKS))
             throw new SecurityException("Недоступная папка");
+        int observedChildren=0;
         try(DirectoryStream<Path> stream=Files.newDirectoryStream(directory)){
             for(Path child:stream){
+                observedChildren++;
                 budget.step();
                 // Never silently send a subset of a selected folder.
                 if(Files.isSymbolicLink(child))
@@ -228,6 +230,9 @@ public final class FileCatalog {
                 }else throw new IOException("Не удалось прочитать элемент папки: "+name);
             }
         }
+        // Android 11+ can return an empty listing for Android/data or obb
+        // without throwing. Do not silently queue a partial/empty transfer.
+        BrowserFolderAccess.requireVisibleEvidence(relative,Build.VERSION.SDK_INT,observedChildren);
     }
     public static ArrayList<Item> fromDocumentFolder(Context c,Uri tree,String docId,String name)throws Exception{
         ArrayList<Item> result=new ArrayList<>();
