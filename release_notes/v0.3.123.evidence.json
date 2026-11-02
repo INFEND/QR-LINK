@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.122",
+  "entries": [
+    {
+      "note": "[=] **Выбор системных папок** больше не принимает недоступное содержимое за пустую папку",
+      "path": "app/src/main/java/dev/xarkon/link/FileCatalog.java",
+      "changed_line": "BrowserFolderAccess.requireVisibleEvidence(relative,Build.VERSION.SDK_INT,observedChildren);"
+    }
+  ]
+}
