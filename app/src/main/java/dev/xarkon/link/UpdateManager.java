@@ -32,6 +32,7 @@ public final class UpdateManager {
     public static final String MANIFEST_URL=OtaUrlPolicy.LEGACY_MANIFEST;
     public static final String TRUSTED_CERT_SHA256="2651D90F5C57F2D4A121E2D8B0899680343DC9E87E515ED5E100FC3D62C6D626";
     private static final long MAX_APK=512L*1024L*1024L;
+    private static final int MAX_MANIFEST_BYTES=4*1024*1024;
     // Only the two pinned slugs of this repository are accepted after its rename.
     public static final String APK_FILE="qr_link_update.apk";
     public interface Callback {
@@ -67,7 +68,9 @@ public final class UpdateManager {
                 throw new IOException("APK размещён вне официального канала");
             List<OtaHistory.Entry> entries=new ArrayList<>();
             JSONArray versions=j.optJSONArray("history");
-            if(versions!=null&&versions.length()<=500){
+            // Do not discard the full missed-release history after 500 entries.
+            // Input bytes are bounded separately when the manifest is downloaded.
+            if(versions!=null){
                 for(int i=0;i<versions.length();i++){
                     JSONObject item=versions.optJSONObject(i);
                     if(item==null){entries.clear();break;}
@@ -161,7 +164,7 @@ public final class UpdateManager {
             try(InputStream in=c.getInputStream()){
                 byte[] b=new byte[8192];int n;
                 while((n=in.read(b))!=-1){
-                    if(memory.size()+n>512*1024)throw new IOException("Ответ сервера слишком большой.");
+                    if(memory.size()+n>MAX_MANIFEST_BYTES)throw new IOException("Ответ сервера слишком большой.");
                     memory.write(b,0,n);
                 }
             }
