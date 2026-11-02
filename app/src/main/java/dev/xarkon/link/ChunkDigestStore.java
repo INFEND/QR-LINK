@@ -4,6 +4,10 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 /** Fixed-width, crash-durable SHA-256 index for received chunks. */
 public final class ChunkDigestStore {
@@ -21,6 +25,27 @@ public final class ChunkDigestStore {
             out.write(digest);
             out.getFD().sync();
         }
+    }
+
+    /** Verify persisted bytes, not merely a digest copied from the same sidecar. */
+    public static boolean matches(FileChannel file,long offset,long length,byte[] expected)throws IOException{
+        if(file==null||expected==null||expected.length!=SHA256_BYTES||
+            offset<0||length<0||offset>Long.MAX_VALUE-length)return false;
+        final MessageDigest digest;
+        try{digest=MessageDigest.getInstance("SHA-256");}
+        catch(NoSuchAlgorithmException failure){throw new IOException("SHA-256 недоступен",failure);}
+        ByteBuffer buffer=ByteBuffer.allocate(256*1024);
+        long position=offset,remaining=length;
+        while(remaining>0){
+            buffer.clear();
+            buffer.limit((int)Math.min(buffer.capacity(),remaining));
+            int n=file.read(buffer,position);
+            if(n<=0)return false;
+            digest.update(buffer.array(),0,n);
+            position+=n;
+            remaining-=n;
+        }
+        return MessageDigest.isEqual(expected,digest.digest());
     }
 
     public static Reader open(File path)throws IOException{

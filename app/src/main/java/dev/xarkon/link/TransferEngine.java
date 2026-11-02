@@ -494,30 +494,34 @@ public final class TransferEngine {
         if(!TransferFileIdentity.validId(id))throw new IllegalArgumentException("Неверный ID файла");
         return new File(new File(context.getFilesDir(),"chunk_sha256"),id+".sha");
     }
-    /** Verify once after a process restart; never trust a bitmap alone. */
+    /** Verify persisted bytes after process death before advertising resume bits. */
     private void verifyRestored(Incoming inc)throws IOException{
         synchronized(inc){
             if(!inc.restored)return;
+            if(inc.done.isEmpty()){inc.restored=false;return;}
             int invalid=0;
-            try(ChunkDigestStore.Reader hashes=ChunkDigestStore.open(digestFile(inc.id))){
-                for(int index=inc.done.nextSetBit(0);index>=0;){
-                    int next=inc.done.nextSetBit(index+1);
-                    byte[] expected=hashes==null?null:hashes.read(index);
-                    boolean valid=false;
-                    if(expected!=null){
-                        try{valid=hex(expected).equalsIgnoreCase(storedSha256(inc,index));}
-                        catch(Exception failure){
-                            throw new IOException("Не удалось проверить сохранённый блок "+index,failure);
+            try(ChunkDigestStore.Reader hashes=ChunkDigestStore.open(digestFile(inc.id));
+                ParcelFileDescriptor saved=context.getContentResolver().openFileDescriptor(inc.uri,"r")){
+                if(saved==null)throw new IOException("Полученный файл больше недоступен");
+                try(FileInputStream bytes=new FileInputStream(saved.getFileDescriptor())){
+                    FileChannel channel=bytes.getChannel();
+                    for(int index=inc.done.nextSetBit(0);index>=0;){
+                        int next=inc.done.nextSetBit(index+1);
+                        byte[] expected=hashes==null?null:hashes.read(index);
+                        long offset=(long)index*Util.CHUNK;
+                        long length=Math.min(Util.CHUNK,inc.size-offset);
+                        boolean valid=expected!=null&&
+                            ChunkDigestStore.matches(channel,offset,length,expected);
+                        if(!valid){
+                            if(inc.completed)throw new IOException("Сохранённый файл повреждён. Добавьте файл в очередь заново.");
+                            inc.done.clear(index);
+                            invalid++;
                         }
+                        index=next;
                     }
-                    if(!valid){inc.done.clear(index);invalid++;}
-                    index=next;
                 }
             }
-            if(invalid>0){
-                if(inc.completed)throw new IOException("Сохранённый файл повреждён. Добавьте файл в очередь заново.");
-                persist(inc);
-            }
+            if(invalid>0)persist(inc);
             inc.restored=false;
             if(invalid>0)events.note("Повторная отправка неподтверждённых блоков: "+invalid);
         }

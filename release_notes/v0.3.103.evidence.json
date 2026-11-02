@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.102",
+  "entries": [
+    {
+      "note": "[=] При возобновлении незавершённой передачи повреждённые блоки загружаются повторно",
+      "path": "app/src/main/java/dev/xarkon/link/TransferEngine.java",
+      "changed_line": "ChunkDigestStore.matches(channel,offset,length,expected);"
+    }
+  ]
+}
