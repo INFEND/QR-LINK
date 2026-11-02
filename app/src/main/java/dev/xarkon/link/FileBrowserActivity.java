@@ -54,6 +54,9 @@ public final class FileBrowserActivity extends Activity {
     // shared by the selection summary. Never assume a selected folder is 0 B.
     private final HashMap<String,BrowserSelectionTotals.FolderStats> folderSizeSnapshots=new HashMap<>();
     private final HashSet<String> folderSizePending=new HashSet<>();
+    // Permission changes invalidate both successful and failed metadata scans.
+    private final HashMap<String,String> folderAccessErrors=new HashMap<>();
+    private int folderStatsEpoch=0;
     // Compact LRU summaries, never 30000 file URIs per unselected card.
     private final LinkedHashMap<String,BrowserFolderCardStats> folderCardStats=
         new LinkedHashMap<String,BrowserFolderCardStats>(128,0.75f,true){
@@ -170,6 +173,9 @@ public final class FileBrowserActivity extends Activity {
         }
         if(storagePermissionRequested){
             storagePermissionRequested=false;
+            invalidateFolderStats();
+            for(Entry entry:selected.values())
+                if(entry.folder)requestFolderSize(entry);
             if(list!=null){
                 for(CancellationSignal signal:expansionSignals.values())signal.cancel();
                 expansionSignals.clear();expandedChildren.clear();expandedFolders.clear();openedFolders.clear();
@@ -177,6 +183,13 @@ public final class FileBrowserActivity extends Activity {
                 load();
             }
         }
+    }
+    private void invalidateFolderStats(){
+        ++folderStatsEpoch;
+        folderSizePending.clear();
+        folderSizeSnapshots.clear();
+        folderCardStats.clear();
+        folderAccessErrors.clear();
     }
     private boolean hasLocalStorageAccess(){
         if(Build.VERSION.SDK_INT>=30)return Environment.isExternalStorageManager();
@@ -684,6 +697,8 @@ public final class FileBrowserActivity extends Activity {
             throw new SecurityException("Папка находится вне внутренней памяти");
         if(!Files.isDirectory(folder.toPath(),LinkOption.NOFOLLOW_LINKS))
             throw new IllegalStateException("Каталог недоступен");
+        if(!Files.isReadable(folder.toPath()))
+            throw new java.nio.file.AccessDeniedException(folder.toString());
         Entries result=new Entries();
         ArrayList<Entry> directories=new ArrayList<>(),files=new ArrayList<>();
         String parent=base.toPath().relativize(folder.toPath()).toString().replace(File.separatorChar,'/');
@@ -1213,6 +1228,8 @@ public final class FileBrowserActivity extends Activity {
                     "неизвестен":Util.readable(folder.mediaBytes));
         }
         BrowserFolderCardStats stats=folderCardStats.get(folder.key());
+        if(folderAccessErrors.containsKey(folder.key())&&(stats==null||!stats.complete))
+            return "Файлов: нет доступа | Размер: нет доступа";
         if(stats==null)return "Файлов: подсчёт… | Размер: подсчёт…";
         return "Файлов: "+(stats.complete?Integer.toString(stats.fileCount):"неизвестно")+
             " | Размер: "+(stats.bytesKnown?Util.readable(stats.bytes):"неизвестен");
@@ -1258,6 +1275,7 @@ public final class FileBrowserActivity extends Activity {
     private void requestFolderSize(Entry folder){
         if(!folder.folder)return;
         final String key=folder.key();
+        final int epoch=folderStatsEpoch;
         final boolean snapshotRequested=selected.containsKey(key);
         boolean needsSnapshot=snapshotRequested&&!folderSizeSnapshots.containsKey(key);
         if(!needsSnapshot&&folderCardStats.containsKey(key))return;
@@ -1266,6 +1284,7 @@ public final class FileBrowserActivity extends Activity {
             LinkedHashMap<String,Long> lengths=new LinkedHashMap<>();
             boolean complete=true;
             BrowserFolderCardStats direct=null;
+            String accessError=null;
             try{
                 // Folder cards do not need thousands of URI/queue objects.
                 // The transfer selection still uses its own verified snapshot.
@@ -1294,6 +1313,8 @@ public final class FileBrowserActivity extends Activity {
                 }
             }catch(Exception error){
                 complete=false;
+                if(BrowserFolderAccess.denied(error))
+                    accessError=BrowserFolderAccess.message(folder.path,error);
                 // Selecting a huge folder before its card was scanned must
                 // still resolve a truthful size, even if queue enumeration
                 // stopped at the separate transfer limit.
@@ -1309,8 +1330,12 @@ public final class FileBrowserActivity extends Activity {
             final BrowserFolderCardStats stats=direct!=null?direct:
                 BrowserFolderCardStats.summarize(lengths,complete);
             final boolean snapshotUnknown=direct!=null||!stats.bytesKnown;
+            final String failedAccess=accessError;
             ui.post(()->{
+                if(epoch!=folderStatsEpoch)return;
                 folderSizePending.remove(key);
+                if(stats.complete)folderAccessErrors.remove(key);
+                else if(failedAccess!=null)folderAccessErrors.put(key,failedAccess);
                 if(isFinishing()||isDestroyed())return;
                 // A later bounded selection scan must not erase a valid card total.
                 if(stats.complete||!folderCardStats.containsKey(key))
@@ -1468,8 +1493,11 @@ public final class FileBrowserActivity extends Activity {
                     expansionSignals.remove(key);loadingFolders.remove(key);
                     if(token!=serial||isFinishing())return;
                     expandedFolders.remove(key);searchIndex.invalidate();
-                    if(!(error instanceof OperationCanceledException))
-                        showBanner("Не удалось раскрыть папку",true);
+                    if(!(error instanceof OperationCanceledException)){
+                        if(BrowserFolderAccess.denied(error))
+                            folderAccessErrors.put(key,BrowserFolderAccess.message(e.path,error));
+                        showBanner(BrowserFolderAccess.message(e.path,error),true);
+                    }
                     render();
                 });
             }
@@ -1560,7 +1588,7 @@ public final class FileBrowserActivity extends Activity {
         jobs.add(it);
     }
     @Override protected void onDestroy(){
-        ++serial;if(activeQuery!=null)activeQuery.cancel();
+        ++serial;++folderStatsEpoch;if(activeQuery!=null)activeQuery.cancel();
         for(CancellationSignal signal:expansionSignals.values())signal.cancel();
         expansionSignals.clear();
         if(list!=null)list.removeCallbacks(searchRefresh);
