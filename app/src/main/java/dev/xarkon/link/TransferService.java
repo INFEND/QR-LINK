@@ -150,9 +150,12 @@ public final class TransferService extends Service implements TransferEngine.Eve
         PendingIntent pi=PendingIntent.getActivity(this,0,intent,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         Intent stopIntent=new Intent(this,TransferService.class).setAction(STOP);
         PendingIntent stopPi=PendingIntent.getService(this,1,stopIntent,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
-        String notice=activeFile.isEmpty()?status:(activeFile+" · "+Util.readable(progress)+" / "+Util.readable(total));
+        String notice=activeFile.isEmpty()?status:(activeFile+" | "+Util.readable(progress)+" / "+Util.readable(total));
+        // A listening receiver is not transferring files. Show the transfer
+        // title only for active work, including an incoming file in progress.
+        boolean transferring=isBusy||("Приём".equals(transferDirection)&&total>0&&progress<total);
         Notification.Builder b=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("QR LINK · фоновая передача").setContentText(notice).setContentIntent(pi).setOngoing(isReceiving||isBusy||!peerState.isEmpty())
+            .setContentTitle(transferring?"Идёт передача файлов…":"QR LINK").setContentText(notice).setContentIntent(pi).setOngoing(isReceiving||isBusy||!peerState.isEmpty())
             .setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_PROGRESS)
             .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Остановить",stopPi).build());
         if(total>0)b.setProgress(100,(int)Math.min(100,progress*100/Math.max(1,total)),false);
