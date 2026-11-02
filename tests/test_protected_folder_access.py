@@ -101,6 +101,8 @@ public final class ProtectedFolderCheck {
         self.assertIn('return "Файлов: Нет доступа | Размер: Нет доступа";',source)
         self.assertIn("BrowserFolderAccess.requireVisibleEvidence(parent,Build.VERSION.SDK_INT,scanned);",source)
         self.assertIn("BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);",source)
+        self.assertGreaterEqual(source.count("BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);"),2)
+        self.assertIn("BrowserFolderCardStats stats=BrowserFolderCardStats.scanDocuments(",source)
         self.assertIn('UiConfirmDialog.showInfo(this,"Нет доступа к папке"',source)
         dialog=(JAVA/"UiConfirmDialog.java").read_text(encoding="utf-8")
         self.assertIn('return showInternal(a,title,message,"ПОНЯТНО",null,true);',dialog)

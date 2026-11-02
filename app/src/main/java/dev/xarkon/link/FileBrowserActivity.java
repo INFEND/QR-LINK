@@ -1263,7 +1263,7 @@ public final class FileBrowserActivity extends Activity {
             BrowserFolderCardStats.ProgressListener progress)throws java.io.IOException{
         if(folder.tree==null||folder.docId==null||folder.docId.isEmpty())
             throw new java.io.IOException("Нет разрешения на папку");
-        return BrowserFolderCardStats.scanDocuments(folder.docId,(parentId,visitor)->{
+        BrowserFolderCardStats stats=BrowserFolderCardStats.scanDocuments(folder.docId,(parentId,visitor)->{
             Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(folder.tree,parentId);
             String[] cols={DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_MIME_TYPE,
@@ -1293,6 +1293,10 @@ public final class FileBrowserActivity extends Activity {
                 throw new java.io.IOException("Нет доступа к документу",denied);
             }
         },progress);
+        // SAF providers may silently filter Android/data or Android/obb.
+        // An empty cursor is not proof of an empty protected directory.
+        BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);
+        return stats;
     }
     private BrowserFolderCardStats scanLocalFolder(Entry folder,
             BrowserFolderCardStats.ProgressListener progress)throws java.io.IOException{

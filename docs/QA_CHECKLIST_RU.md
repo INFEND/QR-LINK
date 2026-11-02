@@ -1,5 +1,8 @@
 # QR LINK · Накопительный QA-реестр
 
+**Незарелизная работа после v0.3.124 (02.11.2026):** для SAF-деревьев `Android/data` и `Android/obb` добавлена проверка на пустой результат, который провайдер мог отфильтровать без исключения. Код `FileBrowserActivity.scanSafFolder`, регрессия `tests/test_protected_folder_access.py`. Отдельного нового OTA пока нет; статус R01/U02 остаётся «Не готово».
+
+
 **Подтверждённый выпуск v0.3.124 (02.11.2026):** `versionCode=129`, релизный коммит `872e66b872fa1f8a78723311c1302deebfa806bf` (основной Android diff `97919330`). Android OTA CI `41510415918` **SUCCESS**, отдельные OTA-тесты `41510416185` **SUCCESS**, **293 теста OK**, release **BUILD SUCCESSFUL**, APK Signature Scheme v3 и прежний сертификат SHA-256 `2651D90F5C57F2D4A121E2D8B0899680343DC9E87E515ED5E100FC3D62C6D626` подтверждены логом. В Releases опубликованы `QR-LINK.apk`, `update.json`, `v0.3.124.txt`. Подсчёт локальных папок на Android 11+ проверяет также вложенные `Android/data`/`Android/obb`: пустой отфильтрованный каталог не выдаётся за нулевой размер; обычные `Download/data` не ограничены, отказ вложенной системной папки объясняется в UI. Код `BrowserFolderCardStats.java`, `BrowserFolderAccess.java`, `FileBrowserActivity.java`; регрессия `tests/test_folder_card_stats.py`. Первый CI `41510101775` провалился из-за устаревших тестовых зависимостей, исправлено коммитом `872e66b8`. **148 требований: 138 «Готово», 10 «Не готово»**, R01/U02 не закрыты. Аппаратных испытаний не было.
 
 
