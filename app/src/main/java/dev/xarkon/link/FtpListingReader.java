@@ -43,4 +43,38 @@ final class FtpListingReader {
         }
         return true;
     }
+
+    /** Windows/DOS FTP LIST: date, time, <DIR>/size and file name. */
+    private static final java.util.regex.Pattern DOS_LIST = java.util.regex.Pattern.compile(
+        "^\\d{2}-\\d{2}-\\d{2,4}\\s+\\d{1,2}:\\d{2}(?:AM|PM)\\s+(<DIR>|\\d+)\\s+(.+)$",
+        java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern DOS_PREFIX = java.util.regex.Pattern.compile(
+        "^\\d{2}-\\d{2}-\\d{2,4}\\s+.*");
+
+    static final class ListedEntry {
+        final String name;
+        final boolean directory;
+        final long size;
+        ListedEntry(String name, boolean directory, long size) {
+            this.name = name; this.directory = directory; this.size = size;
+        }
+    }
+
+    static ListedEntry parseDosEntry(String line) {
+        if (line == null) return null;
+        java.util.regex.Matcher match = DOS_LIST.matcher(line.trim());
+        if (!match.matches()) return null;
+        String name = match.group(2);
+        if (!safeName(name)) return null;
+        boolean directory = match.group(1).equalsIgnoreCase("<DIR>");
+        try {
+            return new ListedEntry(name, directory,
+                directory ? -1 : Long.parseLong(match.group(1)));
+        } catch (NumberFormatException ignored) { return null; }
+    }
+
+    /** Malformed DOS records must not appear as fabricated file names. */
+    static boolean looksLikeDosLine(String line) {
+        return line != null && DOS_PREFIX.matcher(line.trim()).matches();
+    }
 }

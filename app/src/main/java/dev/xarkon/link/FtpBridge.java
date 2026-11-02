@@ -82,6 +82,13 @@ public final class FtpBridge implements AutoCloseable {
                 String line;
                 while((line=FtpListingReader.readLine(r))!=null){
                     if(line.startsWith("total "))continue;
+                    FtpListingReader.ListedEntry dos=FtpListingReader.parseDosEntry(line);
+                    if(dos!=null){
+                        FtpListingReader.requireCapacity(result.size());
+                        result.add(new Entry(dos.name,dos.directory,dos.size));
+                        continue;
+                    }
+                    if(FtpListingReader.looksLikeDosLine(line))continue;
                     // Unix LIST: permissions links owner group size month day time name
                     String[]fields=line.trim().split("\\s+",9);
                     if(fields.length>=9){

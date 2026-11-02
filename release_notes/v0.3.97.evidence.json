@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.96",
+  "entries": [
+    {
+      "note": "[=] FTP-проводник правильно показывает папки и файлы серверов с Windows-форматом списка",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "FtpListingReader.ListedEntry dos=FtpListingReader.parseDosEntry(line);"
+    }
+  ]
+}
