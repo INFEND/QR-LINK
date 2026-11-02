@@ -50,24 +50,20 @@ public final class FtpBridge implements AutoCloseable {
     private void expect(int expect)throws IOException{int n=response();if(n!=expect)throw serverFailure(n);}
     private void expectResult(int code)throws IOException{if(code<200||code>=300)throw serverFailure(code);}
     private Socket passive()throws IOException{
-        int code=send("EPSV");String ip=host;int dataport;
+        int code=send("EPSV");int dataport;
         if(code==229){
-            int a=last.indexOf('('),b=last.indexOf(')',a+1);
-            if(a<0||b<=a)throw new IOException("Некорректный EPSV");
-            String body=last.substring(a+1,b),delimiter=body.substring(0,1);
-            String[]v=body.split(java.util.regex.Pattern.quote(delimiter));
-            dataport=Integer.parseInt(v[v.length-1]);
+            dataport=FtpPassiveReply.epsvPort(last);
         }else{
-            code=send("PASV");if(code!=227)throw new IOException("FTP не поддерживает пассивный режим");
-            int a=last.indexOf('('),b=last.indexOf(')',a+1);
-            if(a<0||b<=a)throw new IOException("Некорректный PASV");
-            String[]nums=last.substring(a+1,b).split(",");
-            if(nums.length!=6)throw new IOException("Некорректный PASV");
-            dataport=Integer.parseInt(nums[4])*256+Integer.parseInt(nums[5]);
-            // Use control-connection address instead of the untrusted PASV IP.
+            code=send("PASV");
+            if(code!=227)throw new IOException("FTP не поддерживает пассивный режим");
+            dataport=FtpPassiveReply.pasvPort(last);
         }
-        if(dataport<1||dataport>65535)throw new IOException("Неверный порт данных");
-        Socket s=new Socket();s.connect(new InetSocketAddress(ip,dataport),5000);s.setSoTimeout(30000);return s;
+        // Always connect to the authenticated control-connection host,
+        // never to the IP advertised by an untrusted FTP server.
+        Socket s=new Socket();
+        s.connect(new InetSocketAddress(host,dataport),5000);
+        s.setSoTimeout(30000);
+        return s;
     }
     private void navigate(String path)throws IOException{
         int res=send("CWD /");expectResult(res);
@@ -129,9 +125,19 @@ public final class FtpBridge implements AutoCloseable {
             }
             expectResult(response());success=true;
         }finally{
-            if(success){ContentValues publish=new ContentValues();publish.put(MediaStore.Downloads.IS_PENDING,0);
-                context.getContentResolver().update(dst,publish,null,null);events.note("FTP получено: "+name+" ("+Util.readable(total)+")");}
-            else context.getContentResolver().delete(dst,null,null);
+            if(success){
+                ContentValues publish=new ContentValues();publish.put(MediaStore.Downloads.IS_PENDING,0);
+                try{
+                    if(context.getContentResolver().update(dst,publish,null,null)!=1)
+                        throw new IOException("Android не подтвердил сохранение FTP-файла");
+                }catch(Exception failure){
+                    try{context.getContentResolver().delete(dst,null,null);}catch(Exception ignored){}
+                    throw new IOException("Не удалось опубликовать загруженный FTP-файл",failure);
+                }
+                events.note("FTP получено: "+name+" ("+Util.readable(total)+")");
+            }else{
+                try{context.getContentResolver().delete(dst,null,null);}catch(Exception ignored){}
+            }
         }
         return dst;
     }

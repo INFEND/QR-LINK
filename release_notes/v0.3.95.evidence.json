@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.94",
+  "entries": [
+    {
+      "note": "[=] FTP-подключение проверяет порт пассивного режима и отклоняет неверные ответы",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "dataport=FtpPassiveReply.epsvPort(last);"
+    },
+    {
+      "note": "[=] Скачанный через FTP файл считается полученным только после сохранения Android",
+      "path": "app/src/main/java/dev/xarkon/link/FtpBridge.java",
+      "changed_line": "if(context.getContentResolver().update(dst,publish,null,null)!=1)"
+    }
+  ]
+}
