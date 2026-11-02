@@ -17,7 +17,7 @@ from release_exceptions import (
 )
 
 MIN_EVIDENCE_VERSION = (0, 3, 81)
-PREFIXES = ("[+] ", "[-] ", "[=] ")
+PREFIXES = ("[+] ", "[-] ", "[–] ", "[=] ")
 
 
 def version_tuple(version):
