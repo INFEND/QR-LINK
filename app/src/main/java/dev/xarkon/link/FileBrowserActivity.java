@@ -1411,8 +1411,21 @@ public final class FileBrowserActivity extends Activity {
                     e.key(),e.uri==null?"":e.uri.toString(),e.path,e.folder,
                     e.size,folderPreviewBytes(e)));
             }
+            // A completed recursive local folder-card scan already knows the
+            // exact size. Reuse it immediately while the selected-folder URI
+            // snapshot is still loading, including for parent/child dedup.
+            Map<String,BrowserSelectionTotals.FolderStats> effectiveSnapshots=
+                new HashMap<>(folderSizeSnapshots);
+            for(Entry folder:selected.values()){
+                if(!folder.folder||folder.mediaFolder||folder.localFile==null||
+                    effectiveSnapshots.containsKey(folder.key()))continue;
+                BrowserFolderCardStats card=folderCardStats.get(folder.key());
+                if(card!=null&&card.complete&&card.bytesKnown)
+                    effectiveSnapshots.put(folder.key(),new BrowserSelectionTotals.FolderStats(
+                        Collections.emptyMap(),false,card.bytes));
+            }
             BrowserSelectionTotals.Result total=
-                BrowserSelectionTotals.sum(entries,folderSizeSnapshots);
+                BrowserSelectionTotals.sum(entries,effectiveSnapshots);
             int files=selected.size()-folders;
             String size=total.unknown?"неизвестен":
                 total.pending&&!total.provisional?"Подсчёт…":

@@ -111,6 +111,13 @@ public final class SelectionTotalsCheck {
             Collections.emptyMap(),false,500L));
         r=sum(cache,huge,hugeChild,inside,outside);
         yes(r.bytes==30005700L); // Nested selection must not inflate the exact total.
+        // A previously completed local folder-card scan is an exact recursive
+        // aggregate even while a separate selected-folder URI scan is pending.
+        Map<String,BrowserSelectionTotals.FolderStats> cardCache=new HashMap<>();
+        cardCache.put("huge",new BrowserSelectionTotals.FolderStats(
+            Collections.emptyMap(),false,30005000L));
+        r=sum(cardCache,huge,hugeChild,inside,outside);
+        yes(r.bytes==30005700L&&!r.unknown&&!r.provisional&&!r.pending);
         cache.put("huge",new BrowserSelectionTotals.FolderStats(
             Collections.emptyMap(),true,30005000L));
         r=sum(cache,huge);
@@ -137,7 +144,9 @@ class SelectionTotalsTests(unittest.TestCase):
     def test_ui_queues_folder_scan_and_never_forces_unknown_size(self):
         source=BROWSER.read_text(encoding="utf-8")
         self.assertIn("if(e.folder&&selected.containsKey(key))requestFolderSize(e)",source)
-        self.assertIn("BrowserSelectionTotals.sum(entries,folderSizeSnapshots)",source)
+        self.assertIn("BrowserSelectionTotals.sum(entries,effectiveSnapshots)",source)
+        self.assertIn("effectiveSnapshots.put(folder.key(),new BrowserSelectionTotals.FolderStats(",source)
+        self.assertIn("!folder.folder||folder.mediaFolder||folder.localFile==null",source)
         self.assertIn("FileCatalog.fromLocalFolder(this,new File(root,folder.path),folder.path)",source)
         self.assertIn("FileCatalog.fromDocumentFolder(this,folder.tree,folder.docId,folder.name)",source)
         self.assertNotIn('folders>0||unknown>0?"неизвестен"',source)
