@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.127",
+  "entries": [
+    {
+      "note": "[=] **Уведомление передачи** показывает «Идёт передача файлов…» и разделяет имя файла и размер символом «|»",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": ".setContentTitle(transferring?\"Идёт передача файлов…\":\"QR LINK\").setContentText(notice)"
+    }
+  ]
+}
