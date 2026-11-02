@@ -34,7 +34,8 @@ class SafConflictingIdsTests(unittest.TestCase):
             file=Path(tmp)/"SafConflictingIdsCheck.java"
             file.write_text(HARNESS,encoding="utf-8")
             subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
-                str(JAVA/"BrowserFolderCardStats.java"),str(file)],
+                str(JAVA/"BrowserFolderCardStats.java"),
+                str(JAVA/"BrowserFolderAccess.java"),str(file)],
                 check=True,capture_output=True,text=True)
             subprocess.run(["java","-cp",tmp,"dev.xarkon.link.SafConflictingIdsCheck"],
                 check=True,capture_output=True,text=True)

@@ -55,7 +55,8 @@ public final class FolderProgressCheck {
             source=Path(temp)/"FolderProgressCheck.java"
             source.write_text(harness,encoding="utf-8")
             subprocess.run(["javac","-encoding","UTF-8","-d",temp,
-                str(JAVA/"BrowserFolderCardStats.java"),str(source)],
+                str(JAVA/"BrowserFolderCardStats.java"),
+                str(JAVA/"BrowserFolderAccess.java"),str(source)],
                 check=True,capture_output=True,text=True)
             subprocess.run(["java","-cp",temp,"dev.xarkon.link.FolderProgressCheck"],
                 check=True,capture_output=True,text=True)
@@ -67,7 +68,8 @@ public final class FolderProgressCheck {
         self.assertIn("folderProgressCounts.remove(key);",source)
         self.assertIn("if(epoch!=folderStatsEpoch||!folderSizePending.contains(key)",source)
         self.assertIn("scanSafFolder(folder,progress)",source)
-        self.assertIn("getCanonicalFile().toPath(),progress)",source)
+        self.assertIn("getCanonicalFile().toPath(),progress,",source)
+        self.assertIn("Build.VERSION.SDK_INT);",source)
 
 if __name__=="__main__":
     unittest.main()
