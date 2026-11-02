@@ -30,5 +30,17 @@ class AutoNetworkUiTests(unittest.TestCase):
         self.assertIn('next.add(sign+file.name+" | "+Util.readable(',source)
         self.assertIn('" | "+(status.isEmpty()?',source)
 
+
+    def test_ota_settings_have_no_last_check_or_available_version_footer(self):
+        source=(JAVA/"MainActivity.java").read_text(encoding="utf-8")
+        # Remove the entire footer, not just the status text. No empty space.
+        for obsolete in ('backgroundCheckStatus', 'updateBackgroundCheckStatus()',
+                         'Последняя проверка:', 'Ожидается первая проверка по расписанию'):
+            self.assertNotIn(obsolete,source)
+        self.assertIn('otaSwitch(parent,"history","Проверка обновлений в фоне"',source)
+        self.assertIn('OtaUpdateSchedule.configure(this);',source)
+        self.assertIn('selectedLabel.setText(labels[value]);',source)
+        self.assertIn('putLong(OtaUpdateSchedule.PREF_AVAILABLE_CODE,r.versionCode)',source)
+
 if __name__=="__main__":
     unittest.main()
