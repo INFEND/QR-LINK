@@ -11,7 +11,7 @@ public final class ReleaseNotes {
         for(String raw:source.split("\\r?\\n")){
             String line=raw.trim();
             if(line.length()<5||line.length()>260)continue;
-            if(!(line.startsWith("[+] ")||line.startsWith("[-] ")||line.startsWith("[=] ")))continue;
+            if(!(line.startsWith("[+] ")||line.startsWith("[-] ")||line.startsWith("[–] ")||line.startsWith("[=] ")))continue;
             String lower=line.toLowerCase(Locale.ROOT);
             if(lower.contains("jvm")||lower.contains("регрессион")||
                 lower.contains("тестирован")||lower.contains("тесты")||
