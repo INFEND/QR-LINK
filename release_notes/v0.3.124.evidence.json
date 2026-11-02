@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.123",
+  "entries": [
+    {
+      "note": "[=] **Подсчёт папок** показывает запрет доступа к вложенным системным каталогам вместо неверного нуля",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "BrowserFolderAccess.requireVisibleEvidence("
+    }
+  ]
+}

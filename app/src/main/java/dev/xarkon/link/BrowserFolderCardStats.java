@@ -43,6 +43,13 @@ final class BrowserFolderCardStats {
                                              java.nio.file.Path sharedRoot,
                                              ProgressListener progress)
             throws java.io.IOException {
+        return scanLocal(folder,sharedRoot,progress,29);
+    }
+    /** Android 11+ may return an empty filtered listing for protected descendants. */
+    static BrowserFolderCardStats scanLocal(java.nio.file.Path folder,
+                                             java.nio.file.Path sharedRoot,
+                                             ProgressListener progress,int androidSdk)
+            throws java.io.IOException {
         java.nio.file.Path base=sharedRoot.toRealPath();
         if(java.nio.file.Files.isSymbolicLink(folder))
             throw new java.io.IOException("Символическая ссылка вместо папки");
@@ -51,6 +58,8 @@ final class BrowserFolderCardStats {
             throw new java.io.IOException("Папка вне внутренней памяти");
         final int[] count={0};
         final long[] total={0};
+        // Track direct children per directory, not a list of every file.
+        final java.util.ArrayDeque<Integer> observedChildren=new java.util.ArrayDeque<>();
         java.nio.file.Files.walkFileTree(selected,
             java.util.EnumSet.noneOf(java.nio.file.FileVisitOption.class),
             Integer.MAX_VALUE,new java.nio.file.SimpleFileVisitor<java.nio.file.Path>(){
@@ -64,6 +73,11 @@ final class BrowserFolderCardStats {
                     checkActive();
                     if(attrs.isSymbolicLink()||!java.nio.file.Files.isReadable(dir))
                         throw new java.io.IOException("Недоступная папка");
+                    if(!observedChildren.isEmpty()){
+                        int count=observedChildren.pop();
+                        observedChildren.push(count+1);
+                    }
+                    observedChildren.push(0);
                     return java.nio.file.FileVisitResult.CONTINUE;
                 }
                 @Override public java.nio.file.FileVisitResult visitFile(
@@ -77,6 +91,8 @@ final class BrowserFolderCardStats {
                         throw new java.io.IOException("Размер папки слишком велик");
                     count[0]++;
                     total[0]+=size;
+                    int siblings=observedChildren.pop();
+                    observedChildren.push(siblings+1);
                     if(progress!=null&&count[0]%512==0)
                         progress.onProgress(count[0],total[0]);
                     return java.nio.file.FileVisitResult.CONTINUE;
@@ -90,6 +106,9 @@ final class BrowserFolderCardStats {
                         java.nio.file.Path dir,java.io.IOException error)
                         throws java.io.IOException{
                     if(error!=null)throw error;
+                    int children=observedChildren.pop();
+                    BrowserFolderAccess.requireVisibleEvidence(
+                        base.relativize(dir).toString(),androidSdk,children);
                     return java.nio.file.FileVisitResult.CONTINUE;
                 }
             });

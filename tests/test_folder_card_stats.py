@@ -39,7 +39,7 @@ public final class FolderCardStatsCheck {
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "FolderCardStatsCheck.java"
             source.write_text(harness, encoding="utf-8")
-            subprocess.run(["javac", "-d", tmp, str(JAVA/"BrowserFolderCardStats.java"),
+            subprocess.run(["javac", "-d", tmp, str(JAVA/"BrowserFolderCardStats.java"),str(JAVA/"BrowserFolderAccess.java"),
                             str(source)], check=True, capture_output=True)
             subprocess.run(["java", "-cp", tmp, "dev.xarkon.link.FolderCardStatsCheck"],
                            check=True, capture_output=True)
@@ -87,10 +87,68 @@ public final class FolderCardLargeCheck {
             source=Path(tmp)/"FolderCardLargeCheck.java"
             source.write_text(harness,encoding="utf-8")
             subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
-                            str(JAVA/"BrowserFolderCardStats.java"),str(source)],
+                            str(JAVA/"BrowserFolderCardStats.java"),str(JAVA/"BrowserFolderAccess.java"),str(source)],
                            check=True,capture_output=True,text=True)
             subprocess.run(["java","-cp",tmp,"dev.xarkon.link.FolderCardLargeCheck"],
                            check=True,capture_output=True,text=True)
+
+    def test_protected_nested_directories_do_not_report_false_zero(self):
+        harness = r"""package dev.xarkon.link;
+import java.nio.file.*;
+import java.nio.file.AccessDeniedException;
+import java.util.Comparator;
+import java.util.stream.Stream;
+public final class NestedProtectedCardCheck {
+    public static void main(String[] args) throws Exception {
+        Path root=Files.createTempDirectory("qr-link-nested-card-");
+        try {
+            Path ordinary=Files.createDirectories(root.resolve("Download/data"));
+            Files.write(ordinary.resolve("clip.mp4"),new byte[]{1,2,3});
+            Path protectedData=Files.createDirectories(root.resolve("Android/data"));
+            boolean denied=false;
+            try{BrowserFolderCardStats.scanLocal(root,root,null,35);}
+            catch(AccessDeniedException e){
+                denied=true;
+                if(!BrowserFolderAccess.message("Android",e).startsWith(
+                    "Нет доступа к системной папке Android"))
+                    throw new AssertionError("Nested denial must have Android explanation");
+            }
+            if(!denied)throw new AssertionError("Filtered nested Android/data reported as empty");
+            Files.write(protectedData.resolve("visible.bin"),new byte[]{1});
+            BrowserFolderCardStats visible=BrowserFolderCardStats.scanLocal(root,root,null,35);
+            if(!visible.complete||!visible.bytesKnown||visible.fileCount!=2||visible.bytes!=4)
+                throw new AssertionError("Visible protected data and ordinary data must count");
+            Files.createDirectories(root.resolve("Android/obb"));
+            denied=false;
+            try{BrowserFolderCardStats.scanLocal(root,root,null,35);}
+            catch(AccessDeniedException expected){denied=true;}
+            if(!denied)throw new AssertionError("Filtered nested Android/obb reported as empty");
+            BrowserFolderCardStats legacy=BrowserFolderCardStats.scanLocal(root,root,null,29);
+            if(!legacy.complete||legacy.fileCount!=2)
+                throw new AssertionError("Android 10 should not receive Android 11 restrictions");
+            BrowserFolderCardStats ordinaryOnly=BrowserFolderCardStats.scanLocal(
+                ordinary,root,null,35);
+            if(!ordinaryOnly.complete||ordinaryOnly.fileCount!=1||ordinaryOnly.bytes!=3)
+                throw new AssertionError("Ordinary data folder incorrectly blocked");
+        } finally {
+            try(Stream<Path> paths=Files.walk(root)){
+                paths.sorted(Comparator.reverseOrder()).forEach(p->{
+                    try{Files.deleteIfExists(p);}catch(Exception e){throw new RuntimeException(e);}
+                });
+            }
+        }
+    }
+}
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/"NestedProtectedCardCheck.java"
+            source.write_text(harness,encoding="utf-8")
+            subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
+                str(JAVA/"BrowserFolderCardStats.java"),
+                str(JAVA/"BrowserFolderAccess.java"),str(source)],
+                check=True,capture_output=True,text=True)
+            subprocess.run(["java","-cp",tmp,"dev.xarkon.link.NestedProtectedCardCheck"],
+                check=True,capture_output=True,text=True)
 
     def test_browser_uses_nonblocking_cached_metadata(self):
         source = (JAVA/"FileBrowserActivity.java").read_text(encoding="utf-8")
@@ -190,7 +248,7 @@ public final class SafFolderCardCheck {
             source=Path(tmp)/"SafFolderCardCheck.java"
             source.write_text(harness,encoding="utf-8")
             subprocess.run(["javac","-encoding","UTF-8","-d",tmp,
-                            str(JAVA/"BrowserFolderCardStats.java"),str(source)],
+                            str(JAVA/"BrowserFolderCardStats.java"),str(JAVA/"BrowserFolderAccess.java"),str(source)],
                            check=True,capture_output=True,text=True)
             subprocess.run(["java","-cp",tmp,"dev.xarkon.link.SafFolderCardCheck"],
                            check=True,capture_output=True,text=True)

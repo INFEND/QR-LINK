@@ -63,7 +63,14 @@ final class BrowserFolderAccess {
     }
 
     static String message(String relativePath,Throwable error){
-        if(denied(error)&&protectedAndroidPath(relativePath))
+        boolean protectedPath=protectedAndroidPath(relativePath);
+        // A parent such as Android/ may fail because a protected child was
+        // silently filtered. Use the denied child's path in that case.
+        for(Throwable cause=error;cause!=null&&!protectedPath;cause=cause.getCause()){
+            if(cause instanceof AccessDeniedException)
+                protectedPath=protectedAndroidPath(((AccessDeniedException)cause).getFile());
+        }
+        if(denied(error)&&protectedPath)
             return "Нет доступа к системной папке Android. Android ограничивает просмотр её содержимого.";
         if(denied(error))
             return "Нет доступа к папке. Проверьте разрешения на файлы или выберите доступную папку через системный проводник.";

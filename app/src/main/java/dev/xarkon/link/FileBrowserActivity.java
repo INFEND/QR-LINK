@@ -1297,7 +1297,8 @@ public final class FileBrowserActivity extends Activity {
     private BrowserFolderCardStats scanLocalFolder(Entry folder,
             BrowserFolderCardStats.ProgressListener progress)throws java.io.IOException{
         BrowserFolderCardStats stats=BrowserFolderCardStats.scanLocal(folder.localFile.toPath(),
-            Environment.getExternalStorageDirectory().getCanonicalFile().toPath(),progress);
+            Environment.getExternalStorageDirectory().getCanonicalFile().toPath(),progress,
+            Build.VERSION.SDK_INT);
         BrowserFolderAccess.requireVisibleEvidence(folder.path,Build.VERSION.SDK_INT,stats.fileCount);
         return stats;
     }
