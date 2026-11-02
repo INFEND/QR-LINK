@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.114",
+  "entries": [
+    {
+      "note": "[=] В **журнале обновлений** больше не выделяются случайные первые слова строк",
+      "path": "app/src/main/java/dev/xarkon/link/OtaProgressDialog.java",
+      "changed_line": "int actionStart=4,actionEnd=actionStart;"
+    }
+  ]
+}
