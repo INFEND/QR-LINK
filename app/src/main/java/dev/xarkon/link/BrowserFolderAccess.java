@@ -10,10 +10,29 @@ final class BrowserFolderAccess {
 
     static boolean protectedAndroidPath(String relativePath){
         if(relativePath==null)return false;
+        // File-browser paths are relative to shared storage, but diagnostics
+        // can provide /storage/emulated/0 or the file-manager /0 alias.
+        // Resolve dot segments before classifying; never escape the root.
         String path=relativePath.replace('\\','/').replaceAll("^/+","");
         String lower=path.toLowerCase(Locale.ROOT);
-        return lower.equals("android/data")||lower.startsWith("android/data/")||
-            lower.equals("android/obb")||lower.startsWith("android/obb/");
+        if(lower.startsWith("storage/emulated/0/"))
+            path=path.substring("storage/emulated/0/".length());
+        else if(lower.startsWith("0/"))path=path.substring(2);
+        else if(lower.startsWith("sdcard/"))path=path.substring(7);
+        else if(lower.startsWith("storage/")||lower.startsWith("mnt/"))
+            return false;
+        java.util.ArrayDeque<String> segments=new java.util.ArrayDeque<>();
+        for(String part:path.split("/")){
+            if(part.isEmpty()||part.equals("."))continue;
+            if(part.equals("..")){
+                if(segments.isEmpty())return false;
+                segments.removeLast();
+            }else segments.addLast(part);
+        }
+        if(segments.size()<2)return false;
+        String first=segments.removeFirst(),second=segments.removeFirst();
+        return first.equalsIgnoreCase("Android")&&
+            (second.equalsIgnoreCase("data")||second.equalsIgnoreCase("obb"));
     }
 
     /** Android 11+ may silently filter a protected directory to an empty listing.
@@ -35,7 +54,9 @@ final class BrowserFolderAccess {
                 lower.contains("eacces")||lower.contains("eperm")||
                 lower.contains("operation not permitted")||
                 lower.contains("доступ запрещ")||lower.contains("нет разрешения")||
-                lower.contains("недоступная папка")||lower.contains("каталог недоступен"))
+                lower.contains("недоступная папка")||lower.contains("каталог недоступен")||
+                lower.contains("нет доступа")||lower.contains("недоступный элемент")||
+                lower.contains("недоступный каталог"))
                 return true;
         }
         return false;
