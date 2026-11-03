@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.131",
+  "entries": [
+    {
+      "note": "[=] **Размер папок** не выдаётся за точный, если системный проводник повторяет один файл в разных подпапках",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "if(!parent.equals(fileParents.get(id)))"
+    }
+  ]
+}
