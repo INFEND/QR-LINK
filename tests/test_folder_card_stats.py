@@ -18,6 +18,18 @@ public final class FolderCardStatsCheck {
             BrowserFolderCardStats.knownDescriptorLength(0,4096)!=0||
             BrowserFolderCardStats.knownDescriptorLength(512,4096)!=512)
             throw new AssertionError("SAF descriptor length fallback");
+        if(BrowserFolderCardStats.resolveDescriptorLength(-1,true,-1,false)!=-1||
+            BrowserFolderCardStats.resolveDescriptorLength(-1,false,4096,true)!=4096||
+            BrowserFolderCardStats.resolveDescriptorLength(-1,false,-1,true)!=-1||
+            BrowserFolderCardStats.resolveDescriptorLength(512,true,-1,false)!=512)
+            throw new AssertionError("Unknown length must stay unknown for readable SAF files");
+        boolean missingDescriptorsDenied=false;
+        try{BrowserFolderCardStats.resolveDescriptorLength(-1,false,-1,false);}
+        catch(java.io.IOException expected){
+            missingDescriptorsDenied=expected.getMessage().contains("Недоступный элемент");
+        }
+        if(!missingDescriptorsDenied)
+            throw new AssertionError("Two missing descriptors must fail closed");
         Map<String,Long> files = new LinkedHashMap<>();
         files.put("file:/a", 2048L);
         files.put("file:/b", 1024L);
@@ -167,6 +179,9 @@ public final class NestedProtectedCardCheck {
         self.assertIn("descriptor.getStatSize()", source)
         self.assertIn("getContentResolver().openAssetFileDescriptor(document,\"r\")", source)
         self.assertIn("asset.getLength()", source)
+        self.assertIn("boolean regularOpened=false;", source)
+        self.assertIn("boolean assetOpened=false;", source)
+        self.assertIn("BrowserFolderCardStats.resolveDescriptorLength(", source)
         self.assertIn("BrowserFolderCardStats.knownDescriptorLength(statSize,", source)
         self.assertIn("folderPreviewBytes(e)", source)
         self.assertIn("if(snapshotRequested&&folder.localFile!=null)try{", source)

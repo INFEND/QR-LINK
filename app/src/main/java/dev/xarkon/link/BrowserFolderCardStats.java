@@ -122,6 +122,19 @@ final class BrowserFolderCardStats {
         return statSize>=0?statSize:assetLength>=0?assetLength:-1;
     }
 
+    /** A document without COLUMN_SIZE is only safely enumerable when at least
+     * one read descriptor actually opened. Two missing descriptors mean that
+     * the provider's listed document is no longer readable, not a zero-size
+     * or merely unknown-size file.
+     */
+    static long resolveDescriptorLength(long statSize,boolean regularOpened,
+                                        long assetLength,boolean assetOpened)
+            throws java.io.IOException {
+        if(!regularOpened&&!assetOpened)
+            throw new java.io.IOException("Недоступный элемент папки");
+        return knownDescriptorLength(statSize,assetLength);
+    }
+
     /** Stream SAF document metadata without building a transfer queue. A
      * provider may repeat document IDs; count identical files only once and
      * reject cycles, inconsistent metadata or inaccessible descendants.

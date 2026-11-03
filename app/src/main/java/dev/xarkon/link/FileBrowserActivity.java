@@ -1290,28 +1290,37 @@ public final class FileBrowserActivity extends Activity {
                 throw new java.io.IOException("Подсчёт отменён");
             Uri document=DocumentsContract.buildDocumentUriUsingTree(folder.tree,documentId);
             long statSize=-1;
+            boolean regularOpened=false;
             try(android.os.ParcelFileDescriptor descriptor=
                     getContentResolver().openFileDescriptor(document,"r")){
-                if(descriptor!=null)statSize=descriptor.getStatSize();
+                if(descriptor!=null){
+                    regularOpened=true;
+                    statSize=descriptor.getStatSize();
+                }
             }catch(java.io.FileNotFoundException missing){
-                // A provider may support asset descriptors even when it does
-                // not expose a regular file descriptor.
+                // Some providers expose only an asset-backed descriptor.
             }catch(SecurityException denied){
                 throw new java.io.IOException("Нет доступа к документу",denied);
             }
             if(statSize>=0)return statSize;
-            // Some providers return a length for an asset-backed document but
-            // no stat size. The asset's declared length is usable without
-            // reading contents; UNKNOWN_LENGTH must remain unknown.
+            // An unknown descriptor length is not zero. If neither read
+            // descriptor can open, the listed document is inaccessible and
+            // the folder must not claim a complete file count.
+            long assetLength=-1;
+            boolean assetOpened=false;
             try(android.content.res.AssetFileDescriptor asset=
                     getContentResolver().openAssetFileDescriptor(document,"r")){
-                return BrowserFolderCardStats.knownDescriptorLength(statSize,
-                    asset==null?-1:asset.getLength());
+                if(asset!=null){
+                    assetOpened=true;
+                    assetLength=asset.getLength();
+                }
             }catch(java.io.FileNotFoundException|UnsupportedOperationException missing){
-                return -1;
+                // A regular descriptor may still be readable.
             }catch(SecurityException denied){
                 throw new java.io.IOException("Нет доступа к документу",denied);
             }
+            return BrowserFolderCardStats.resolveDescriptorLength(
+                statSize,regularOpened,assetLength,assetOpened);
         },progress);
         // SAF providers may silently filter Android/data or Android/obb.
         // An empty cursor is not proof of an empty protected directory.
