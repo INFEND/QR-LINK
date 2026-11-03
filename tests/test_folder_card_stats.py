@@ -12,7 +12,7 @@ class FolderCardStatsTests(unittest.TestCase):
         harness = """package dev.xarkon.link;
 import java.util.*;
 public final class FolderCardStatsCheck {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         if(BrowserFolderCardStats.knownDescriptorLength(-1,4096)!=4096||
             BrowserFolderCardStats.knownDescriptorLength(-1,-1)!=-1||
             BrowserFolderCardStats.knownDescriptorLength(0,4096)!=0||
