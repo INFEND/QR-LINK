@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.130",
+  "entries": [
+    {
+      "note": "[=] **Недоступные файлы** больше не считаются проверенными, если системный проводник не может открыть их для чтения",
+      "path": "app/src/main/java/dev/xarkon/link/BrowserFolderCardStats.java",
+      "changed_line": "if(!regularOpened&&!assetOpened)"
+    }
+  ]
+}
