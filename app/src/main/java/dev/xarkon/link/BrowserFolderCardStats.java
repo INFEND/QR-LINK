@@ -171,6 +171,9 @@ final class BrowserFolderCardStats {
         // A second parent or a back-edge is an alias/cycle and must fail closed.
         java.util.HashMap<String,String> directoryParents=new java.util.HashMap<>();
         java.util.HashMap<String,Long> seenFiles=new java.util.HashMap<>();
+        // Repeated file rows are safe only within the same parent. A
+        // cross-parent alias could silently undercount the visible tree.
+        java.util.HashMap<String,String> fileParents=new java.util.HashMap<>();
         final int[] count={0};
         final long[] total={0};
         final boolean[] known={true};
@@ -205,6 +208,8 @@ final class BrowserFolderCardStats {
                     throw new java.io.IOException("Несогласованный тип документа");
                 Long previous=seenFiles.get(id);
                 if(previous!=null){
+                    if(!parent.equals(fileParents.get(id)))
+                        throw new java.io.IOException("Файл повторяется в разных папках");
                     // A provider may repeat the same document, first without
                     // COLUMN_SIZE and later with an exact size (or vice versa).
                     // Only conflicting *known* sizes are inconsistent.
@@ -218,6 +223,7 @@ final class BrowserFolderCardStats {
                     return;
                 }
                 seenFiles.put(id,size);
+                fileParents.put(id,parent);
                 if(count[0]==Integer.MAX_VALUE)
                     throw new java.io.IOException("Слишком много файлов");
                 count[0]++;

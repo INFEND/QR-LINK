@@ -237,6 +237,15 @@ public final class SafFolderCardCheck {
         try{BrowserFolderCardStats.scanDocuments("root",reader);}
         catch(IOException expected){aliasDenied=true;}
         if(!aliasDenied)throw new AssertionError("Cross-parent directory alias accepted");
+        // A provider may repeat a *file* under two different directories.
+        // Silent global deduplication would claim an incorrect file count.
+        tree.put("root",Arrays.asList(new Node("left",true,0),new Node("right",true,0)));
+        tree.put("left",Arrays.asList(new Node("shared-file",false,5)));
+        tree.put("right",Arrays.asList(new Node("shared-file",false,5)));
+        aliasDenied=false;
+        try{BrowserFolderCardStats.scanDocuments("root",reader);}
+        catch(IOException expected){aliasDenied=true;}
+        if(!aliasDenied)throw new AssertionError("Cross-parent file alias accepted");
         // Duplicate provider rows can report a missing size first, then
         // an exact one; neither order may corrupt the final count/bytes.
         tree.put("root",Arrays.asList(new Node("same",false,-1),
