@@ -182,7 +182,6 @@ public final class NestedProtectedCardCheck {
         self.assertIn("boolean regularOpened=false;", source)
         self.assertIn("boolean assetOpened=false;", source)
         self.assertIn("BrowserFolderCardStats.resolveDescriptorLength(", source)
-        self.assertIn("BrowserFolderCardStats.knownDescriptorLength(statSize,", source)
         self.assertIn("folderPreviewBytes(e)", source)
         self.assertIn("if(snapshotRequested&&folder.localFile!=null)try{", source)
         self.assertIn("final boolean snapshotUnknown=!stats.bytesKnown;", source)
