@@ -416,8 +416,12 @@ public final class TransferService extends Service implements TransferEngine.Eve
                     establishNetworkRoute();return;
                 }
                 if(!QrInputValidation.validWifiCredentials(ssid,pass)){
+                    // A started AP with missing/invalid credentials cannot
+                    // produce a usable QR. Release its reservation before
+                    // trying Wi-Fi Direct, otherwise the radio may stay busy.
                     hotspot.stop();resetHotspot();
-                    status="Android не предоставил параметры точки доступа";refresh();return;
+                    startDirectFallback("Android не предоставил корректные параметры точки доступа");
+                    return;
                 }
                 hotspotStarting=false;hotspotReady=true;
                 hotspotSsid=ssid;hotspotPassword=pass;hotspotSecurity=security;
