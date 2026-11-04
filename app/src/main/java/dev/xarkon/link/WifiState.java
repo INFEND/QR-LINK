@@ -141,6 +141,8 @@ public final class WifiState {
             return "Системная точка доступа включена. Приём доступен.";
         if(!radioOn(c))return "Wi-Fi выключен. Включите его в настройках телефона.";
         if(clientConnected(c))return "Подключение через общую сеть Wi-Fi.";
-        // An enabled radio is not evidence that a P2P group exists.\n        // The route chooser may still be negotiating Direct or a local hotspot.\n        return "Нет подключения к роутеру. Подготавливаем локальное соединение.";
+        // An enabled radio is not evidence that a P2P group exists.
+        // The route chooser may still be negotiating Direct or a local hotspot.
+        return "Нет подключения к роутеру. Подготавливаем локальное соединение.";
     }
 }
