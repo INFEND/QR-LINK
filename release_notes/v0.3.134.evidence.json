@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.133",
+  "entries": [
+    {
+      "note": "[=] **Подключение без роутера** пробует Wi-Fi Direct, если точка доступа возвращает неправильные параметры",
+      "path": "app/src/main/java/dev/xarkon/link/TransferService.java",
+      "changed_line": "startDirectFallback(\"Android не предоставил корректные параметры точки доступа\");"
+    },
+    {
+      "note": "[=] **QR Wi-Fi Direct** не создаётся с некорректными именем сети или паролем",
+      "path": "app/src/main/java/dev/xarkon/link/DirectWifi.java",
+      "changed_line": "if(!QrInputValidation.validWifiCredentials(ssid,password)){"
+    }
+  ]
+}
