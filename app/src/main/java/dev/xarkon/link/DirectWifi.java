@@ -165,8 +165,10 @@ public final class DirectWifi {
             String ssid=group.getNetworkName(),password=group.getPassphrase();
             WifiP2pDevice owner=group.getOwner();
             String mac=owner==null?"":owner.deviceAddress;
-            if(ssid==null||ssid.isEmpty()||password==null||password.length()<8){
-                // Group may exist but OEM has not populated its credentials yet.
+            if(!QrInputValidation.validWifiCredentials(ssid,password)){
+                // A group with malformed or incomplete OEM credentials must
+                // not be advertised: the sender would reject its QR anyway.
+                // Poll for updated credentials until the hosting timeout.
                 return;
             }
             String ip=localIp(group.getInterface());
