@@ -1378,7 +1378,7 @@ public final class MainActivity extends Activity {
                 !TransferService.systemApHost.isEmpty()?"СИСТЕМНАЯ ТОЧКА ДОСТУПА":
                 !WifiState.radioOn(this)?"WI-FI ВЫКЛЮЧЕН":
                 TransferService.directStarting?"СОЗДАЁМ WI-FI DIRECT...":
-                "ОЖИДАЕМ WI-FI DIRECT");
+                "ПОДГОТАВЛИВАЕМ ЛОКАЛЬНУЮ СЕТЬ");
         }
         String key=TransferService.receiveKey;
         if(!WifiState.localTransferReady(this)){
@@ -1422,7 +1422,7 @@ public final class MainActivity extends Activity {
         if(!direct&&!externalAp&&!localAp&&(!WifiState.clientConnected(this)||
             "127.0.0.1".equals(host)||host.isEmpty())){
             receiveHint.setText("Локальная сеть не обнаружена");qrImage.setImageDrawable(null);lastQr="";
-            receiveCaption.setText("Создание Wi-Fi Direct не завершилось. "+TransferService.detail+" Если Wi-Fi выключен, включите его, затем обновите QR.");return;
+            receiveCaption.setText("Локальное соединение ещё не готово. "+TransferService.detail+" Если Wi-Fi выключен, включите его, затем обновите QR.");return;
         }
         String value=direct?Pairing.buildDirect(host,key,TransferService.directMac,
             TransferService.directSsid,TransferService.directPass):localAp?
