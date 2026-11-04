@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.134",
+  "entries": [
+    {
+      "note": "[=] **Экран получения** больше не сообщает о Wi-Fi Direct до выбора реального способа соединения",
+      "path": "app/src/main/java/dev/xarkon/link/MainActivity.java",
+      "changed_line": "\"ПОДГОТАВЛИВАЕМ ЛОКАЛЬНУЮ СЕТЬ\");"
+    }
+  ]
+}
