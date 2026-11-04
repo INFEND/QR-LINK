@@ -25,6 +25,12 @@ class WifiLanPriorityTests(unittest.TestCase):
         self.assertNotIn('return "Нет подключения к роутеру. Используем Wi-Fi Direct.";',self.wifi)
         self.assertIn('if(clientConnected(c))return "Подключение через общую сеть Wi-Fi.";',self.wifi)
 
+    def test_no_direct_pending_label_before_route_selection(self):
+        self.assertIn('"ПОДГОТАВЛИВАЕМ ЛОКАЛЬНУЮ СЕТЬ"',self.main)
+        self.assertNotIn('"ОЖИДАЕМ WI-FI DIRECT"',self.main)
+        self.assertIn("Локальное соединение ещё не готово.",self.main)
+        self.assertNotIn("Создание Wi-Fi Direct не завершилось.",self.main)
+
     def test_receiver_prioritizes_lan_before_creating_direct(self):
         body=self.service.split("private void establishNetworkRoute(){",1)[1].split(
             "private void startHotspotFallback(",1)[0]
