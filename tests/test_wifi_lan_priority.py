@@ -20,6 +20,11 @@ class WifiLanPriorityTests(unittest.TestCase):
         self.assertIn("android.net.wifi.SupplicantState.COMPLETED",self.wifi)
         self.assertIn("return !clientAddress(c).isEmpty();",self.wifi)
 
+    def test_no_false_direct_status_before_group_ready(self):
+        self.assertIn('return "Нет подключения к роутеру. Подготавливаем локальное соединение.";',self.wifi)
+        self.assertNotIn('return "Нет подключения к роутеру. Используем Wi-Fi Direct."; ',self.wifi)
+        self.assertIn('if(clientConnected(c))return "Подключение через общую сеть Wi-Fi.";',self.wifi)
+
     def test_receiver_prioritizes_lan_before_creating_direct(self):
         body=self.service.split("private void establishNetworkRoute(){",1)[1].split(
             "private void startHotspotFallback(",1)[0]
