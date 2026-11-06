@@ -97,7 +97,7 @@ public final class WifiPeerConnector {
                         if(candidate.isEmpty())candidate=resolveApAddress(properties);
                         String confirmed=verifyReceiverOnNetwork(n,candidate,info)?candidate:"";
                         if(confirmed.isEmpty()&&active()&&!failed.get()){
-                            String discovered=discoverPeer(n,properties,info.key);
+                            String discovered=discoverPeer(n,properties,info.key,info.port);
                             if(verifyReceiverOnNetwork(n,discovered,info))confirmed=discovered;
                         }
                         if(!active()||failed.get())return;
@@ -143,7 +143,7 @@ public final class WifiPeerConnector {
         finally{if(connection!=null)connection.disconnect();}
     }
     /** Uses the existing authenticated receiver's UDP discovery endpoint when DHCP omits its IP. */
-    private static String discoverPeer(Network network,LinkProperties links,String key){
+    private static String discoverPeer(Network network,LinkProperties links,String key,int expectedPort){
         try(DatagramSocket socket=new DatagramSocket(null)){
             socket.setReuseAddress(true);
             socket.bind(new InetSocketAddress(0));
@@ -173,7 +173,7 @@ public final class WifiPeerConnector {
                 try{socket.receive(packet);}
                 catch(SocketTimeoutException timeout){break;}
                 String answer=new String(packet.getData(),packet.getOffset(),packet.getLength(),StandardCharsets.UTF_8);
-                if(DiscoveryAuth.verifies(answer,nonce,key,Util.PORT)&&
+                if(DiscoveryAuth.verifies(answer,nonce,key,expectedPort)&&
                    localAddress(packet.getAddress()))return packet.getAddress().getHostAddress();
             }
         }catch(Exception ignored){}
