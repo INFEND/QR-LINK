@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.135",
+  "entries": [
+    {
+      "note": "[=] **Подключение через локальную точку доступа** проверяет адрес приёмника и при ошибке повторно находит его в сети",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "String confirmed=verifyReceiverOnNetwork(n,candidate,info)?candidate:\"\";"
+    }
+  ]
+}
