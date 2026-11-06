@@ -33,7 +33,7 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         self.assertIn("discoverPeer(n,properties,info.key,info.port)", block)
         self.assertIn("verifyReceiverOnNetwork(n,discovered,info)", block)
         self.assertLess(block.index("verifyReceiverOnNetwork(n,candidate,info)"),
-                        block.index("discoverPeer(n,properties,info.key)"))
+                        block.index("discoverPeer(n,properties,info.key,info.port)"))
         self.assertIn("if(!active()||failed.get())return;", block)
         self.assertIn("synchronized(delivered){if(delivered[0])return;delivered[0]=true;}", block)
 
