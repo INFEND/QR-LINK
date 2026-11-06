@@ -30,12 +30,17 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         block = self.connector.split("private void deliver(Network n,LinkProperties lp){", 1)[1].split(
             "@Override public void onUnavailable()", 1
         )[0]
-        self.assertIn("discoverPeer(n,properties,info.key)", block)
+        self.assertIn("discoverPeer(n,properties,info.key,info.port)", block)
         self.assertIn("verifyReceiverOnNetwork(n,discovered,info)", block)
         self.assertLess(block.index("verifyReceiverOnNetwork(n,candidate,info)"),
                         block.index("discoverPeer(n,properties,info.key)"))
         self.assertIn("if(!active()||failed.get())return;", block)
         self.assertIn("synchronized(delivered){if(delivered[0])return;delivered[0]=true;}", block)
+
+    def test_discovery_rejects_reply_for_a_different_session_port(self):
+        self.assertIn("String key,int expectedPort", self.connector)
+        self.assertIn("DiscoveryAuth.verifies(answer,nonce,key,expectedPort)", self.connector)
+        self.assertNotIn("DiscoveryAuth.verifies(answer,nonce,key,Util.PORT)", self.connector)
 
     def test_probe_uses_selected_wifi_not_vpn_or_default_cellular(self):
         probe = self.connector.split("private static boolean verifyReceiverOnNetwork(", 1)[1].split(
