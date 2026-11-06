@@ -86,24 +86,28 @@ public final class WifiPeerConnector {
                         if(local.getAddress() instanceof Inet4Address){hasIpv4=true;break;}
                     }
                     if(!hasIpv4)return;
-                    String host=resolveApAddress(lp);
-                    if(host.isEmpty())host=info.host==null?"":info.host;
-                    if(host.isEmpty()){
-                        synchronized(discovering){if(discovering[0])return;discovering[0]=true;}
-                        final LinkProperties properties=lp;
-                        new Thread(()->{
-                            String found=discoverPeer(n,properties,info.key);
-                            if(!active()||failed.get())return;
-                            if(!found.isEmpty()){
-                                synchronized(delivered){if(delivered[0])return;delivered[0]=true;}
-                                listener.connected(found);
-                            }else fail("Сеть подключена, но Android не сообщил адрес приёмника. Повторите подключение.");
-                        },"qr-link-find-peer").start();
-                        return;
-                    }
-                    if(!active()||failed.get())return;
-                    synchronized(delivered){if(delivered[0])return;delivered[0]=true;}
-                    listener.connected(host);
+                    synchronized(discovering){if(discovering[0])return;discovering[0]=true;}
+                    final LinkProperties properties=lp;
+                    // DHCP gateways are not necessarily QR LINK receivers. On some
+                    // LocalOnlyHotspot/Direct implementations the QR IP is stale or
+                    // DHCP reports a different gateway. Verify /hello before
+                    // declaring a peer, then use authenticated UDP discovery.
+                    new Thread(()->{
+                        String candidate=info.host==null?"":info.host;
+                        if(candidate.isEmpty())candidate=resolveApAddress(properties);
+                        String confirmed=verifyReceiverOnNetwork(n,candidate,info)?candidate:"";
+                        if(confirmed.isEmpty()&&active()&&!failed.get()){
+                            String discovered=discoverPeer(n,properties,info.key);
+                            if(verifyReceiverOnNetwork(n,discovered,info))confirmed=discovered;
+                        }
+                        if(!active()||failed.get())return;
+                        if(confirmed.isEmpty()){
+                            fail("Сеть подключена, но приёмник QR LINK не отвечает. Повторите подключение.");
+                            return;
+                        }
+                        synchronized(delivered){if(delivered[0])return;delivered[0]=true;}
+                        listener.connected(confirmed);
+                    },"qr-link-verify-peer").start();
                 }
                 @Override public void onUnavailable(){
                     fail("Android не подключился к точке доступа. Подтвердите запрос Wi-Fi и повторите сканирование.");
@@ -115,6 +119,28 @@ public final class WifiPeerConnector {
             };
             manager.requestNetwork(request,callback,25000);
         }catch(Exception e){stop();listener.failure("Подключение Wi-Fi: "+ErrorText.human(e));}
+    }
+    /** Probe only on Android's requested Wi-Fi network, never via default mobile/VPN.
+     * The /hello response must identify a compatible QR LINK receiver; a
+     * successful TCP handshake with a random local gateway is not enough.
+     */
+    private static boolean verifyReceiverOnNetwork(Network network,String host,Pairing.Info info){
+        if(host==null||host.isEmpty()||!QrInputValidation.isLocalIpv4(host))return false;
+        HttpURLConnection connection=null;
+        try{
+            URL url=new URL("http",host,info.port,"/hello");
+            connection=(HttpURLConnection)network.openConnection(url);
+            connection.setConnectTimeout(2000);
+            connection.setReadTimeout(2000);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("X-Xarkon-Key",info.key);
+            if(connection.getResponseCode()!=200)return false;
+            try(java.io.InputStream stream=connection.getInputStream()){
+                org.json.JSONObject reply=new org.json.JSONObject(Util.readText(stream,4096));
+                return PeerIdentity.compatible(reply.optString("app"),reply.optInt("version",-1));
+            }
+        }catch(Exception ignored){return false;}
+        finally{if(connection!=null)connection.disconnect();}
     }
     /** Uses the existing authenticated receiver's UDP discovery endpoint when DHCP omits its IP. */
     private static String discoverPeer(Network network,LinkProperties links,String key){
