@@ -96,6 +96,13 @@ public final class WifiPeerConnector {
                         String candidate=info.host==null?"":info.host;
                         if(candidate.isEmpty())candidate=resolveApAddress(properties);
                         String confirmed=verifyReceiverOnNetwork(n,candidate,info)?candidate:"";
+                        // A stale QR address does not invalidate the DHCP server/gateway.
+                        // Probe this distinct candidate on the same Wi-Fi before broadcast.
+                        if(confirmed.isEmpty()&&active()&&!failed.get()){
+                            String gateway=resolveApAddress(properties);
+                            if(!gateway.equals(candidate)&&verifyReceiverOnNetwork(n,gateway,info))
+                                confirmed=gateway;
+                        }
                         if(confirmed.isEmpty()&&active()&&!failed.get()){
                             String discovered=discoverPeer(n,properties,info.key,info.port);
                             if(verifyReceiverOnNetwork(n,discovered,info))confirmed=discovered;

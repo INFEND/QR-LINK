@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.136",
+  "entries": [
+    {
+      "note": "[=] **Подключение через точку доступа:** при устаревшем IP из QR проверяется адрес, полученный от Wi-Fi, до повторного поиска приёмника",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "if(!gateway.equals(candidate)&&verifyReceiverOnNetwork(n,gateway,info))"
+    },
+    {
+      "note": "[=] **Поиск приёмника:** ответ из другой сессии с несовпадающим портом больше не принимается",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "if(DiscoveryAuth.verifies(answer,nonce,key,expectedPort)&&"
+    }
+  ]
+}

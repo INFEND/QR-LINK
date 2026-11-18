@@ -37,6 +37,20 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         self.assertIn("if(!active()||failed.get())return;", block)
         self.assertIn("synchronized(delivered){if(delivered[0])return;delivered[0]=true;}", block)
 
+    def test_stale_qr_probes_dhcp_before_broadcast(self):
+        block = self.connector.split("private void deliver(Network n,LinkProperties lp){", 1)[1].split(
+            "@Override public void onUnavailable()", 1
+        )[0]
+        initial = block.index("verifyReceiverOnNetwork(n,candidate,info)")
+        gateway = block.index("String gateway=resolveApAddress(properties);")
+        verified = block.index("!gateway.equals(candidate)&&verifyReceiverOnNetwork(n,gateway,info)")
+        fallback = block.index("discoverPeer(n,properties,info.key,info.port)")
+        self.assertLess(initial, gateway)
+        self.assertLess(gateway, verified)
+        self.assertLess(verified, fallback)
+        self.assertIn("confirmed=gateway;", block)
+        self.assertNotIn("listener.connected(gateway)", block)
+
     def test_discovery_rejects_reply_for_a_different_session_port(self):
         self.assertIn("String key,int expectedPort", self.connector)
         self.assertIn("DiscoveryAuth.verifies(answer,nonce,key,expectedPort)", self.connector)
