@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.138",
+  "entries": [
+    {
+      "note": "[=] **Ошибки файловой системы** объясняют причину отказа вместо отображения необработанного пути",
+      "path": "app/src/main/java/dev/xarkon/link/ErrorText.java",
+      "changed_line": "String fileError=fileSystemMessage(error);"
+    },
+    {
+      "note": "[=] **Ошибки обновления** учитывают вложенную причину сбоя подключения и защищённого соединения",
+      "path": "app/src/main/java/dev/xarkon/link/UpdateManager.java",
+      "changed_line": "return ErrorText.human(e);"
+    }
+  ]
+}

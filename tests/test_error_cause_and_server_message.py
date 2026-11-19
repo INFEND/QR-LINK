@@ -52,6 +52,30 @@ public final class ErrorCauseCheck {
             new java.net.SocketTimeoutException())).contains("ожидания"),
             "nested exception with no message");
 
+        // Cyrillic paths are not localized error descriptions.
+        String deniedPath = ErrorText.human(new java.nio.file.AccessDeniedException("/sdcard/Фото"));
+        expect(deniedPath.contains("разрешений") && !deniedPath.contains("/sdcard"),
+            "access denied with Cyrillic path");
+        expect(ErrorText.human(new java.nio.file.NoSuchFileException("/Фото")).contains("перемещён"),
+            "missing file path");
+        expect(ErrorText.human(new java.nio.file.FileAlreadyExistsException("/Фото")).contains("существует"),
+            "existing file path");
+        expect(ErrorText.human(new java.nio.file.DirectoryNotEmptyException("/Фото")).contains("не пуста"),
+            "nonempty directory");
+        expect(ErrorText.human(new java.nio.file.NotDirectoryException("/Фото")).contains("не является папкой"),
+            "not a directory");
+        expect(ErrorText.human(new java.nio.file.FileSystemLoopException("/Фото")).contains("циклическая"),
+            "filesystem loop");
+        expect(ErrorText.human(new java.nio.file.ReadOnlyFileSystemException()).contains("только для чтения"),
+            "read-only storage");
+        expect(ErrorText.human(new IOException("OEM failure",
+            new java.nio.file.NoSuchFileException("/Фото"))).contains("перемещён"), "nested path failure");
+        expect(ErrorText.human(new java.net.NoRouteToHostException()).contains("Нет маршрута"),
+            "empty no route");
+        expect(ErrorText.human(new IOException("OEM error",
+            new javax.net.ssl.SSLException((String)null))).contains("защищённого"),
+            "nested SSL error without message");
+
         String safe = ErrorText.human("HTTP 409 {\"error\":\"Передача уже завершена\"}");
         expect(safe.equals("Передача уже завершена"), "safe Russian server error");
         String newline = ErrorText.human("HTTP 500 {\"error\":\"Ошибка\nподменённый заголовок\"}");
@@ -70,6 +94,11 @@ public final class ErrorCauseCheck {
 '''
 
 class ErrorCauseAndServerMessageTests(unittest.TestCase):
+    def test_ota_preserves_exception_chain(self):
+        ota = (JAVA.parent / "UpdateManager.java").read_text(encoding="utf-8")
+        self.assertIn("return ErrorText.human(e);", ota)
+        self.assertNotIn("String s=e.getMessage();", ota)
+
     def test_localized_nested_errors_and_http_responses(self):
         with tempfile.TemporaryDirectory() as work:
             source = Path(work) / "ErrorCauseCheck.java"

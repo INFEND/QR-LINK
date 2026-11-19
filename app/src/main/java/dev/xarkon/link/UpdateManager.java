@@ -105,8 +105,7 @@ public final class UpdateManager {
         if(e instanceof SocketTimeoutException)return "Сервер обновлений не ответил вовремя. Попробуйте ещё раз.";
         if(e instanceof SSLException)return "Ошибка защищённого соединения. Проверьте дату, время и настройки VPN.";
         if(e instanceof ConnectException)return "Не удалось подключиться к серверу обновлений.";
-        String s=e.getMessage();
-        return ErrorText.human(s);
+        return ErrorText.human(e);
     }
     private static void requireOk(HttpsURLConnection c,String purpose)throws IOException{
         int code=c.getResponseCode();

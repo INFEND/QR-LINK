@@ -36,12 +36,16 @@ public final class ErrorText {
     /** Preserve the actionable root cause when a wrapper contains only an OEM error. */
     public static String human(Throwable error){
         if(error==null)return human((String)null);
+        String fileError=fileSystemMessage(error);
+        if(fileError!=null)return fileError;
         String fallback=human(error.getMessage());
         if(!generic(fallback))return fallback;
         java.util.IdentityHashMap<Throwable,Boolean> visited=new java.util.IdentityHashMap<>();
         Throwable cause=error;
         for(int depth=0;cause!=null&&depth<8&&visited.put(cause,Boolean.TRUE)==null;depth++){
             if(cause!=error){
+                String fileCause=fileSystemMessage(cause);
+                if(fileCause!=null)return fileCause;
                 String localized=human(cause.getMessage());
                 if(!generic(localized))return localized;
             }
@@ -53,7 +57,30 @@ public final class ErrorText {
         }
         return fallback;
     }
+    // FileSystemException messages may contain only a path, including Cyrillic.
+    // Classify these before treating the raw path as a human-readable message.
+    private static String fileSystemMessage(Throwable cause){
+        if(cause instanceof java.nio.file.AccessDeniedException)
+            return "Не хватает разрешений Android. Проверьте доступ к файлам и устройствам поблизости.";
+        if(cause instanceof java.nio.file.NoSuchFileException)
+            return "Исходный файл недоступен или был перемещён.";
+        if(cause instanceof java.nio.file.FileAlreadyExistsException)
+            return "Файл с таким именем уже существует.";
+        if(cause instanceof java.nio.file.DirectoryNotEmptyException)
+            return "Папка не пуста.";
+        if(cause instanceof java.nio.file.NotDirectoryException)
+            return "Указанный путь не является папкой.";
+        if(cause instanceof java.nio.file.FileSystemLoopException)
+            return "Обнаружена циклическая ссылка на папку.";
+        if(cause instanceof java.nio.file.ReadOnlyFileSystemException)
+            return "Хранилище доступно только для чтения.";
+        return null;
+    }
     private static String typeMessage(Throwable cause){
+        if(cause instanceof java.net.NoRouteToHostException)
+            return "Нет маршрута до получателя. Проверьте Wi-Fi и соединение между устройствами.";
+        if(cause instanceof javax.net.ssl.SSLException)
+            return "Ошибка проверки защищённого соединения. Проверьте дату, время и настройки VPN.";
         if(cause instanceof java.lang.SecurityException ||
            cause instanceof java.nio.file.AccessDeniedException)
             return "Не хватает разрешений Android. Проверьте доступ к файлам и устройствам поблизости.";
