@@ -83,7 +83,7 @@ public final class WifiPeerConnector {
                     synchronized(delivered){if(delivered[0])return;}
                     boolean hasIpv4=false;
                     for(LinkAddress local:lp.getLinkAddresses()){
-                        if(local.getAddress() instanceof Inet4Address){hasIpv4=true;break;}
+                        if(localAddress(local.getAddress())){hasIpv4=true;break;}
                     }
                     if(!hasIpv4)return;
                     synchronized(discovering){if(discovering[0])return;discovering[0]=true;}
@@ -159,7 +159,7 @@ public final class WifiPeerConnector {
             String nonce=DiscoveryAuth.newNonce();
             byte[] data=DiscoveryAuth.request(nonce).getBytes(StandardCharsets.UTF_8);
             for(LinkAddress la:links.getLinkAddresses()){
-                if(!(la.getAddress() instanceof Inet4Address))continue;
+                if(!localAddress(la.getAddress()))continue;
                 byte[] ip=la.getAddress().getAddress();int prefix=la.getPrefixLength();
                 if(prefix<0||prefix>32)continue;
                 byte[] broadcast=new byte[4];
@@ -168,7 +168,8 @@ public final class WifiPeerConnector {
                     int mask=remaining==0?0:((255 << (8-remaining))&255);
                     broadcast[b]=(byte)((ip[b]&mask)|(~mask&255));
                 }
-                socket.send(new DatagramPacket(data,data.length,InetAddress.getByAddress(broadcast),Util.DISCOVERY_PORT));
+                try{socket.send(new DatagramPacket(data,data.length,InetAddress.getByAddress(broadcast),Util.DISCOVERY_PORT));}
+                catch(java.io.IOException ignored){/* Try remaining on-link addresses. */}
             }
             // Ignore unrelated UDP packets rather than failing discovery on the first one.
             long deadline=android.os.SystemClock.elapsedRealtime()+2500L;

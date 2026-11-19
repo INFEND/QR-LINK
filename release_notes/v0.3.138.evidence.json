@@ -1,0 +1,15 @@
+{
+  "base_tag": "v0.3.137",
+  "entries": [
+    {
+      "note": "[=] **Подключение через точку доступа** не запускает поиск приёмника до получения подходящего локального IPv4-адреса",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "if(localAddress(local.getAddress())){hasIpv4=true;break;}"
+    },
+    {
+      "note": "[=] **Поиск приёмника** продолжает работу, если отправка запроса через один из локальных адресов не удалась",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "catch(java.io.IOException ignored){/* Try remaining on-link addresses. */}"
+    }
+  ]
+}

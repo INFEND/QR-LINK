@@ -51,6 +51,18 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         self.assertIn("confirmed=gateway;", block)
         self.assertNotIn("listener.connected(gateway)", block)
 
+    def test_invalid_ipv4_does_not_start_peer_discovery(self):
+        block = self.connector.split("private void deliver(Network n,LinkProperties lp){", 1)[1].split(
+            "@Override public void onUnavailable()", 1
+        )[0]
+        self.assertIn("if(localAddress(local.getAddress())){hasIpv4=true;break;}", block)
+        self.assertLess(block.index("if(!hasIpv4)return;"), block.index("discovering[0]=true"))
+        self.assertIn("if(!localAddress(la.getAddress()))continue;", self.connector)
+
+    def test_one_failed_broadcast_does_not_abort_other_addresses(self):
+        self.assertIn("try{socket.send(new DatagramPacket", self.connector)
+        self.assertIn("catch(java.io.IOException ignored){/* Try remaining on-link addresses. */}", self.connector)
+
     def test_discovery_rejects_reply_for_a_different_session_port(self):
         self.assertIn("String key,int expectedPort", self.connector)
         self.assertIn("DiscoveryAuth.verifies(answer,nonce,key,expectedPort)", self.connector)
