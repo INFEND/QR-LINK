@@ -33,5 +33,5 @@ class OtaUrlPolicyTests(unittest.TestCase):
   updater=(SRC.parent/"UpdateManager.java").read_text(encoding="utf-8")
   self.assertIn("readManifest(OtaUrlPolicy.CANONICAL_MANIFEST)",updater)
   self.assertIn("OtaUrlPolicy.trustedApk(apkUrl,versionName)",updater)
-  self.assertIn("return ErrorText.human(s);",updater)
+  self.assertIn("return ErrorText.human(e);",updater)
 if __name__=="__main__":unittest.main()
