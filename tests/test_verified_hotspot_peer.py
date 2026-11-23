@@ -90,6 +90,25 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         self.assertIn("PeerIdentity.compatible(", verify)
         self.assertIn('putString("host",host)', verify)
 
+    def test_late_failure_cannot_stop_a_newer_connection_attempt(self):
+        block = self.connector.split("private void fail(String reason){", 1)[1].split(
+            "@Override public void onAvailable(", 1
+        )[0]
+        self.assertRegex(block, r"synchronized\\(WifiPeerConnector\\.this\\)\\s*\\{\\s*"
+                               r"if\\(!active\\(\\)\\|\\|!failed\\.compareAndSet\\(false,true\\)\\)return;\\s*"
+                               r"WifiPeerConnector\\.this\\.stop\\(\\);\\s*listener\\.failure\\(reason\\);")
+        self.assertIn("public synchronized void stop()", self.connector)
+        self.assertIn("public synchronized void connect(Pairing.Info info,Listener listener)", self.connector)
+
+    def test_late_success_cannot_reconnect_after_stop(self):
+        block = self.connector.split("private void deliver(Network n,LinkProperties lp){", 1)[1].split(
+            "@Override public void onUnavailable()", 1
+        )[0]
+        self.assertRegex(block, r"synchronized\\(WifiPeerConnector\\.this\\)\\s*\\{\\s*"
+                               r"if\\(!active\\(\\)\\|\\|failed\\.get\\(\\)\\)return;\\s*"
+                               r"synchronized\\(delivered\\)\\{if\\(delivered\\[0\\]\\)return;"
+                               r"delivered\\[0\\]=true;\\}\\s*listener\\.connected\\(confirmed\\);")
+
 
 if __name__ == "__main__":
     unittest.main()

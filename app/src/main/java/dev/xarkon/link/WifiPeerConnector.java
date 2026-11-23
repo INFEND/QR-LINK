@@ -46,9 +46,12 @@ public final class WifiPeerConnector {
                     new java.util.concurrent.atomic.AtomicBoolean(false);
                 private boolean active(){return current(attempt,this);}
                 private void fail(String reason){
-                    if(!active()||!failed.compareAndSet(false,true))return;
-                    WifiPeerConnector.this.stop();
-                    listener.failure(reason);
+                    // A late failure must not tear down a replacement connection.
+                    synchronized(WifiPeerConnector.this){
+                        if(!active()||!failed.compareAndSet(false,true))return;
+                        WifiPeerConnector.this.stop();
+                        listener.failure(reason);
+                    }
                 }
                 @Override public void onAvailable(Network n){
                     synchronized(WifiPeerConnector.this){
@@ -112,8 +115,12 @@ public final class WifiPeerConnector {
                             fail("Сеть подключена, но приёмник QR LINK не отвечает. Повторите подключение.");
                             return;
                         }
-                        synchronized(delivered){if(delivered[0])return;delivered[0]=true;}
-                        listener.connected(confirmed);
+                        // Keep success dispatch atomic with stop() and connect().
+                        synchronized(WifiPeerConnector.this){
+                            if(!active()||failed.get())return;
+                            synchronized(delivered){if(delivered[0])return;delivered[0]=true;}
+                            listener.connected(confirmed);
+                        }
                     },"qr-link-verify-peer").start();
                 }
                 @Override public void onUnavailable(){

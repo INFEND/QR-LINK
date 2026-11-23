@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.139",
+  "entries": [
+    {
+      "note": "[=] **Переподключение Wi-Fi** защищено от запоздавших ответов предыдущего соединения",
+      "path": "app/src/main/java/dev/xarkon/link/WifiPeerConnector.java",
+      "changed_line": "synchronized(WifiPeerConnector.this){"
+    }
+  ]
+}
