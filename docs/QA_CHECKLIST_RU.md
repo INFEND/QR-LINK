@@ -1,3 +1,10 @@
+## Проверенные выпуски 23.11.2026 · v0.3.140–v0.3.141
+
+- **Готово · v0.3.140** (versionCode 145): исправлена гонка запоздалых событий успешного и неуспешного Wi-Fi подключения в `WifiPeerConnector.java`; `tests/test_verified_hotspot_peer.py` дополнен двумя регрессиями. Android OTA CI [45262817148](https://github.com/INFEND/QR-LINK/actions/runs/45262817148) SUCCESS, OTA utility [45262817333](https://github.com/INFEND/QR-LINK/actions/runs/45262817333) SUCCESS; 310 тестов OK; Android BUILD SUCCESSFUL; APK v3 подписан прежним SHA-256 `2651D90F5C57F2D4A121E2D8B0899680343DC9E87E515ED5E100FC3D62C6D626`; опубликованы `QR-LINK.apk`, `update.json`, `v0.3.140.txt`. Релизный коммит `28806692`.
+- **Готово · v0.3.141** (versionCode 146): в `ErrorText.java` исправлена обработка общего `FileSystemException`, чтобы кириллический путь не появлялся вместо пользовательского объяснения; причины отказа в разрешениях и отсутствия места распознаются отдельно. `tests/test_error_cause_and_server_message.py` дополнен регрессиями. Android OTA CI [45263606796](https://github.com/INFEND/QR-LINK/actions/runs/45263606796) SUCCESS, OTA utility [45263606666](https://github.com/INFEND/QR-LINK/actions/runs/45263606666) SUCCESS; 310 тестов OK; Android BUILD SUCCESSFUL; прежний сертификат APK v3; опубликованы `QR-LINK.apk`, `update.json`, `v0.3.141.txt`. Релизный коммит `511c116c`.
+- **Незакрытые требования:** T07, T08, T15, T16, F17, F18, O14, O17, U02, R01, R11, R12, R13. Их статусы остаются **«Не готово»**; локальные исправления не равны полному закрытию R11, R12 или O14.
+- **Полный реестр:** 151 требование, из них 138 «Готово» и 13 «Не готово». Испытания на S24 Ultra и iQOO не проводились. Используются только два статуса.
+
 
 ## Новые требования R11–R13 · «Исправление QR LINK #3» (03.11.2026)
 
