@@ -74,6 +74,20 @@ public final class ErrorText {
             return "Обнаружена циклическая ссылка на папку.";
         if(cause instanceof java.nio.file.ReadOnlyFileSystemException)
             return "Хранилище доступно только для чтения.";
+        // A plain FileSystemException may expose a path containing Cyrillic.
+        // Only use its reason to classify known failures, never show the path.
+        if(cause instanceof java.nio.file.FileSystemException){
+            String reason=((java.nio.file.FileSystemException)cause).getReason();
+            if(reason!=null){
+                String lowerReason=reason.toLowerCase(Locale.ROOT);
+                if(lowerReason.contains("permission denied")||lowerReason.contains("access denied")||
+                   lowerReason.contains("eacces"))
+                    return "Не хватает разрешений Android. Проверьте доступ к файлам и устройствам поблизости.";
+                if(lowerReason.contains("no space left")||lowerReason.contains("enospc"))
+                    return "Недостаточно свободного места на устройстве.";
+            }
+            return "Не удалось открыть файл или папку. Проверьте доступ и повторите попытку.";
+        }
         return null;
     }
     private static String typeMessage(Throwable cause){

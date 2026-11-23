@@ -1,0 +1,10 @@
+{
+  "base_tag": "v0.3.140",
+  "entries": [
+    {
+      "note": "[=] **Ошибки файлов и папок** больше не показывают путь вместо причины сбоя",
+      "path": "app/src/main/java/dev/xarkon/link/ErrorText.java",
+      "changed_line": "if(cause instanceof java.nio.file.FileSystemException){"
+    }
+  ]
+}

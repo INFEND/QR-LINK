@@ -68,6 +68,18 @@ public final class ErrorCauseCheck {
             "filesystem loop");
         expect(ErrorText.human(new java.nio.file.ReadOnlyFileSystemException()).contains("только для чтения"),
             "read-only storage");
+        // A plain FileSystemException is not one of the specific subclasses above.
+        // It must never leak a Russian filename as if it were an error message.
+        String pathOnly=ErrorText.human(new java.nio.file.FileSystemException("/storage/emulated/0/Фото/Секрет"));
+        expect(pathOnly.contains("файл или папку") && !pathOnly.contains("Секрет") &&
+            !pathOnly.contains("/storage"), "generic file system exception path");
+        expect(ErrorText.human(new IOException("OEM error",
+            new java.nio.file.FileSystemException("/storage/emulated/0/Фото/Секрет")))
+            .contains("файл или папку"), "wrapped generic file system exception");
+        expect(ErrorText.human(new java.nio.file.FileSystemException("/Фото",null,"Permission denied"))
+            .contains("разрешений"), "generic file system exception permission reason");
+        expect(ErrorText.human(new java.nio.file.FileSystemException("/Видео",null,"No space left on device"))
+            .contains("свободного места"), "generic file system exception disk full");
         expect(ErrorText.human(new IOException("OEM failure",
             new java.nio.file.NoSuchFileException("/Фото"))).contains("перемещён"), "nested path failure");
         expect(ErrorText.human(new java.net.NoRouteToHostException()).contains("Нет маршрута"),
