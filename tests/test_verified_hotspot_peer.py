@@ -94,9 +94,9 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         block = self.connector.split("private void fail(String reason){", 1)[1].split(
             "@Override public void onAvailable(", 1
         )[0]
-        self.assertRegex(block, r"synchronized\\(WifiPeerConnector\\.this\\)\\s*\\{\\s*"
-                               r"if\\(!active\\(\\)\\|\\|!failed\\.compareAndSet\\(false,true\\)\\)return;\\s*"
-                               r"WifiPeerConnector\\.this\\.stop\\(\\);\\s*listener\\.failure\\(reason\\);")
+        self.assertRegex(block, r"synchronized\(WifiPeerConnector\.this\)\s*\{\s*"
+                               r"if\(!active\(\)\|\|!failed\.compareAndSet\(false,true\)\)return;\s*"
+                               r"WifiPeerConnector\.this\.stop\(\);\s*listener\.failure\(reason\);")
         self.assertIn("public synchronized void stop()", self.connector)
         self.assertIn("public synchronized void connect(Pairing.Info info,Listener listener)", self.connector)
 
@@ -104,10 +104,10 @@ class VerifiedHotspotPeerTests(unittest.TestCase):
         block = self.connector.split("private void deliver(Network n,LinkProperties lp){", 1)[1].split(
             "@Override public void onUnavailable()", 1
         )[0]
-        self.assertRegex(block, r"synchronized\\(WifiPeerConnector\\.this\\)\\s*\\{\\s*"
-                               r"if\\(!active\\(\\)\\|\\|failed\\.get\\(\\)\\)return;\\s*"
-                               r"synchronized\\(delivered\\)\\{if\\(delivered\\[0\\]\\)return;"
-                               r"delivered\\[0\\]=true;\\}\\s*listener\\.connected\\(confirmed\\);")
+        self.assertRegex(block, r"synchronized\(WifiPeerConnector\.this\)\s*\{\s*"
+                               r"if\(!active\(\)\|\|failed\.get\(\)\)return;\s*"
+                               r"synchronized\(delivered\)\{if\(delivered\[0\]\)return;"
+                               r"delivered\[0\]=true;\}\s*listener\.connected\(confirmed\);")
 
 
 if __name__ == "__main__":
